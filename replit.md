@@ -48,6 +48,27 @@ Every package extends `tsconfig.base.json` which sets `composite: true`. The roo
 - `pnpm run build` — runs `typecheck` first, then recursively runs `build` in all packages that define it
 - `pnpm run typecheck` — runs `tsc --build --emitDeclarationOnly` using project references
 
+## Artifacts
+
+### `artifacts/hex-strategy` (`@workspace/hex-strategy`) — Hex Conquest
+
+Android-first Expo React Native turn-based hexagonal strategy game.
+
+**Phase 1 complete** (main menu + interactive hex board):
+- `app/index.tsx` — Main menu (tile count 40–200, 1–3 opponents, difficulty)
+- `app/game.tsx` — Interactive hex board with SVG rendering, zoom/pan via GestureDetector + Reanimated
+- `app/_layout.tsx` — Stack navigation (index → game), no tabs
+- `utils/hexGrid.ts` — Hex grid generation: organic BFS shape, terrain (5% Mountain, 15% Desert, 1% City, rest Grass), round-robin territory distribution
+- `constants/colors.ts` — Dark navy game palette + TERRAIN_FILLS, TERRITORY_FILLS, TERRITORY_BORDERS exports
+
+**Key game rules:**
+- Up to 4 players: player (blue), AI1 (red), AI2 (green), AI3 (orange)
+- Mountains always neutral/unowned; all other tiles distributed equally round-robin
+- No starting cities in Phase 1 (Phase 2 feature)
+- Flat-top axial hex coordinates; territory borders drawn per edge direction mapping
+
+**Dependencies:** react-native-svg 15.12.1, react-native-gesture-handler, react-native-reanimated, expo-linear-gradient, expo-haptics, @expo/vector-icons
+
 ## Packages
 
 ### `artifacts/api-server` (`@workspace/api-server`)
