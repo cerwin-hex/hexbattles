@@ -7,6 +7,7 @@ import {
   Platform,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -17,6 +18,7 @@ type Difficulty = 'easy' | 'medium' | 'hard';
 export default function MainMenuScreen() {
   const insets = useSafeAreaInsets();
   const [tileCount, setTileCount] = useState(100);
+  const [rawInput, setRawInput] = useState('100');
   const [opponentCount, setOpponentCount] = useState(1);
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
 
@@ -25,7 +27,26 @@ export default function MainMenuScreen() {
 
   function adjustTiles(delta: number) {
     Haptics.selectionAsync();
-    setTileCount(prev => Math.min(200, Math.max(40, prev + delta)));
+    setTileCount(prev => {
+      const next = Math.min(200, Math.max(40, prev + delta));
+      setRawInput(String(next));
+      return next;
+    });
+  }
+
+  function handleTileInputChange(text: string) {
+    setRawInput(text);
+  }
+
+  function commitTileInput() {
+    const parsed = parseInt(rawInput, 10);
+    if (!isNaN(parsed)) {
+      const clamped = Math.min(200, Math.max(40, parsed));
+      setTileCount(clamped);
+      setRawInput(String(clamped));
+    } else {
+      setRawInput(String(tileCount));
+    }
   }
 
   function handleStart() {
@@ -63,7 +84,17 @@ export default function MainMenuScreen() {
                 <Ionicons name="remove" size={22} color="#F59E0B" />
               </TouchableOpacity>
               <View style={styles.stepValue}>
-                <Text style={styles.stepNumber}>{tileCount}</Text>
+                <TextInput
+                  style={styles.stepInput}
+                  value={rawInput}
+                  onChangeText={handleTileInputChange}
+                  onBlur={commitTileInput}
+                  onSubmitEditing={commitTileInput}
+                  keyboardType="number-pad"
+                  returnKeyType="done"
+                  selectTextOnFocus
+                  maxLength={3}
+                />
                 <Text style={styles.stepUnit}>TILES</Text>
               </View>
               <TouchableOpacity
@@ -192,11 +223,12 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
   },
-  stepNumber: {
+  stepInput: {
     fontSize: 44,
     fontFamily: 'Inter_700Bold',
     color: '#E2E8F0',
-    lineHeight: 48,
+    textAlign: 'center',
+    minWidth: 80,
   },
   stepUnit: {
     fontSize: 10,

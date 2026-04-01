@@ -22,7 +22,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Line, Polygon } from 'react-native-svg';
 
-import { TERRAIN_FILLS, TERRITORY_BORDERS } from '@/constants/colors';
+import { TERRAIN_FILLS, TERRITORY_BORDERS, TERRITORY_FILLS } from '@/constants/colors';
 import {
   HEX_EDGES,
   HexTile,
@@ -226,6 +226,12 @@ export default function GameScreen() {
     transform: [{ translateY: ribbonAnim.value }],
   }));
 
+  function getTileFill(tile: HexTile): string {
+    if (tile.terrain === 'mountain') return TERRAIN_FILLS.mountain;
+    if (tile.owner === 'neutral') return TERRAIN_FILLS[tile.terrain] ?? TERRAIN_FILLS.grass;
+    return TERRITORY_FILLS[tile.owner] ?? TERRITORY_FILLS.neutral;
+  }
+
   const credits = 500;
 
   return (
@@ -237,7 +243,7 @@ export default function GameScreen() {
               <Polygon
                 key={tile.key}
                 points={hexCornersString(cx, cy, HEX_SIZE)}
-                fill={TERRAIN_FILLS[tile.terrain] ?? TERRAIN_FILLS.grass}
+                fill={getTileFill(tile)}
                 stroke="#030710"
                 strokeWidth={0.5}
               />
