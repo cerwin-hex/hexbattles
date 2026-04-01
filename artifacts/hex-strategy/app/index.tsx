@@ -180,10 +180,10 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   title: {
-    fontSize: 58,
+    fontSize: 46,
     fontFamily: 'Cinzel_700Bold',
     color: '#C8A24A',
-    lineHeight: 64,
+    lineHeight: 52,
     letterSpacing: 1,
   },
   accentLine: {
@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
   progressText: {
     fontSize: 10,
     fontFamily: 'Inter_400Regular',
-    color: '#3A2E14',
+    color: '#786A54',
   },
   pills: {
     flexDirection: 'row',
@@ -267,7 +267,7 @@ const styles = StyleSheet.create({
     height: 54,
     borderRadius: 5,
     borderWidth: 1,
-    borderColor: '#3A2E14',
+    borderColor: '#4A3C1E',
     backgroundColor: '#140F06',
     alignItems: 'center',
     justifyContent: 'center',
@@ -279,7 +279,7 @@ const styles = StyleSheet.create({
   pillText: {
     fontSize: 22,
     fontFamily: 'Inter_700Bold',
-    color: '#3A2E14',
+    color: '#786A54',
   },
   pillTextActive: {
     color: '#C8A24A',
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
     height: 42,
     borderRadius: 5,
     borderWidth: 1,
-    borderColor: '#3A2E14',
+    borderColor: '#4A3C1E',
     backgroundColor: '#140F06',
     alignItems: 'center',
     justifyContent: 'center',
@@ -301,7 +301,7 @@ const styles = StyleSheet.create({
   diffText: {
     fontSize: 10,
     fontFamily: 'Cinzel_400Regular',
-    color: '#3A2E14',
+    color: '#786A54',
     letterSpacing: 1.5,
   },
   diffTextActive: {
