@@ -47,7 +47,7 @@ export default colors;
 export const TERRAIN_FILLS: Record<string, string> = {
   grass: '#143D1E',
   desert: '#4A3518',
-  mountain: '#0D111A',
+  mountain: '#4A5568',
   city: '#220E46',
 };
 

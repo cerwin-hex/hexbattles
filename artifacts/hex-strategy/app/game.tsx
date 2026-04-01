@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Dimensions,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -11,20 +12,20 @@ import {
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  cancelAnimation,
   useAnimatedStyle,
   useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Line, Polygon } from 'react-native-svg';
 
+import { TERRAIN_FILLS, TERRITORY_BORDERS } from '@/constants/colors';
 import {
-  TERRAIN_FILLS,
-  TERRITORY_BORDERS,
-  TERRITORY_FILLS,
-} from '@/constants/colors';
-import {
-  HexTile,
   HEX_EDGES,
+  HexTile,
   TerritoryOwner,
   generateHexGrid,
   getBoardBounds,
@@ -36,10 +37,34 @@ import {
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
-function getTileFill(tile: HexTile): string {
-  if (tile.terrain === 'mountain') return TERRAIN_FILLS.mountain;
-  if (tile.owner === 'neutral') return TERRAIN_FILLS[tile.terrain] ?? TERRAIN_FILLS.grass;
-  return TERRITORY_FILLS[tile.owner] ?? TERRITORY_FILLS.neutral;
+const BOTTOM_BAR_H = 64;
+const RIBBON_H = 130;
+
+const PURCHASABLES = [
+  { id: 'soldier',  name: 'Soldier',  icon: '⚔️',  cost: 50 },
+  { id: 'archer',   name: 'Archer',   icon: '🏹',  cost: 75 },
+  { id: 'cavalry',  name: 'Cavalry',  icon: '🐴',  cost: 120 },
+  { id: 'mine',     name: 'Mine',     icon: '⛏️',  cost: 150 },
+  { id: 'fortress', name: 'Fortress', icon: '🏰',  cost: 250 },
+  { id: 'castle',   name: 'Castle',   icon: '🏯',  cost: 750 },
+] as const;
+
+function insetEdge(
+  ptA: { x: number; y: number },
+  ptB: { x: number; y: number },
+  cx: number,
+  cy: number,
+  amount: number,
+): { x1: number; y1: number; x2: number; y2: number } {
+  const mx = (ptA.x + ptB.x) / 2;
+  const my = (ptA.y + ptB.y) / 2;
+  const dx = cx - mx;
+  const dy = cy - my;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < 0.001) return { x1: ptA.x, y1: ptA.y, x2: ptB.x, y2: ptB.y };
+  const nx = (dx / dist) * amount;
+  const ny = (dy / dist) * amount;
+  return { x1: ptA.x + nx, y1: ptA.y + ny, x2: ptB.x + nx, y2: ptB.y + ny };
 }
 
 interface BorderEdge {
@@ -55,6 +80,8 @@ export default function GameScreen() {
   const numTiles = Math.min(200, Math.max(40, Number(params.tileCount) || 100));
   const numOpponents = Math.min(3, Math.max(1, Number(params.opponentCount) || 1));
   const insets = useSafeAreaInsets();
+  const topInset = insets.top + (Platform.OS === 'web' ? 67 : 0);
+  const botInset = insets.bottom + (Platform.OS === 'web' ? 34 : 0);
 
   const HEX_SIZE = Math.max(20, Math.min(42, Math.floor(280 / Math.sqrt(numTiles))));
 
@@ -80,39 +107,39 @@ export default function GameScreen() {
     });
   }, [tiles, bounds, HEX_SIZE]);
 
+  const INSET = HEX_SIZE * 0.13;
+
   const borderEdges = useMemo<BorderEdge[]>(() => {
     const edges: BorderEdge[] = [];
     for (const { tile, cx, cy } of tileData) {
-      if (tile.owner === 'neutral' || tile.terrain === 'mountain') continue;
-      const borderColor = TERRITORY_BORDERS[tile.owner as TerritoryOwner] ?? '#FFFFFF';
+      if (tile.terrain === 'mountain' || tile.owner === 'neutral') continue;
+      const color = TERRITORY_BORDERS[tile.owner as TerritoryOwner]!;
       for (const { dir: [dq, dr], verts: [va, vb] } of HEX_EDGES) {
         const nk = tileKey(tile.q + dq, tile.r + dr);
         const neighbor = tileMap.get(nk);
-        if (!neighbor || neighbor.owner !== tile.owner) {
-          const ptA = hexCornerPoint(cx, cy, HEX_SIZE, va);
-          const ptB = hexCornerPoint(cx, cy, HEX_SIZE, vb);
-          edges.push({
-            x1: ptA.x, y1: ptA.y,
-            x2: ptB.x, y2: ptB.y,
-            color: borderColor,
-          });
+        const ptA = hexCornerPoint(cx, cy, HEX_SIZE, va);
+        const ptB = hexCornerPoint(cx, cy, HEX_SIZE, vb);
+
+        if (!neighbor || neighbor.terrain === 'mountain' || neighbor.owner === 'neutral') {
+          const e = insetEdge(ptA, ptB, cx, cy, INSET * 0.35);
+          edges.push({ x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, color });
+        } else if (neighbor.owner !== tile.owner) {
+          const e = insetEdge(ptA, ptB, cx, cy, INSET);
+          edges.push({ x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, color });
         }
       }
     }
     return edges;
-  }, [tileData, tileMap, HEX_SIZE]);
+  }, [tileData, tileMap, HEX_SIZE, INSET]);
 
   const boardW = bounds.width;
   const boardH = bounds.height;
 
-  const topInset = insets.top + (Platform.OS === 'web' ? 67 : 0);
-  const botInset = insets.bottom + (Platform.OS === 'web' ? 34 : 0);
-  const availH = SH - topInset - botInset - 56;
-  const fitScale = boardW > 0 && boardH > 0
-    ? Math.min(SW / boardW, availH / boardH) * 0.9
-    : 1;
+  const availH = SH - topInset - botInset - BOTTOM_BAR_H;
+  const fitScale =
+    boardW > 0 && boardH > 0 ? Math.min(SW / boardW, availH / boardH) * 0.9 : 1;
   const initX = (SW - fitScale * boardW) / 2;
-  const initY = topInset + 56 + (availH - fitScale * boardH) / 2;
+  const initY = topInset + (availH - fitScale * boardH) / 2;
 
   const scale = useSharedValue(fitScale);
   const savedScale = useSharedValue(fitScale);
@@ -120,6 +147,48 @@ export default function GameScreen() {
   const translateY = useSharedValue(initY);
   const savedX = useSharedValue(initX);
   const savedY = useSharedValue(initY);
+
+  const pulseVal = useSharedValue(1);
+  const hasTakenAction = useRef(false);
+
+  useEffect(() => {
+    pulseVal.value = withRepeat(
+      withSequence(
+        withTiming(0.25, { duration: 550 }),
+        withTiming(1.0, { duration: 550 }),
+      ),
+      -1,
+      false,
+    );
+    return () => cancelAnimation(pulseVal);
+  }, []);
+
+  function handleAction() {
+    if (!hasTakenAction.current) {
+      hasTakenAction.current = true;
+      cancelAnimation(pulseVal);
+      pulseVal.value = withTiming(1.0, { duration: 200 });
+    }
+  }
+
+  const [ribbonOpen, setRibbonOpen] = useState(false);
+  const ribbonAnim = useSharedValue(RIBBON_H);
+
+  function openRibbon() {
+    setRibbonOpen(true);
+    ribbonAnim.value = withTiming(0, { duration: 280 });
+    handleAction();
+  }
+
+  function closeRibbon() {
+    ribbonAnim.value = withTiming(RIBBON_H, { duration: 220 });
+    setRibbonOpen(false);
+  }
+
+  function toggleRibbon() {
+    if (ribbonOpen) closeRibbon();
+    else openRibbon();
+  }
 
   const panGesture = Gesture.Pan()
     .onUpdate(e => {
@@ -133,7 +202,7 @@ export default function GameScreen() {
 
   const pinchGesture = Gesture.Pinch()
     .onUpdate(e => {
-      scale.value = Math.max(0.3, Math.min(5, savedScale.value * e.scale));
+      scale.value = Math.max(0.3, Math.min(3, savedScale.value * e.scale));
     })
     .onEnd(() => {
       savedScale.value = scale.value;
@@ -141,7 +210,7 @@ export default function GameScreen() {
 
   const gesture = Gesture.Simultaneous(panGesture, pinchGesture);
 
-  const animatedStyle = useAnimatedStyle(() => ({
+  const boardStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: translateX.value },
       { translateY: translateY.value },
@@ -149,40 +218,28 @@ export default function GameScreen() {
     ],
   }));
 
-  const ownerCounts: Record<string, number> = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const tile of tiles) {
-      if (tile.owner !== 'neutral' && tile.terrain !== 'mountain') {
-        counts[tile.owner] = (counts[tile.owner] ?? 0) + 1;
-      }
-    }
-    return counts;
-  }, [tiles]);
+  const endTurnStyle = useAnimatedStyle(() => ({
+    opacity: pulseVal.value,
+  }));
 
-  const legendEntries = useMemo(() => {
-    const entries: { key: TerritoryOwner; label: string; color: string; count: number }[] = [
-      { key: 'player', label: 'You', color: TERRITORY_BORDERS.player, count: ownerCounts['player'] ?? 0 },
-    ];
-    for (let i = 1; i <= numOpponents; i++) {
-      const k = `ai${i}` as TerritoryOwner;
-      const labels: Record<string, string> = { ai1: 'Red', ai2: 'Green', ai3: 'Orange' };
-      entries.push({ key: k, label: labels[k] ?? k, color: TERRITORY_BORDERS[k], count: ownerCounts[k] ?? 0 });
-    }
-    return entries;
-  }, [numOpponents, ownerCounts]);
+  const ribbonStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: ribbonAnim.value }],
+  }));
+
+  const credits = 500;
 
   return (
     <View style={styles.root}>
       <GestureDetector gesture={gesture}>
-        <Animated.View style={[styles.board, animatedStyle]}>
+        <Animated.View style={[styles.board, boardStyle]}>
           <Svg width={boardW} height={boardH}>
             {tileData.map(({ tile, cx, cy }) => (
               <Polygon
                 key={tile.key}
                 points={hexCornersString(cx, cy, HEX_SIZE)}
-                fill={getTileFill(tile)}
-                stroke="#040810"
-                strokeWidth={0.6}
+                fill={TERRAIN_FILLS[tile.terrain] ?? TERRAIN_FILLS.grass}
+                stroke="#030710"
+                strokeWidth={0.5}
               />
             ))}
             {borderEdges.map((edge, i) => (
@@ -193,7 +250,7 @@ export default function GameScreen() {
                 x2={edge.x2}
                 y2={edge.y2}
                 stroke={edge.color}
-                strokeWidth={2.8}
+                strokeWidth={2.6}
                 strokeLinecap="round"
               />
             ))}
@@ -201,23 +258,81 @@ export default function GameScreen() {
         </Animated.View>
       </GestureDetector>
 
-      <View style={[styles.topBar, { paddingTop: topInset + 10 }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={22} color="#E2E8F0" />
-        </TouchableOpacity>
-        <Text style={styles.topLabel}>
-          {numTiles} TILES  ·  {numOpponents} OPPONENT{numOpponents > 1 ? 'S' : ''}
-        </Text>
-      </View>
+      {ribbonOpen && (
+        <TouchableOpacity
+          style={[
+            StyleSheet.absoluteFillObject,
+            { bottom: BOTTOM_BAR_H + botInset },
+          ]}
+          onPress={closeRibbon}
+          activeOpacity={1}
+        />
+      )}
 
-      <View style={[styles.legend, { bottom: botInset + 16 }]}>
-        {legendEntries.map(entry => (
-          <View key={entry.key} style={styles.legendRow}>
-            <View style={[styles.legendDot, { backgroundColor: entry.color }]} />
-            <Text style={styles.legendLabel}>{entry.label}</Text>
-            <Text style={styles.legendCount}>{entry.count}</Text>
+      <Animated.View
+        style={[styles.ribbon, { bottom: BOTTOM_BAR_H + botInset }, ribbonStyle]}
+      >
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.ribbonContent}
+        >
+          {PURCHASABLES.map(item => {
+            const affordable = item.cost <= credits;
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={[styles.ribbonItem, !affordable && styles.ribbonItemDisabled]}
+                activeOpacity={affordable ? 0.75 : 1}
+              >
+                <Text style={styles.ribbonIcon}>{item.icon}</Text>
+                <Text style={[styles.ribbonName, !affordable && styles.ribbonDim]}>
+                  {item.name}
+                </Text>
+                <Text style={[styles.ribbonCost, !affordable && styles.ribbonDim]}>
+                  💰 {item.cost}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </Animated.View>
+
+      <View style={[styles.bottomBar, { paddingBottom: botInset }]}>
+        <View style={styles.bottomBarInner}>
+          <TouchableOpacity style={styles.menuBtn} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={15} color="#64748B" />
+            <Text style={styles.menuBtnText}>Menu</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.buildBtn, ribbonOpen && styles.buildBtnActive]}
+            onPress={toggleRibbon}
+          >
+            <Ionicons
+              name="construct"
+              size={15}
+              color={ribbonOpen ? '#050A14' : '#F59E0B'}
+            />
+            <Text style={[styles.buildBtnText, ribbonOpen && styles.buildBtnTextActive]}>
+              Build
+            </Text>
+          </TouchableOpacity>
+
+          <View style={styles.creditsDisplay}>
+            <Text style={styles.creditsIcon}>💰</Text>
+            <Text style={styles.creditsAmount}>{credits}</Text>
           </View>
-        ))}
+
+          <View style={styles.spacer} />
+
+          <Animated.View style={endTurnStyle}>
+            <TouchableOpacity style={styles.endTurnBtn} onPress={() => handleAction()}>
+              <Text style={styles.endTurnText}>End Turn</Text>
+              <Ionicons name="arrow-forward" size={13} color="#050A14" />
+            </TouchableOpacity>
+          </Animated.View>
+        </View>
       </View>
     </View>
   );
@@ -234,66 +349,143 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
   },
-  topBar: {
+  ribbon: {
     position: 'absolute',
-    top: 0,
     left: 0,
     right: 0,
+    height: RIBBON_H,
+    backgroundColor: 'rgba(8, 13, 24, 0.97)',
+    borderTopWidth: 1,
+    borderTopColor: '#1E3A5F',
+  },
+  ribbonContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingBottom: 10,
-    gap: 12,
-    backgroundColor: 'rgba(4, 8, 16, 0.75)',
+    gap: 10,
   },
-  backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(14, 25, 45, 0.9)',
-    borderWidth: 1,
-    borderColor: '#1E3A5F',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  topLabel: {
-    fontSize: 11,
-    fontFamily: 'Inter_600SemiBold',
-    color: '#475569',
-    letterSpacing: 2,
-  },
-  legend: {
-    position: 'absolute',
-    right: 16,
-    backgroundColor: 'rgba(8, 15, 28, 0.88)',
+  ribbonItem: {
+    width: 82,
+    height: RIBBON_H - 20,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#1E3A5F',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    gap: 6,
+    backgroundColor: '#0A1220',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
   },
-  legendRow: {
+  ribbonItemDisabled: {
+    borderColor: '#0E1A28',
+    backgroundColor: '#060C14',
+  },
+  ribbonIcon: {
+    fontSize: 22,
+  },
+  ribbonName: {
+    fontSize: 11,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#CBD5E1',
+  },
+  ribbonCost: {
+    fontSize: 10,
+    fontFamily: 'Inter_500Medium',
+    color: '#F59E0B',
+  },
+  ribbonDim: {
+    color: '#283040',
+  },
+  bottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(6, 10, 20, 0.97)',
+    borderTopWidth: 1,
+    borderTopColor: '#1E3A5F',
+  },
+  bottomBarInner: {
+    height: BOTTOM_BAR_H,
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 12,
     gap: 8,
   },
-  legendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  menuBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#1A2A40',
+    backgroundColor: '#070D1A',
   },
-  legendLabel: {
-    fontSize: 11,
+  menuBtnText: {
+    fontSize: 12,
     fontFamily: 'Inter_500Medium',
-    color: '#94A3B8',
+    color: '#64748B',
+  },
+  buildBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#7C5A15',
+    backgroundColor: '#150F04',
+  },
+  buildBtnActive: {
+    backgroundColor: '#F59E0B',
+    borderColor: '#F59E0B',
+  },
+  buildBtnText: {
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#F59E0B',
+  },
+  buildBtnTextActive: {
+    color: '#050A14',
+  },
+  creditsDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#1A2A40',
+    backgroundColor: '#070D1A',
+  },
+  creditsIcon: {
+    fontSize: 13,
+  },
+  creditsAmount: {
+    fontSize: 14,
+    fontFamily: 'Inter_700Bold',
+    color: '#F59E0B',
+  },
+  spacer: {
     flex: 1,
   },
-  legendCount: {
-    fontSize: 11,
+  endTurnBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#22C55E',
+  },
+  endTurnText: {
+    fontSize: 13,
     fontFamily: 'Inter_700Bold',
-    color: '#E2E8F0',
-    minWidth: 24,
-    textAlign: 'right',
+    color: '#050A14',
+    letterSpacing: 0.2,
   },
 });

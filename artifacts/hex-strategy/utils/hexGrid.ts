@@ -172,7 +172,7 @@ export function generateHexGrid(tileCount: number, playerCount: number): HexTile
     ['player', 'ai1', 'ai2', 'ai3'] as TerritoryOwner[]
   ).slice(0, clampedPlayers);
 
-  const assignable = tiles.filter(t => t.terrain !== 'mountain');
+  const assignable = tiles.filter(t => t.terrain !== 'mountain' && t.terrain !== 'city');
 
   for (let i = assignable.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));

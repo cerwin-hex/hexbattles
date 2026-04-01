@@ -75,7 +75,7 @@ export default function MainMenuScreen() {
               </TouchableOpacity>
             </View>
             <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${tileProgress * 100}%` as any }]} />
+              <View style={[styles.progressFill, { width: `${(tileProgress * 100).toFixed(1)}%` }]} />
             </View>
             <View style={styles.progressLabels}>
               <Text style={styles.progressText}>40</Text>
