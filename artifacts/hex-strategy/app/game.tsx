@@ -38,6 +38,15 @@ import {
 const BOTTOM_BAR_H = 64;
 const RIBBON_H = 130;
 
+const ORDERED_EDGES: ReadonlyArray<{ dir: [number, number]; verts: [number, number] }> = [
+  { dir: [1, 0],   verts: [0, 1] },
+  { dir: [0, 1],   verts: [1, 2] },
+  { dir: [-1, 1],  verts: [2, 3] },
+  { dir: [-1, 0],  verts: [3, 4] },
+  { dir: [0, -1],  verts: [4, 5] },
+  { dir: [1, -1],  verts: [5, 0] },
+];
+
 const PURCHASABLES = [
   { id: 'soldier',  name: 'Soldier',  icon: '⚔️',  cost: 50 },
   { id: 'archer',   name: 'Archer',   icon: '🏹',  cost: 75 },
@@ -46,36 +55,6 @@ const PURCHASABLES = [
   { id: 'fortress', name: 'Fortress', icon: '🏰',  cost: 250 },
   { id: 'castle',   name: 'Castle',   icon: '🏯',  cost: 750 },
 ] as const;
-
-function insetEdge(
-  ptA: { x: number; y: number },
-  ptB: { x: number; y: number },
-  cx: number,
-  cy: number,
-  perpAmount: number,
-  edgeTrim: number = 0,
-): { x1: number; y1: number; x2: number; y2: number } {
-  const mx = (ptA.x + ptB.x) / 2;
-  const my = (ptA.y + ptB.y) / 2;
-  const dx = cx - mx;
-  const dy = cy - my;
-  const dist = Math.sqrt(dx * dx + dy * dy);
-  const perpX = dist < 0.001 ? 0 : (dx / dist) * perpAmount;
-  const perpY = dist < 0.001 ? 0 : (dy / dist) * perpAmount;
-
-  const edgeDx = ptB.x - ptA.x;
-  const edgeDy = ptB.y - ptA.y;
-  const edgeDist = Math.sqrt(edgeDx * edgeDx + edgeDy * edgeDy);
-  const edgeNx = edgeDist < 0.001 ? 0 : (edgeDx / edgeDist) * edgeTrim;
-  const edgeNy = edgeDist < 0.001 ? 0 : (edgeDy / edgeDist) * edgeTrim;
-
-  return {
-    x1: ptA.x + perpX + edgeNx,
-    y1: ptA.y + perpY + edgeNy,
-    x2: ptB.x + perpX - edgeNx,
-    y2: ptB.y + perpY - edgeNy,
-  };
-}
 
 interface BorderEdge {
   x1: number;
@@ -97,9 +76,12 @@ export default function GameScreen() {
 
   const HEX_SIZE = Math.max(20, Math.min(42, Math.floor(280 / Math.sqrt(numTiles))));
   const BORDER_W = 4.0;
-  const PERP_INSET = BORDER_W * 0.65;
-  const EDGE_TRIM = HEX_SIZE * 0.08;
-  const CITY_INSET = BORDER_W * 0.5;
+  const CITY_W = 3.0;
+  // Inner hex radius: line centre sits BORDER_W*0.65 perpendicular inside the tile edge.
+  // For a flat-top regular hex: perpInset = (HEX_SIZE - innerSize) * cos(30°)
+  // → innerSize = HEX_SIZE - perpInset * (2/√3)
+  const INNER_SIZE = HEX_SIZE - BORDER_W * 0.65 * (2 / Math.sqrt(3));
+  const CITY_INNER_SIZE = HEX_SIZE - CITY_W * 0.5 * (2 / Math.sqrt(3));
 
   const tiles = useMemo(
     () => generateHexGrid(numTiles, numOpponents + 1),
@@ -126,38 +108,38 @@ export default function GameScreen() {
   const borderEdges = useMemo<BorderEdge[]>(() => {
     const edges: BorderEdge[] = [];
 
+    // Territory borders — use inner hex vertices so adjacent edges share the
+    // exact same corner point, eliminating gaps when strokeLinecap="round".
     for (const { tile, cx, cy } of tileData) {
       if (tile.terrain === 'mountain' || tile.owner === 'neutral') continue;
       const color = TERRITORY_BORDERS[tile.owner as TerritoryOwner]!;
-      for (const { dir: [dq, dr], verts: [va, vb] } of HEX_EDGES) {
+      for (const { dir: [dq, dr], verts: [va, vb] } of ORDERED_EDGES) {
         const nk = tileKey(tile.q + dq, tile.r + dr);
         const neighbor = tileMap.get(nk);
-        const ptA = hexCornerPoint(cx, cy, HEX_SIZE, va);
-        const ptB = hexCornerPoint(cx, cy, HEX_SIZE, vb);
-        const isShared = neighbor && neighbor.owner !== 'neutral'
-          && neighbor.terrain !== 'mountain'
-          && neighbor.owner !== tile.owner;
-        const e = insetEdge(ptA, ptB, cx, cy, PERP_INSET, EDGE_TRIM);
-        if (!neighbor || neighbor.terrain === 'mountain' || neighbor.owner === 'neutral') {
-          edges.push({ x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, color, width: BORDER_W });
-        } else if (isShared) {
-          edges.push({ x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, color, width: BORDER_W });
-        }
+        const needsBorder =
+          !neighbor ||
+          neighbor.terrain === 'mountain' ||
+          neighbor.owner === 'neutral' ||
+          neighbor.owner !== tile.owner;
+        if (!needsBorder) continue;
+        const ptA = hexCornerPoint(cx, cy, INNER_SIZE, va);
+        const ptB = hexCornerPoint(cx, cy, INNER_SIZE, vb);
+        edges.push({ x1: ptA.x, y1: ptA.y, x2: ptB.x, y2: ptB.y, color, width: BORDER_W });
       }
     }
 
+    // City neutral-zone ring — all 6 inner edges of each city tile.
     for (const { tile, cx, cy } of tileData) {
       if (tile.terrain !== 'city') continue;
-      for (const { verts: [va, vb] } of HEX_EDGES) {
-        const ptA = hexCornerPoint(cx, cy, HEX_SIZE, va);
-        const ptB = hexCornerPoint(cx, cy, HEX_SIZE, vb);
-        const e = insetEdge(ptA, ptB, cx, cy, CITY_INSET, EDGE_TRIM);
-        edges.push({ x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, color: CITY_BORDER_COLOR, width: 3.0 });
+      for (const { verts: [va, vb] } of ORDERED_EDGES) {
+        const ptA = hexCornerPoint(cx, cy, CITY_INNER_SIZE, va);
+        const ptB = hexCornerPoint(cx, cy, CITY_INNER_SIZE, vb);
+        edges.push({ x1: ptA.x, y1: ptA.y, x2: ptB.x, y2: ptB.y, color: CITY_BORDER_COLOR, width: CITY_W });
       }
     }
 
     return edges;
-  }, [tileData, tileMap, HEX_SIZE, PERP_INSET, EDGE_TRIM, CITY_INSET]);
+  }, [tileData, tileMap, HEX_SIZE, INNER_SIZE, CITY_INNER_SIZE]);
 
   const boardW = bounds.width;
   const boardH = bounds.height;
@@ -289,7 +271,7 @@ export default function GameScreen() {
                 y2={edge.y2}
                 stroke={edge.color}
                 strokeWidth={edge.width}
-                strokeLinecap="butt"
+                strokeLinecap="round"
               />
             ))}
           </Svg>
