@@ -22,7 +22,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Line, Polygon } from 'react-native-svg';
 
-import { TERRAIN_FILLS, TERRITORY_BORDERS } from '@/constants/colors';
+import { CITY_BORDER_COLOR, TERRAIN_FILLS, TERRITORY_BORDERS } from '@/constants/colors';
 import {
   HEX_EDGES,
   HexTile,
@@ -52,17 +52,29 @@ function insetEdge(
   ptB: { x: number; y: number },
   cx: number,
   cy: number,
-  amount: number,
+  perpAmount: number,
+  edgeTrim: number = 0,
 ): { x1: number; y1: number; x2: number; y2: number } {
   const mx = (ptA.x + ptB.x) / 2;
   const my = (ptA.y + ptB.y) / 2;
   const dx = cx - mx;
   const dy = cy - my;
   const dist = Math.sqrt(dx * dx + dy * dy);
-  if (dist < 0.001) return { x1: ptA.x, y1: ptA.y, x2: ptB.x, y2: ptB.y };
-  const nx = (dx / dist) * amount;
-  const ny = (dy / dist) * amount;
-  return { x1: ptA.x + nx, y1: ptA.y + ny, x2: ptB.x + nx, y2: ptB.y + ny };
+  const perpX = dist < 0.001 ? 0 : (dx / dist) * perpAmount;
+  const perpY = dist < 0.001 ? 0 : (dy / dist) * perpAmount;
+
+  const edgeDx = ptB.x - ptA.x;
+  const edgeDy = ptB.y - ptA.y;
+  const edgeDist = Math.sqrt(edgeDx * edgeDx + edgeDy * edgeDy);
+  const edgeNx = edgeDist < 0.001 ? 0 : (edgeDx / edgeDist) * edgeTrim;
+  const edgeNy = edgeDist < 0.001 ? 0 : (edgeDy / edgeDist) * edgeTrim;
+
+  return {
+    x1: ptA.x + perpX + edgeNx,
+    y1: ptA.y + perpY + edgeNy,
+    x2: ptB.x + perpX - edgeNx,
+    y2: ptB.y + perpY - edgeNy,
+  };
 }
 
 interface BorderEdge {
@@ -71,6 +83,7 @@ interface BorderEdge {
   x2: number;
   y2: number;
   color: string;
+  width: number;
 }
 
 export default function GameScreen() {
@@ -83,6 +96,10 @@ export default function GameScreen() {
   const botInset = insets.bottom + (Platform.OS === 'web' ? 34 : 0);
 
   const HEX_SIZE = Math.max(20, Math.min(42, Math.floor(280 / Math.sqrt(numTiles))));
+  const BORDER_W = 4.0;
+  const PERP_INSET = BORDER_W * 0.65;
+  const EDGE_TRIM = HEX_SIZE * 0.08;
+  const CITY_INSET = BORDER_W * 0.5;
 
   const tiles = useMemo(
     () => generateHexGrid(numTiles, numOpponents + 1),
@@ -106,12 +123,9 @@ export default function GameScreen() {
     });
   }, [tiles, bounds, HEX_SIZE]);
 
-  const BORDER_STROKE_W = 4.5;
-  const SHARED_INSET = BORDER_STROKE_W / 2;
-  const OUTER_INSET = BORDER_STROKE_W / 2;
-
   const borderEdges = useMemo<BorderEdge[]>(() => {
     const edges: BorderEdge[] = [];
+
     for (const { tile, cx, cy } of tileData) {
       if (tile.terrain === 'mountain' || tile.owner === 'neutral') continue;
       const color = TERRITORY_BORDERS[tile.owner as TerritoryOwner]!;
@@ -120,22 +134,33 @@ export default function GameScreen() {
         const neighbor = tileMap.get(nk);
         const ptA = hexCornerPoint(cx, cy, HEX_SIZE, va);
         const ptB = hexCornerPoint(cx, cy, HEX_SIZE, vb);
-
+        const isShared = neighbor && neighbor.owner !== 'neutral'
+          && neighbor.terrain !== 'mountain'
+          && neighbor.owner !== tile.owner;
+        const e = insetEdge(ptA, ptB, cx, cy, PERP_INSET, EDGE_TRIM);
         if (!neighbor || neighbor.terrain === 'mountain' || neighbor.owner === 'neutral') {
-          const e = insetEdge(ptA, ptB, cx, cy, OUTER_INSET);
-          edges.push({ x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, color });
-        } else if (neighbor.owner !== tile.owner) {
-          const e = insetEdge(ptA, ptB, cx, cy, SHARED_INSET);
-          edges.push({ x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, color });
+          edges.push({ x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, color, width: BORDER_W });
+        } else if (isShared) {
+          edges.push({ x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, color, width: BORDER_W });
         }
       }
     }
+
+    for (const { tile, cx, cy } of tileData) {
+      if (tile.terrain !== 'city') continue;
+      for (const { verts: [va, vb] } of HEX_EDGES) {
+        const ptA = hexCornerPoint(cx, cy, HEX_SIZE, va);
+        const ptB = hexCornerPoint(cx, cy, HEX_SIZE, vb);
+        const e = insetEdge(ptA, ptB, cx, cy, CITY_INSET, EDGE_TRIM);
+        edges.push({ x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, color: CITY_BORDER_COLOR, width: 3.0 });
+      }
+    }
+
     return edges;
-  }, [tileData, tileMap, HEX_SIZE, SHARED_INSET, OUTER_INSET]);
+  }, [tileData, tileMap, HEX_SIZE, PERP_INSET, EDGE_TRIM, CITY_INSET]);
 
   const boardW = bounds.width;
   const boardH = bounds.height;
-
   const availH = SH - topInset - botInset - BOTTOM_BAR_H;
   const fitScale =
     boardW > 0 && boardH > 0 ? Math.min(SW / boardW, availH / boardH) * 0.9 : 1;
@@ -164,8 +189,8 @@ export default function GameScreen() {
   useEffect(() => {
     pulseVal.value = withRepeat(
       withSequence(
-        withTiming(0.25, { duration: 550 }),
-        withTiming(1.0, { duration: 550 }),
+        withTiming(0.25, { duration: 600 }),
+        withTiming(1.0, { duration: 600 }),
       ),
       -1,
       false,
@@ -236,10 +261,6 @@ export default function GameScreen() {
     transform: [{ translateY: ribbonAnim.value }],
   }));
 
-  function getTileFill(tile: HexTile): string {
-    return TERRAIN_FILLS[tile.terrain] ?? TERRAIN_FILLS.grass;
-  }
-
   const credits = 500;
 
   return (
@@ -248,13 +269,13 @@ export default function GameScreen() {
         <Animated.View style={[styles.board, boardStyle]}>
           <Svg width={boardW} height={boardH}>
             {tileData.map(({ tile, cx, cy }) => {
-              const fill = getTileFill(tile);
+              const fill = TERRAIN_FILLS[tile.terrain] ?? TERRAIN_FILLS.grass;
               return (
                 <Polygon
                   key={tile.key}
                   points={hexCornersString(cx, cy, HEX_SIZE)}
                   fill={fill}
-                  stroke={fill}
+                  stroke="#080603"
                   strokeWidth={1}
                 />
               );
@@ -267,8 +288,8 @@ export default function GameScreen() {
                 x2={edge.x2}
                 y2={edge.y2}
                 stroke={edge.color}
-                strokeWidth={BORDER_STROKE_W}
-                strokeLinecap="round"
+                strokeWidth={edge.width}
+                strokeLinecap="butt"
               />
             ))}
           </Svg>
@@ -307,7 +328,7 @@ export default function GameScreen() {
                   {item.name}
                 </Text>
                 <Text style={[styles.ribbonCost, !affordable && styles.ribbonDim]}>
-                  💰 {item.cost}
+                  {item.cost}g
                 </Text>
               </TouchableOpacity>
             );
@@ -318,7 +339,7 @@ export default function GameScreen() {
       <View style={[styles.bottomBar, { paddingBottom: botInset }]}>
         <View style={styles.bottomBarInner}>
           <TouchableOpacity style={styles.menuBtn} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={15} color="#64748B" />
+            <Ionicons name="arrow-back" size={14} color="#786A54" />
             <Text style={styles.menuBtnText}>Menu</Text>
           </TouchableOpacity>
 
@@ -327,9 +348,9 @@ export default function GameScreen() {
             onPress={toggleRibbon}
           >
             <Ionicons
-              name="construct"
-              size={15}
-              color={ribbonOpen ? '#050A14' : '#F59E0B'}
+              name="hammer"
+              size={14}
+              color={ribbonOpen ? '#0D0A06' : '#C8A24A'}
             />
             <Text style={[styles.buildBtnText, ribbonOpen && styles.buildBtnTextActive]}>
               Build
@@ -337,7 +358,7 @@ export default function GameScreen() {
           </TouchableOpacity>
 
           <View style={styles.creditsDisplay}>
-            <Text style={styles.creditsIcon}>💰</Text>
+            <Text style={styles.creditsIcon}>⚜️</Text>
             <Text style={styles.creditsAmount}>{credits}</Text>
           </View>
 
@@ -346,7 +367,7 @@ export default function GameScreen() {
           <Animated.View style={endTurnStyle}>
             <TouchableOpacity style={styles.endTurnBtn} onPress={() => handleAction()}>
               <Text style={styles.endTurnText}>End Turn</Text>
-              <Ionicons name="arrow-forward" size={13} color="#050A14" />
+              <Ionicons name="arrow-forward" size={13} color="#F0D080" />
             </TouchableOpacity>
           </Animated.View>
         </View>
@@ -358,7 +379,7 @@ export default function GameScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#040810',
+    backgroundColor: '#0D0A06',
     overflow: 'hidden',
   },
   board: {
@@ -371,9 +392,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: RIBBON_H,
-    backgroundColor: 'rgba(8, 13, 24, 0.97)',
+    backgroundColor: 'rgba(18, 13, 6, 0.97)',
     borderTopWidth: 1,
-    borderTopColor: '#1E3A5F',
+    borderTopColor: '#5C4820',
   },
   ribbonContent: {
     paddingHorizontal: 12,
@@ -385,42 +406,42 @@ const styles = StyleSheet.create({
   ribbonItem: {
     width: 82,
     height: RIBBON_H - 20,
-    borderRadius: 10,
+    borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#1E3A5F',
-    backgroundColor: '#0A1220',
+    borderColor: '#4A3C1E',
+    backgroundColor: '#1A1208',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 3,
   },
   ribbonItemDisabled: {
-    borderColor: '#0E1A28',
-    backgroundColor: '#060C14',
+    borderColor: '#241C0A',
+    backgroundColor: '#110D06',
   },
   ribbonIcon: {
     fontSize: 22,
   },
   ribbonName: {
-    fontSize: 11,
-    fontFamily: 'Inter_600SemiBold',
-    color: '#CBD5E1',
+    fontSize: 10,
+    fontFamily: 'Cinzel_400Regular',
+    color: '#C8A24A',
   },
   ribbonCost: {
     fontSize: 10,
     fontFamily: 'Inter_500Medium',
-    color: '#F59E0B',
+    color: '#A08C68',
   },
   ribbonDim: {
-    color: '#283040',
+    color: '#3A3020',
   },
   bottomBar: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(6, 10, 20, 0.97)',
+    backgroundColor: 'rgba(14, 10, 5, 0.97)',
     borderTopWidth: 1,
-    borderTopColor: '#1E3A5F',
+    borderTopColor: '#5C4820',
   },
   bottomBarInner: {
     height: BOTTOM_BAR_H,
@@ -435,15 +456,15 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 11,
     paddingVertical: 9,
-    borderRadius: 8,
+    borderRadius: 5,
     borderWidth: 1,
-    borderColor: '#1A2A40',
-    backgroundColor: '#070D1A',
+    borderColor: '#3A2E14',
+    backgroundColor: '#140F06',
   },
   menuBtnText: {
-    fontSize: 12,
-    fontFamily: 'Inter_500Medium',
-    color: '#64748B',
+    fontSize: 11,
+    fontFamily: 'Cinzel_400Regular',
+    color: '#786A54',
   },
   buildBtn: {
     flexDirection: 'row',
@@ -451,33 +472,33 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 13,
     paddingVertical: 9,
-    borderRadius: 8,
+    borderRadius: 5,
     borderWidth: 1,
-    borderColor: '#7C5A15',
-    backgroundColor: '#150F04',
+    borderColor: '#6B5220',
+    backgroundColor: '#1A1208',
   },
   buildBtnActive: {
-    backgroundColor: '#F59E0B',
-    borderColor: '#F59E0B',
+    backgroundColor: '#C8A24A',
+    borderColor: '#C8A24A',
   },
   buildBtnText: {
-    fontSize: 12,
-    fontFamily: 'Inter_600SemiBold',
-    color: '#F59E0B',
+    fontSize: 11,
+    fontFamily: 'Cinzel_400Regular',
+    color: '#C8A24A',
   },
   buildBtnTextActive: {
-    color: '#050A14',
+    color: '#0D0A06',
   },
   creditsDisplay: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 10,
-    paddingVertical: 9,
-    borderRadius: 8,
+    paddingVertical: 8,
+    borderRadius: 5,
     borderWidth: 1,
-    borderColor: '#1A2A40',
-    backgroundColor: '#070D1A',
+    borderColor: '#3A2E14',
+    backgroundColor: '#140F06',
   },
   creditsIcon: {
     fontSize: 13,
@@ -485,7 +506,7 @@ const styles = StyleSheet.create({
   creditsAmount: {
     fontSize: 14,
     fontFamily: 'Inter_700Bold',
-    color: '#F59E0B',
+    color: '#C8A24A',
   },
   spacer: {
     flex: 1,
@@ -496,13 +517,15 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#22C55E',
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: '#8B6010',
+    backgroundColor: '#4A2E08',
   },
   endTurnText: {
-    fontSize: 13,
-    fontFamily: 'Inter_700Bold',
-    color: '#050A14',
-    letterSpacing: 0.2,
+    fontSize: 12,
+    fontFamily: 'Cinzel_700Bold',
+    color: '#F0D080',
+    letterSpacing: 0.5,
   },
 });

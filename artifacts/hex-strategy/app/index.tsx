@@ -61,27 +61,27 @@ export default function MainMenuScreen() {
 
   return (
     <LinearGradient
-      colors={['#030710', '#070E1C', '#0A1628']}
+      colors={['#0D0A06', '#130E07', '#1A1208']}
       style={styles.root}
     >
       <View style={[styles.content, { paddingTop: topPad + 24, paddingBottom: botPad + 24 }]}>
 
         <View style={styles.header}>
-          <Text style={styles.eyebrow}>TURN-BASED STRATEGY</Text>
-          <Text style={styles.title}>HEX{'\n'}CONQUEST</Text>
+          <Text style={styles.eyebrow}>Turn-Based Strategy</Text>
+          <Text style={styles.title}>{'HEX\nCONQUEST'}</Text>
           <View style={styles.accentLine} />
         </View>
 
         <View style={styles.sections}>
           <View style={styles.section}>
-            <Text style={styles.label}>MAP SIZE</Text>
+            <Text style={styles.label}>Map Size</Text>
             <View style={styles.stepper}>
               <TouchableOpacity
                 style={styles.stepBtn}
                 onPress={() => adjustTiles(-10)}
                 activeOpacity={0.7}
               >
-                <Ionicons name="remove" size={22} color="#F59E0B" />
+                <Ionicons name="remove" size={22} color="#C8A24A" />
               </TouchableOpacity>
               <View style={styles.stepValue}>
                 <TextInput
@@ -95,14 +95,14 @@ export default function MainMenuScreen() {
                   selectTextOnFocus
                   maxLength={3}
                 />
-                <Text style={styles.stepUnit}>TILES</Text>
+                <Text style={styles.stepUnit}>Tiles</Text>
               </View>
               <TouchableOpacity
                 style={styles.stepBtn}
                 onPress={() => adjustTiles(10)}
                 activeOpacity={0.7}
               >
-                <Ionicons name="add" size={22} color="#F59E0B" />
+                <Ionicons name="add" size={22} color="#C8A24A" />
               </TouchableOpacity>
             </View>
             <View style={styles.progressTrack}>
@@ -115,7 +115,7 @@ export default function MainMenuScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.label}>OPPONENTS</Text>
+            <Text style={styles.label}>Opponents</Text>
             <View style={styles.pills}>
               {[1, 2, 3].map(n => (
                 <TouchableOpacity
@@ -133,7 +133,7 @@ export default function MainMenuScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.label}>DIFFICULTY</Text>
+            <Text style={styles.label}>Difficulty</Text>
             <View style={styles.pills}>
               {(['easy', 'medium', 'hard'] as Difficulty[]).map(d => (
                 <TouchableOpacity
@@ -143,7 +143,7 @@ export default function MainMenuScreen() {
                   activeOpacity={0.7}
                 >
                   <Text style={[styles.diffText, difficulty === d && styles.diffTextActive]}>
-                    {d.toUpperCase()}
+                    {d.charAt(0).toUpperCase() + d.slice(1)}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -152,9 +152,9 @@ export default function MainMenuScreen() {
         </View>
 
         <TouchableOpacity style={styles.startOuter} onPress={handleStart} activeOpacity={0.85}>
-          <LinearGradient colors={['#F59E0B', '#B45309']} style={styles.startInner}>
-            <Text style={styles.startText}>START GAME</Text>
-            <Ionicons name="chevron-forward" size={20} color="#050A14" />
+          <LinearGradient colors={['#6B4A10', '#4A3008', '#3A2208']} style={styles.startInner}>
+            <Text style={styles.startText}>Commence Battle</Text>
+            <Ionicons name="chevron-forward" size={18} color="#F0D080" />
           </LinearGradient>
         </TouchableOpacity>
 
@@ -174,22 +174,22 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   eyebrow: {
-    fontSize: 10,
-    fontFamily: 'Inter_600SemiBold',
-    color: '#F59E0B',
-    letterSpacing: 4,
+    fontSize: 11,
+    fontFamily: 'Cinzel_400Regular',
+    color: '#786A54',
+    letterSpacing: 2,
   },
   title: {
     fontSize: 58,
-    fontFamily: 'Inter_700Bold',
-    color: '#E2E8F0',
-    lineHeight: 62,
-    letterSpacing: -1,
+    fontFamily: 'Cinzel_700Bold',
+    color: '#C8A24A',
+    lineHeight: 64,
+    letterSpacing: 1,
   },
   accentLine: {
-    width: 44,
-    height: 2.5,
-    backgroundColor: '#F59E0B',
+    width: 54,
+    height: 2,
+    backgroundColor: '#6B4A10',
     marginTop: 4,
   },
   sections: {
@@ -200,9 +200,9 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 10,
-    fontFamily: 'Inter_600SemiBold',
-    color: '#475569',
-    letterSpacing: 3,
+    fontFamily: 'Cinzel_400Regular',
+    color: '#786A54',
+    letterSpacing: 2,
   },
   stepper: {
     flexDirection: 'row',
@@ -212,10 +212,10 @@ const styles = StyleSheet.create({
   stepBtn: {
     width: 46,
     height: 46,
-    borderRadius: 23,
+    borderRadius: 5,
     borderWidth: 1,
-    borderColor: '#1E3A5F',
-    backgroundColor: '#0A1220',
+    borderColor: '#4A3C1E',
+    backgroundColor: '#1A1208',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -226,26 +226,26 @@ const styles = StyleSheet.create({
   stepInput: {
     fontSize: 44,
     fontFamily: 'Inter_700Bold',
-    color: '#E2E8F0',
+    color: '#C8A24A',
     textAlign: 'center',
     minWidth: 80,
   },
   stepUnit: {
     fontSize: 10,
-    fontFamily: 'Inter_500Medium',
-    color: '#475569',
-    letterSpacing: 3,
+    fontFamily: 'Cinzel_400Regular',
+    color: '#786A54',
+    letterSpacing: 2,
     marginTop: 2,
   },
   progressTrack: {
     height: 3,
-    backgroundColor: '#1E3A5F',
+    backgroundColor: '#2A1E0C',
     borderRadius: 2,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#F59E0B',
+    backgroundColor: '#6B4A10',
     borderRadius: 2,
   },
   progressLabels: {
@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
   progressText: {
     fontSize: 10,
     fontFamily: 'Inter_400Regular',
-    color: '#334155',
+    color: '#3A2E14',
   },
   pills: {
     flexDirection: 'row',
@@ -265,50 +265,52 @@ const styles = StyleSheet.create({
   pill: {
     flex: 1,
     height: 54,
-    borderRadius: 10,
+    borderRadius: 5,
     borderWidth: 1,
-    borderColor: '#1E3A5F',
-    backgroundColor: '#080F1C',
+    borderColor: '#3A2E14',
+    backgroundColor: '#140F06',
     alignItems: 'center',
     justifyContent: 'center',
   },
   pillActive: {
-    borderColor: '#F59E0B',
-    backgroundColor: '#150E04',
+    borderColor: '#C8A24A',
+    backgroundColor: '#1E1608',
   },
   pillText: {
     fontSize: 22,
     fontFamily: 'Inter_700Bold',
-    color: '#334155',
+    color: '#3A2E14',
   },
   pillTextActive: {
-    color: '#F59E0B',
+    color: '#C8A24A',
   },
   diffPill: {
     flex: 1,
     height: 42,
-    borderRadius: 8,
+    borderRadius: 5,
     borderWidth: 1,
-    borderColor: '#1E3A5F',
-    backgroundColor: '#080F1C',
+    borderColor: '#3A2E14',
+    backgroundColor: '#140F06',
     alignItems: 'center',
     justifyContent: 'center',
   },
   diffPillActive: {
-    borderColor: '#64748B',
-    backgroundColor: '#111827',
+    borderColor: '#786A54',
+    backgroundColor: '#1E1608',
   },
   diffText: {
     fontSize: 10,
-    fontFamily: 'Inter_600SemiBold',
-    color: '#334155',
+    fontFamily: 'Cinzel_400Regular',
+    color: '#3A2E14',
     letterSpacing: 1.5,
   },
   diffTextActive: {
-    color: '#CBD5E1',
+    color: '#C8A24A',
   },
   startOuter: {
-    borderRadius: 14,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: '#6B4A10',
     overflow: 'hidden',
   },
   startInner: {
@@ -319,9 +321,9 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
   },
   startText: {
-    fontSize: 15,
-    fontFamily: 'Inter_700Bold',
-    color: '#050A14',
+    fontSize: 14,
+    fontFamily: 'Cinzel_700Bold',
+    color: '#F0D080',
     letterSpacing: 1.5,
   },
 });

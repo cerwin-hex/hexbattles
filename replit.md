@@ -54,20 +54,27 @@ Every package extends `tsconfig.base.json` which sets `composite: true`. The roo
 
 Android-first Expo React Native turn-based hexagonal strategy game.
 
-**Phase 1 complete** (main menu + interactive hex board):
-- `app/index.tsx` — Main menu (tile count 40–200, 1–3 opponents, difficulty)
-- `app/game.tsx` — Interactive hex board with SVG rendering, zoom/pan via GestureDetector + Reanimated
-- `app/_layout.tsx` — Stack navigation (index → game), no tabs
-- `utils/hexGrid.ts` — Hex grid generation: organic BFS shape, terrain (5% Mountain, 15% Desert, 1% City, rest Grass), round-robin territory distribution
-- `constants/colors.ts` — Dark navy game palette + TERRAIN_FILLS, TERRITORY_FILLS, TERRITORY_BORDERS exports
+**Phase 1 + 2 complete** (main menu + game screen overhaul):
+- `app/index.tsx` — Main menu (Cinzel title, TextInput tile count 40–200, 1–3 opponents, difficulty, "Commence Battle" CTA)
+- `app/game.tsx` — Interactive hex board: SVG terrain tiles, inset territory borders, city neutral-zone ring, zoom/pan, bottom bar (Menu | Build | ⚜️ Credits | End Turn), slide-up purchase ribbon, End Turn pulse animation
+- `app/_layout.tsx` — Stack navigation (index → game), loads Inter + Cinzel fonts
+- `utils/hexGrid.ts` — Hex grid generation: organic BFS shape, terrain (5% Mountain, 15% Desert, 1% City, rest Grass), round-robin territory distribution excluding mountains and cities
+- `constants/colors.ts` — Medieval earth palette + TERRAIN_FILLS, TERRITORY_FILLS, TERRITORY_BORDERS, CITY_BORDER_COLOR exports
+
+**Visual style — Medieval theme:**
+- Fonts: Cinzel (titles/labels) + Inter (numbers/body)
+- Colors: dark earth backgrounds (#0D0A06), aged gold accent (#C8A24A), parchment text (#D4BF96)
+- Terrain: dark forest (#2A5C20), sand (#8B6B24), stone (#5A5650), deep purple city (#3D1F5E)
+- Territory borders: steel blue / crimson / forest green / amber (heraldic)
+- Border lines: `insetEdge()` with along-edge trim (edgeTrim=HEX_SIZE*0.08) + strokeLinecap="butt" → clean flat ends at hex corners
+- City neutral zone: warm stone ring (#8B7A5A) drawn inside city tiles via borderEdges pass
 
 **Key game rules:**
 - Up to 4 players: player (blue), AI1 (red), AI2 (green), AI3 (orange)
-- Mountains always neutral/unowned; all other tiles distributed equally round-robin
-- No starting cities in Phase 1 (Phase 2 feature)
-- Flat-top axial hex coordinates; territory borders drawn per edge direction mapping
+- Mountains always neutral/unowned; cities always neutral; all other tiles distributed equally round-robin
+- Flat-top axial hex coordinates; territory borders drawn per HEX_EDGES direction→vertex mapping
 
-**Dependencies:** react-native-svg 15.12.1, react-native-gesture-handler, react-native-reanimated, expo-linear-gradient, expo-haptics, @expo/vector-icons
+**Dependencies:** react-native-svg, react-native-gesture-handler, react-native-reanimated, expo-linear-gradient, expo-haptics, @expo/vector-icons, @expo-google-fonts/inter, @expo-google-fonts/cinzel
 
 ## Packages
 
