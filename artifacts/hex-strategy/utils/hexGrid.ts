@@ -7,6 +7,7 @@ export interface HexTile {
   terrain: TerrainType;
   owner: TerritoryOwner;
   key: string;
+  cityBuffer: boolean;
 }
 
 export interface BoardBounds {
@@ -29,6 +30,10 @@ export const HEX_EDGES: Array<{ dir: [number, number]; verts: [number, number] }
 
 export function tileKey(q: number, r: number): string {
   return `${q},${r}`;
+}
+
+export function hexDistance(q1: number, r1: number, q2: number, r2: number): number {
+  return Math.max(Math.abs(q1 - q2), Math.abs(r1 - r2), Math.abs(q1 + r1 - q2 - r2));
 }
 
 export function hexToPixel(q: number, r: number, size: number): { x: number; y: number } {
@@ -78,6 +83,8 @@ function getNeighborsOf(q: number, r: number): [number, number][] {
   return HEX_EDGES.map(({ dir: [dq, dr] }) => [q + dq, r + dr] as [number, number]);
 }
 
+const MIN_CITY_DISTANCE = 5;
+
 export function generateHexGrid(tileCount: number, playerCount: number): HexTile[] {
   const clampedCount = Math.min(200, Math.max(40, tileCount));
   const clampedPlayers = Math.min(4, Math.max(1, playerCount));
@@ -87,7 +94,7 @@ export function generateHexGrid(tileCount: number, playerCount: number): HexTile
   const visited = new Set<string>([tileKey(0, 0)]);
 
   tileMap.set(tileKey(0, 0), {
-    q: 0, r: 0, terrain: 'grass', owner: 'neutral', key: tileKey(0, 0),
+    q: 0, r: 0, terrain: 'grass', owner: 'neutral', key: tileKey(0, 0), cityBuffer: false,
   });
 
   while (tileMap.size < clampedCount && frontier.length > 0) {
@@ -105,12 +112,13 @@ export function generateHexGrid(tileCount: number, playerCount: number): HexTile
     const [nq, nr] = unvisited[Math.floor(Math.random() * unvisited.length)];
     const key = tileKey(nq, nr);
     visited.add(key);
-    tileMap.set(key, { q: nq, r: nr, terrain: 'grass', owner: 'neutral', key });
+    tileMap.set(key, { q: nq, r: nr, terrain: 'grass', owner: 'neutral', key, cityBuffer: false });
     frontier.push([nq, nr]);
   }
 
   const tiles = Array.from(tileMap.values());
 
+  // Assign terrain — cities get a temporary flag, we enforce spacing afterwards
   for (const tile of tiles) {
     const rand = Math.random();
     if (rand < 0.05) tile.terrain = 'mountain';
@@ -119,6 +127,32 @@ export function generateHexGrid(tileCount: number, playerCount: number): HexTile
     else tile.terrain = 'grass';
   }
 
+  // Enforce minimum distance between cities: keep only cities that are
+  // at least MIN_CITY_DISTANCE apart from every already-accepted city.
+  const acceptedCities: HexTile[] = [];
+  for (const tile of tiles) {
+    if (tile.terrain !== 'city') continue;
+    const tooClose = acceptedCities.some(
+      c => hexDistance(tile.q, tile.r, c.q, c.r) < MIN_CITY_DISTANCE,
+    );
+    if (tooClose) {
+      tile.terrain = 'grass';
+    } else {
+      acceptedCities.push(tile);
+    }
+  }
+
+  // Mark every tile adjacent to a city as a buffer (stays neutral, shown with gray border)
+  for (const city of acceptedCities) {
+    for (const [nq, nr] of getNeighborsOf(city.q, city.r)) {
+      const neighbor = tileMap.get(tileKey(nq, nr));
+      if (neighbor && neighbor.terrain !== 'city') {
+        neighbor.cityBuffer = true;
+      }
+    }
+  }
+
+  // Ensure non-mountain connectivity
   const nonMountain = tiles.filter(t => t.terrain !== 'mountain');
   if (nonMountain.length > 1) {
     const reachable = new Set<string>([nonMountain[0].key]);
@@ -172,7 +206,10 @@ export function generateHexGrid(tileCount: number, playerCount: number): HexTile
     ['player', 'ai1', 'ai2', 'ai3'] as TerritoryOwner[]
   ).slice(0, clampedPlayers);
 
-  const assignable = tiles.filter(t => t.terrain !== 'mountain' && t.terrain !== 'city');
+  // Exclude mountains, cities, and city-buffer tiles from territory assignment
+  const assignable = tiles.filter(
+    t => t.terrain !== 'mountain' && t.terrain !== 'city' && !t.cityBuffer,
+  );
 
   for (let i = assignable.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));

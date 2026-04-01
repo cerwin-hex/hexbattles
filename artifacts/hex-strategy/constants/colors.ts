@@ -74,3 +74,4 @@ export const PLAYER_LABELS: Record<string, string> = {
 };
 
 export const CITY_BORDER_COLOR = '#8B7A5A';
+export const CITY_BUFFER_BORDER = '#B8B8B8';

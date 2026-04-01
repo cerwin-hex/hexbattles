@@ -22,7 +22,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Line, Polygon } from 'react-native-svg';
 
-import { CITY_BORDER_COLOR, TERRAIN_FILLS, TERRITORY_BORDERS } from '@/constants/colors';
+import { CITY_BORDER_COLOR, CITY_BUFFER_BORDER, TERRAIN_FILLS, TERRITORY_BORDERS } from '@/constants/colors';
 import {
   HEX_EDGES,
   HexTile,
@@ -125,6 +125,23 @@ export default function GameScreen() {
         const ptA = hexCornerPoint(cx, cy, INNER_SIZE, va);
         const ptB = hexCornerPoint(cx, cy, INNER_SIZE, vb);
         edges.push({ x1: ptA.x, y1: ptA.y, x2: ptB.x, y2: ptB.y, color, width: BORDER_W });
+      }
+    }
+
+    // City buffer zone borders — light gray border on the outer edge of every
+    // neutral buffer tile (where it meets non-buffer, non-city territory).
+    for (const { tile, cx, cy } of tileData) {
+      if (!tile.cityBuffer) continue;
+      for (const { dir: [dq, dr], verts: [va, vb] } of ORDERED_EDGES) {
+        const nk = tileKey(tile.q + dq, tile.r + dr);
+        const neighbor = tileMap.get(nk);
+        const needsBorder =
+          !neighbor ||
+          (!neighbor.cityBuffer && neighbor.terrain !== 'city');
+        if (!needsBorder) continue;
+        const ptA = hexCornerPoint(cx, cy, INNER_SIZE, va);
+        const ptB = hexCornerPoint(cx, cy, INNER_SIZE, vb);
+        edges.push({ x1: ptA.x, y1: ptA.y, x2: ptB.x, y2: ptB.y, color: CITY_BUFFER_BORDER, width: BORDER_W });
       }
     }
 
