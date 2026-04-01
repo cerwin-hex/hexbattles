@@ -2,13 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Dimensions,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -22,7 +22,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Line, Polygon } from 'react-native-svg';
 
-import { TERRAIN_FILLS, TERRITORY_BORDERS, TERRITORY_FILLS } from '@/constants/colors';
+import { TERRAIN_FILLS, TERRITORY_BORDERS } from '@/constants/colors';
 import {
   HEX_EDGES,
   HexTile,
@@ -34,8 +34,6 @@ import {
   hexToPixel,
   tileKey,
 } from '@/utils/hexGrid';
-
-const { width: SW, height: SH } = Dimensions.get('window');
 
 const BOTTOM_BAR_H = 64;
 const RIBBON_H = 130;
@@ -79,6 +77,7 @@ export default function GameScreen() {
   const params = useLocalSearchParams<{ tileCount: string; opponentCount: string }>();
   const numTiles = Math.min(200, Math.max(40, Number(params.tileCount) || 100));
   const numOpponents = Math.min(3, Math.max(1, Number(params.opponentCount) || 1));
+  const { width: SW, height: SH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const topInset = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const botInset = insets.bottom + (Platform.OS === 'web' ? 34 : 0);
@@ -107,7 +106,9 @@ export default function GameScreen() {
     });
   }, [tiles, bounds, HEX_SIZE]);
 
-  const INSET = HEX_SIZE * 0.13;
+  const BORDER_STROKE_W = 4.5;
+  const SHARED_INSET = BORDER_STROKE_W / 2;
+  const OUTER_INSET = BORDER_STROKE_W / 2;
 
   const borderEdges = useMemo<BorderEdge[]>(() => {
     const edges: BorderEdge[] = [];
@@ -121,16 +122,16 @@ export default function GameScreen() {
         const ptB = hexCornerPoint(cx, cy, HEX_SIZE, vb);
 
         if (!neighbor || neighbor.terrain === 'mountain' || neighbor.owner === 'neutral') {
-          const e = insetEdge(ptA, ptB, cx, cy, INSET * 0.35);
+          const e = insetEdge(ptA, ptB, cx, cy, OUTER_INSET);
           edges.push({ x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, color });
         } else if (neighbor.owner !== tile.owner) {
-          const e = insetEdge(ptA, ptB, cx, cy, INSET);
+          const e = insetEdge(ptA, ptB, cx, cy, SHARED_INSET);
           edges.push({ x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2, color });
         }
       }
     }
     return edges;
-  }, [tileData, tileMap, HEX_SIZE, INSET]);
+  }, [tileData, tileMap, HEX_SIZE, SHARED_INSET, OUTER_INSET]);
 
   const boardW = bounds.width;
   const boardH = bounds.height;
@@ -138,8 +139,8 @@ export default function GameScreen() {
   const availH = SH - topInset - botInset - BOTTOM_BAR_H;
   const fitScale =
     boardW > 0 && boardH > 0 ? Math.min(SW / boardW, availH / boardH) * 0.9 : 1;
-  const initX = (SW - fitScale * boardW) / 2;
-  const initY = topInset + (availH - fitScale * boardH) / 2;
+  const initX = (SW - boardW) / 2;
+  const initY = topInset + (availH - boardH) / 2;
 
   const scale = useSharedValue(fitScale);
   const savedScale = useSharedValue(fitScale);
@@ -147,6 +148,15 @@ export default function GameScreen() {
   const translateY = useSharedValue(initY);
   const savedX = useSharedValue(initX);
   const savedY = useSharedValue(initY);
+
+  useEffect(() => {
+    translateX.value = initX;
+    translateY.value = initY;
+    savedX.value = initX;
+    savedY.value = initY;
+    scale.value = fitScale;
+    savedScale.value = fitScale;
+  }, [initX, initY, fitScale]);
 
   const pulseVal = useSharedValue(1);
   const hasTakenAction = useRef(false);
@@ -227,9 +237,7 @@ export default function GameScreen() {
   }));
 
   function getTileFill(tile: HexTile): string {
-    if (tile.terrain === 'mountain') return TERRAIN_FILLS.mountain;
-    if (tile.owner === 'neutral') return TERRAIN_FILLS[tile.terrain] ?? TERRAIN_FILLS.grass;
-    return TERRITORY_FILLS[tile.owner] ?? TERRITORY_FILLS.neutral;
+    return TERRAIN_FILLS[tile.terrain] ?? TERRAIN_FILLS.grass;
   }
 
   const credits = 500;
@@ -239,15 +247,18 @@ export default function GameScreen() {
       <GestureDetector gesture={gesture}>
         <Animated.View style={[styles.board, boardStyle]}>
           <Svg width={boardW} height={boardH}>
-            {tileData.map(({ tile, cx, cy }) => (
-              <Polygon
-                key={tile.key}
-                points={hexCornersString(cx, cy, HEX_SIZE)}
-                fill={getTileFill(tile)}
-                stroke="#030710"
-                strokeWidth={0.5}
-              />
-            ))}
+            {tileData.map(({ tile, cx, cy }) => {
+              const fill = getTileFill(tile);
+              return (
+                <Polygon
+                  key={tile.key}
+                  points={hexCornersString(cx, cy, HEX_SIZE)}
+                  fill={fill}
+                  stroke={fill}
+                  strokeWidth={1}
+                />
+              );
+            })}
             {borderEdges.map((edge, i) => (
               <Line
                 key={i}
@@ -256,7 +267,7 @@ export default function GameScreen() {
                 x2={edge.x2}
                 y2={edge.y2}
                 stroke={edge.color}
-                strokeWidth={2.6}
+                strokeWidth={BORDER_STROKE_W}
                 strokeLinecap="round"
               />
             ))}
