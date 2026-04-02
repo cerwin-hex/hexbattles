@@ -47,23 +47,24 @@ export default colors;
 export const TERRAIN_FILLS: Record<string, string> = {
   grass: '#66985C',
   desert: '#C7A760',
-  mountain: '#96928C',
-  city: '#795B9A',
+  mountain: '#4A4642',
 };
 
 export const TERRITORY_FILLS: Record<string, string> = {
-  neutral: '#131008',
-  player: '#162460',
-  ai1: '#5C1010',
-  ai2: '#1A4A14',
-  ai3: '#5C3A0A',
+  neutral: '#2A2820',
+  player: '#2E6EE8',
+  ai1: '#E03838',
+  ai2: '#38B838',
+  ai3: '#E08828',
 };
 
+export const CITY_NEUTRAL_FILL = '#C0B8B0';
+
 export const TERRITORY_BORDERS: Record<string, string> = {
-  player: '#4488CC',
-  ai1: '#CC3333',
-  ai2: '#44AA44',
-  ai3: '#CC8833',
+  player: '#6AAAF4',
+  ai1: '#F06060',
+  ai2: '#60CC60',
+  ai3: '#F0AA44',
 };
 
 export const PLAYER_LABELS: Record<string, string> = {

@@ -1,5 +1,6 @@
-export type TerrainType = 'grass' | 'desert' | 'mountain' | 'city';
+export type TerrainType = 'grass' | 'desert' | 'mountain';
 export type TerritoryOwner = 'neutral' | 'player' | 'ai1' | 'ai2' | 'ai3';
+export type EntityType = 'simple_unit' | 'advanced_unit' | 'expert_unit' | 'tower' | 'castle' | 'city';
 
 export interface HexTile {
   q: number;
@@ -8,6 +9,78 @@ export interface HexTile {
   owner: TerritoryOwner;
   key: string;
   cityBuffer: boolean;
+  isCity: boolean;
+}
+
+export interface EntityMeta {
+  name: string;
+  icon: string;
+  cost: number;
+  upkeep: number;
+  isUnit: boolean;
+}
+
+export const ENTITY_META: Record<EntityType, EntityMeta> = {
+  simple_unit:   { name: 'Simple Unit',   icon: '⚔️',  cost: 10, upkeep: 3, isUnit: true  },
+  advanced_unit: { name: 'Advanced Unit', icon: '🛡️',  cost: 20, upkeep: 5, isUnit: true  },
+  expert_unit:   { name: 'Expert Unit',   icon: '🗡️',  cost: 30, upkeep: 9, isUnit: true  },
+  tower:         { name: 'Tower',         icon: '🗼',  cost: 10, upkeep: 2, isUnit: false },
+  castle:        { name: 'Castle',        icon: '🏰',  cost: 20, upkeep: 5, isUnit: false },
+  city:          { name: 'City',          icon: '🏙️',  cost: 10, upkeep: 0, isUnit: false },
+};
+
+export const TERRAIN_INCOME: Record<TerrainType, number> = {
+  grass:    1,
+  desert:   0,
+  mountain: 0,
+};
+
+export const CITY_BONUS = 1;
+
+export function getContiguousTerritory(
+  tileMap: Map<string, HexTile>,
+  startKey: string,
+  owner: TerritoryOwner,
+): HexTile[] {
+  const start = tileMap.get(startKey);
+  if (!start || start.owner !== owner) return [];
+  const visited = new Set<string>([startKey]);
+  const queue: string[] = [startKey];
+  const result: HexTile[] = [start];
+  while (queue.length > 0) {
+    const curr = queue.shift()!;
+    const [cq, cr] = curr.split(',').map(Number);
+    for (const { dir: [dq, dr] } of HEX_EDGES) {
+      const nk = tileKey(cq + dq, cr + dr);
+      if (visited.has(nk)) continue;
+      visited.add(nk);
+      const neighbor = tileMap.get(nk);
+      if (neighbor && neighbor.owner === owner) {
+        result.push(neighbor);
+        queue.push(nk);
+      }
+    }
+  }
+  return result;
+}
+
+/** Stable territory ID: lexicographically smallest tile key. Order-independent. */
+export function getTerritoryId(tiles: HexTile[]): string | null {
+  if (tiles.length === 0) return null;
+  return tiles.reduce((best, t) => (t.key < best ? t.key : best), tiles[0].key);
+}
+
+export function findCentralTile(tiles: HexTile[]): HexTile | null {
+  if (tiles.length === 0) return null;
+  const avgQ = tiles.reduce((s, t) => s + t.q, 0) / tiles.length;
+  const avgR = tiles.reduce((s, t) => s + t.r, 0) / tiles.length;
+  let best = tiles[0];
+  let bestDist = Infinity;
+  for (const t of tiles) {
+    const d = Math.hypot(t.q - avgQ, t.r - avgR);
+    if (d < bestDist) { bestDist = d; best = t; }
+  }
+  return best;
 }
 
 export interface BoardBounds {
@@ -94,7 +167,7 @@ export function generateHexGrid(tileCount: number, playerCount: number): HexTile
   const visited = new Set<string>([tileKey(0, 0)]);
 
   tileMap.set(tileKey(0, 0), {
-    q: 0, r: 0, terrain: 'grass', owner: 'neutral', key: tileKey(0, 0), cityBuffer: false,
+    q: 0, r: 0, terrain: 'grass', owner: 'neutral', key: tileKey(0, 0), cityBuffer: false, isCity: false,
   });
 
   while (tileMap.size < clampedCount && frontier.length > 0) {
@@ -112,47 +185,44 @@ export function generateHexGrid(tileCount: number, playerCount: number): HexTile
     const [nq, nr] = unvisited[Math.floor(Math.random() * unvisited.length)];
     const key = tileKey(nq, nr);
     visited.add(key);
-    tileMap.set(key, { q: nq, r: nr, terrain: 'grass', owner: 'neutral', key, cityBuffer: false });
+    tileMap.set(key, { q: nq, r: nr, terrain: 'grass', owner: 'neutral', key, cityBuffer: false, isCity: false });
     frontier.push([nq, nr]);
   }
 
   const tiles = Array.from(tileMap.values());
 
-  // Assign terrain — cities get a temporary flag, we enforce spacing afterwards
+  const pendingCityKeys = new Set<string>();
+
   for (const tile of tiles) {
     const rand = Math.random();
     if (rand < 0.05) tile.terrain = 'mountain';
     else if (rand < 0.20) tile.terrain = 'desert';
-    else if (rand < 0.21) tile.terrain = 'city';
+    else if (rand < 0.21) pendingCityKeys.add(tile.key);
     else tile.terrain = 'grass';
   }
 
-  // Enforce minimum distance between cities: keep only cities that are
-  // at least MIN_CITY_DISTANCE apart from every already-accepted city.
   const acceptedCities: HexTile[] = [];
   for (const tile of tiles) {
-    if (tile.terrain !== 'city') continue;
+    if (!pendingCityKeys.has(tile.key)) continue;
     const tooClose = acceptedCities.some(
       c => hexDistance(tile.q, tile.r, c.q, c.r) < MIN_CITY_DISTANCE,
     );
-    if (tooClose) {
-      tile.terrain = 'grass';
-    } else {
+    if (!tooClose) {
       acceptedCities.push(tile);
     }
   }
 
-  // Mark every tile adjacent to a city as a buffer (stays neutral, shown with gray border)
   for (const city of acceptedCities) {
+    city.isCity = true;
+    city.terrain = Math.random() < 0.5 ? 'grass' : 'desert';
     for (const [nq, nr] of getNeighborsOf(city.q, city.r)) {
       const neighbor = tileMap.get(tileKey(nq, nr));
-      if (neighbor && neighbor.terrain !== 'city') {
+      if (neighbor && !neighbor.isCity) {
         neighbor.cityBuffer = true;
       }
     }
   }
 
-  // Ensure non-mountain connectivity
   const nonMountain = tiles.filter(t => t.terrain !== 'mountain');
   if (nonMountain.length > 1) {
     const reachable = new Set<string>([nonMountain[0].key]);
@@ -206,9 +276,8 @@ export function generateHexGrid(tileCount: number, playerCount: number): HexTile
     ['player', 'ai1', 'ai2', 'ai3'] as TerritoryOwner[]
   ).slice(0, clampedPlayers);
 
-  // Exclude mountains, cities, and city-buffer tiles from territory assignment
   const assignable = tiles.filter(
-    t => t.terrain !== 'mountain' && t.terrain !== 'city' && !t.cityBuffer,
+    t => t.terrain !== 'mountain' && !t.isCity && !t.cityBuffer,
   );
 
   for (let i = assignable.length - 1; i > 0; i--) {

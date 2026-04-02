@@ -2,52 +2,72 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Platform,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const TILE_MIN = 40;
+const TILE_MAX = 300;
+const THUMB_SIZE = 26;
 
 type Difficulty = 'easy' | 'medium' | 'hard';
 
 export default function MainMenuScreen() {
   const insets = useSafeAreaInsets();
   const [tileCount, setTileCount] = useState(100);
-  const [rawInput, setRawInput] = useState('100');
   const [opponentCount, setOpponentCount] = useState(1);
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
+  const [trackW, setTrackW] = useState(0);
 
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const botPad = insets.bottom + (Platform.OS === 'web' ? 34 : 0);
 
-  function adjustTiles(delta: number) {
-    Haptics.selectionAsync();
-    setTileCount(prev => {
-      const next = Math.min(200, Math.max(40, prev + delta));
-      setRawInput(String(next));
-      return next;
-    });
+  const thumbX = useSharedValue(0);
+  const startX = useSharedValue(0);
+
+  function countToX(count: number, width: number): number {
+    const maxX = Math.max(0, width - THUMB_SIZE);
+    return ((count - TILE_MIN) / (TILE_MAX - TILE_MIN)) * maxX;
   }
 
-  function handleTileInputChange(text: string) {
-    setRawInput(text);
-  }
-
-  function commitTileInput() {
-    const parsed = parseInt(rawInput, 10);
-    if (!isNaN(parsed)) {
-      const clamped = Math.min(200, Math.max(40, parsed));
-      setTileCount(clamped);
-      setRawInput(String(clamped));
-    } else {
-      setRawInput(String(tileCount));
+  useEffect(() => {
+    if (trackW > 0) {
+      thumbX.value = countToX(tileCount, trackW);
     }
-  }
+  }, [trackW]);
+
+  const panGesture = Gesture.Pan()
+    .onBegin(() => {
+      startX.value = thumbX.value;
+    })
+    .onUpdate(e => {
+      const maxX = trackW - THUMB_SIZE;
+      const newX = Math.max(0, Math.min(maxX, startX.value + e.translationX));
+      thumbX.value = newX;
+      const frac = maxX > 0 ? newX / maxX : 0;
+      const tiles = Math.round(TILE_MIN + frac * (TILE_MAX - TILE_MIN));
+      runOnJS(setTileCount)(tiles);
+    });
+
+  const thumbStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: thumbX.value }],
+  }));
+
+  const fillStyle = useAnimatedStyle(() => ({
+    width: thumbX.value + THUMB_SIZE / 2,
+  }));
 
   function handleStart() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -57,11 +77,9 @@ export default function MainMenuScreen() {
     });
   }
 
-  const tileProgress = (tileCount - 40) / 160;
-
   return (
     <LinearGradient
-      colors={['#0D0A06', '#130E07', '#1A1208']}
+      colors={['#2E2214', '#382A18', '#44341E']}
       style={styles.root}
     >
       <View style={[styles.content, { paddingTop: topPad + 24, paddingBottom: botPad + 24 }]}>
@@ -74,43 +92,22 @@ export default function MainMenuScreen() {
 
         <View style={styles.sections}>
           <View style={styles.section}>
-            <Text style={styles.label}>Map Size</Text>
-            <View style={styles.stepper}>
-              <TouchableOpacity
-                style={styles.stepBtn}
-                onPress={() => adjustTiles(-10)}
-                activeOpacity={0.7}
+            <View style={styles.labelRow}>
+              <Text style={styles.label}>Map Size</Text>
+              <Text style={styles.tileCountDisplay}>{tileCount} Tiles</Text>
+            </View>
+            <GestureDetector gesture={panGesture}>
+              <View
+                style={styles.sliderTrack}
+                onLayout={e => setTrackW(e.nativeEvent.layout.width)}
               >
-                <Ionicons name="remove" size={22} color="#C8A24A" />
-              </TouchableOpacity>
-              <View style={styles.stepValue}>
-                <TextInput
-                  style={styles.stepInput}
-                  value={rawInput}
-                  onChangeText={handleTileInputChange}
-                  onBlur={commitTileInput}
-                  onSubmitEditing={commitTileInput}
-                  keyboardType="number-pad"
-                  returnKeyType="done"
-                  selectTextOnFocus
-                  maxLength={3}
-                />
-                <Text style={styles.stepUnit}>Tiles</Text>
+                <Animated.View style={[styles.sliderFill, fillStyle]} />
+                <Animated.View style={[styles.sliderThumb, thumbStyle]} />
               </View>
-              <TouchableOpacity
-                style={styles.stepBtn}
-                onPress={() => adjustTiles(10)}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="add" size={22} color="#C8A24A" />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${(tileProgress * 100).toFixed(1)}%` }]} />
-            </View>
-            <View style={styles.progressLabels}>
-              <Text style={styles.progressText}>40</Text>
-              <Text style={styles.progressText}>200</Text>
+            </GestureDetector>
+            <View style={styles.sliderLabels}>
+              <Text style={styles.sliderLabelText}>{TILE_MIN}</Text>
+              <Text style={styles.sliderLabelText}>{TILE_MAX}</Text>
             </View>
           </View>
 
@@ -204,56 +201,49 @@ const styles = StyleSheet.create({
     color: '#786A54',
     letterSpacing: 2,
   },
-  stepper: {
+  labelRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
   },
-  stepBtn: {
-    width: 46,
-    height: 46,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: '#4A3C1E',
-    backgroundColor: '#1A1208',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepValue: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  stepInput: {
-    fontSize: 44,
+  tileCountDisplay: {
+    fontSize: 22,
     fontFamily: 'Inter_700Bold',
     color: '#C8A24A',
-    textAlign: 'center',
-    minWidth: 80,
   },
-  stepUnit: {
-    fontSize: 10,
-    fontFamily: 'Cinzel_400Regular',
-    color: '#786A54',
-    letterSpacing: 2,
-    marginTop: 2,
-  },
-  progressTrack: {
-    height: 3,
-    backgroundColor: '#2A1E0C',
-    borderRadius: 2,
+  sliderTrack: {
+    height: 36,
+    backgroundColor: '#2E2210',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#7A6030',
+    justifyContent: 'center',
     overflow: 'hidden',
   },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#6B4A10',
-    borderRadius: 2,
+  sliderFill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: '#7A5418',
+    borderRadius: 18,
   },
-  progressLabels: {
+  sliderThumb: {
+    position: 'absolute',
+    width: THUMB_SIZE,
+    height: THUMB_SIZE,
+    borderRadius: THUMB_SIZE / 2,
+    backgroundColor: '#C8A24A',
+    borderWidth: 2,
+    borderColor: '#F0D080',
+    top: (36 - THUMB_SIZE) / 2,
+  },
+  sliderLabels: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 4,
+    marginTop: 2,
   },
-  progressText: {
+  sliderLabelText: {
     fontSize: 10,
     fontFamily: 'Inter_400Regular',
     color: '#786A54',
@@ -267,19 +257,19 @@ const styles = StyleSheet.create({
     height: 54,
     borderRadius: 5,
     borderWidth: 1,
-    borderColor: '#4A3C1E',
-    backgroundColor: '#140F06',
+    borderColor: '#7A6030',
+    backgroundColor: '#2A1E0C',
     alignItems: 'center',
     justifyContent: 'center',
   },
   pillActive: {
     borderColor: '#C8A24A',
-    backgroundColor: '#1E1608',
+    backgroundColor: '#3A2A10',
   },
   pillText: {
     fontSize: 22,
     fontFamily: 'Inter_700Bold',
-    color: '#786A54',
+    color: '#A08A60',
   },
   pillTextActive: {
     color: '#C8A24A',
@@ -289,19 +279,19 @@ const styles = StyleSheet.create({
     height: 42,
     borderRadius: 5,
     borderWidth: 1,
-    borderColor: '#4A3C1E',
-    backgroundColor: '#140F06',
+    borderColor: '#7A6030',
+    backgroundColor: '#2A1E0C',
     alignItems: 'center',
     justifyContent: 'center',
   },
   diffPillActive: {
-    borderColor: '#786A54',
-    backgroundColor: '#1E1608',
+    borderColor: '#C8A24A',
+    backgroundColor: '#3A2A10',
   },
   diffText: {
     fontSize: 10,
     fontFamily: 'Cinzel_400Regular',
-    color: '#786A54',
+    color: '#A08A60',
     letterSpacing: 1.5,
   },
   diffTextActive: {
@@ -310,7 +300,7 @@ const styles = StyleSheet.create({
   startOuter: {
     borderRadius: 5,
     borderWidth: 1,
-    borderColor: '#6B4A10',
+    borderColor: '#9A7030',
     overflow: 'hidden',
   },
   startInner: {
