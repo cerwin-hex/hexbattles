@@ -1,0 +1,47 @@
+Phase 1 looks fantastic! The map generation and main menu are perfect. Now we are moving on to Phase 2.
+
+Please refer to our original Game Design Document, but ONLY implement the features listed below for Phase 2. Do not implement movement, combat, or AI opponent logic yet.
+
+YOUR TASK - PHASE 2 (Economy, UI, and Placement):
+
+1. Tile Selection & Bottom Menu:
+
+Allow the human player to tap on any tile they own.
+
+When a tile is selected, visually highlight it and update the "In-Game Bottom Menu" to display the total Credit balance of the entire contiguous territory that the selected tile belongs to.
+
+The Bottom Menu must contain: "Back to Menu" (resets game), "End Turn", Credit Display, and a "Build" button.
+
+2. Economy & State Management:
+
+Track the credit balance for every independent contiguous territory on the board.
+
+Calculate income correctly (Grass = +1, Desert = 0, City = +2).
+
+Calculate upkeep for any entities placed on the board.
+
+3. The Purchase Ribbon (Build Menu):
+
+When the player clicks "Build" while an empty owned tile is selected, open a horizontal ribbon/overlay above the bottom menu.
+
+Display the 5 entities with their costs: Simple Unit (10), Advanced Unit (20), Expert Unit (30), Tower (10), Castle (20).
+
+Validation: Check the selected territory's credit balance. Gray out/disable entities the territory cannot afford.
+
+4. Purchasing & Placement:
+
+If the player clicks an affordable entity in the ribbon, place it on the currently selected tile, close the ribbon, and deduct the cost from that territory's balance.
+
+Render simple placeholder icons or shapes on the hexes to represent the different units and buildings.
+
+5. Turn Progression (Basic):
+
+When the player clicks "End Turn", cycle through the AI opponents (they do nothing for now, just skip their turns).
+
+When a new round starts, add the calculated net income (Income minus Upkeep) to every territory's balance.
+
+Bankruptcy Check: If a territory's net income is negative and its balance drops below 0, set balance to 0 and immediately delete all Units (but keep Buildings) in that territory.
+
+Add the "Affordability Flag" logic: If a territory has >= 10 credits at the start of the turn, render a small flag icon on its central tile.
+
+Please implement these features and let me know when I can test tapping tiles, buying units, and ending turns to see the economy update.
