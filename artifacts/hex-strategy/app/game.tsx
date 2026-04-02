@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Platform,
@@ -32,14 +32,17 @@ import {
   HexTile,
   TERRAIN_INCOME,
   TerritoryOwner,
+  UNIT_UPGRADE,
   findCentralTile,
   generateHexGrid,
   getBoardBounds,
   getContiguousTerritory,
   getTerritoryId,
+  getValidMoves,
   hexCornerPoint,
   hexCornersString,
   hexToPixel,
+  recalculateTerritories,
   tileKey,
 } from '@/utils/hexGrid';
 
@@ -129,20 +132,30 @@ export default function GameScreen() {
     return m;
   }, [tileData]);
 
+  const [liveOwnerMap, setLiveOwnerMap] = useState<Map<string, TerritoryOwner>>(new Map());
+
   const borderEdges = useMemo<BorderEdge[]>(() => {
     const edges: BorderEdge[] = [];
 
     for (const { tile, cx, cy } of tileData) {
-      if (tile.terrain === 'mountain' || tile.owner === 'neutral') continue;
-      const color = TERRITORY_BORDERS[tile.owner as TerritoryOwner]!;
+      const liveOwner = liveOwnerMap.get(tile.key) ?? tile.owner;
+      if (tile.terrain === 'mountain' || liveOwner === 'neutral') continue;
+      const color = TERRITORY_BORDERS[liveOwner as TerritoryOwner]!;
+      if (!color) continue;
       for (const { dir: [dq, dr], verts: [va, vb] } of ORDERED_EDGES) {
         const nk = tileKey(tile.q + dq, tile.r + dr);
-        const neighbor = tileMap.get(nk);
+        const neighborBase = tileMap.get(nk);
+        if (!neighborBase) {
+          const ptA = hexCornerPoint(cx, cy, INNER_SIZE, va);
+          const ptB = hexCornerPoint(cx, cy, INNER_SIZE, vb);
+          edges.push({ x1: ptA.x, y1: ptA.y, x2: ptB.x, y2: ptB.y, color, width: BORDER_W });
+          continue;
+        }
+        const neighborLiveOwner = liveOwnerMap.get(nk) ?? neighborBase.owner;
         const needsBorder =
-          !neighbor ||
-          neighbor.terrain === 'mountain' ||
-          neighbor.owner === 'neutral' ||
-          neighbor.owner !== tile.owner;
+          neighborBase.terrain === 'mountain' ||
+          neighborLiveOwner === 'neutral' ||
+          neighborLiveOwner !== liveOwner;
         if (!needsBorder) continue;
         const ptA = hexCornerPoint(cx, cy, INNER_SIZE, va);
         const ptB = hexCornerPoint(cx, cy, INNER_SIZE, vb);
@@ -151,13 +164,18 @@ export default function GameScreen() {
     }
 
     for (const { tile, cx, cy } of tileData) {
-      if (!tile.cityBuffer) continue;
+      if (!tile.cityBuffer && !tile.isCity) continue;
+      const liveOwner = liveOwnerMap.get(tile.key) ?? tile.owner;
+      if (liveOwner !== 'neutral') continue;
       for (const { dir: [dq, dr], verts: [va, vb] } of ORDERED_EDGES) {
         const nk = tileKey(tile.q + dq, tile.r + dr);
-        const neighbor = tileMap.get(nk);
-        const needsBorder =
-          !neighbor ||
-          (!neighbor.cityBuffer && !neighbor.isCity);
+        const neighborBase = tileMap.get(nk);
+        const neighborLiveOwner = neighborBase ? (liveOwnerMap.get(nk) ?? neighborBase.owner) : null;
+        const neighborIsNeutralCity =
+          neighborBase !== undefined &&
+          neighborLiveOwner === 'neutral' &&
+          (neighborBase.cityBuffer || neighborBase.isCity);
+        const needsBorder = !neighborIsNeutralCity && neighborBase?.terrain !== 'mountain';
         if (!needsBorder) continue;
         const ptA = hexCornerPoint(cx, cy, INNER_SIZE, va);
         const ptB = hexCornerPoint(cx, cy, INNER_SIZE, vb);
@@ -166,7 +184,7 @@ export default function GameScreen() {
     }
 
     return edges;
-  }, [tileData, tileMap, INNER_SIZE]);
+  }, [tileData, tileMap, liveOwnerMap, INNER_SIZE]);
 
   const boardW = bounds.width;
   const boardH = bounds.height;
@@ -193,29 +211,6 @@ export default function GameScreen() {
   }, [initX, initY, fitScale]);
 
   const pulseVal = useSharedValue(1);
-  const hasTakenAction = useRef(false);
-
-  useEffect(() => {
-    pulseVal.value = withRepeat(
-      withSequence(
-        withTiming(0.25, { duration: 600 }),
-        withTiming(1.0, { duration: 600 }),
-      ),
-      -1,
-      false,
-    );
-    return () => {
-      cancelAnimation(pulseVal);
-    };
-  }, []);
-
-  function handleAction() {
-    if (!hasTakenAction.current) {
-      hasTakenAction.current = true;
-      cancelAnimation(pulseVal);
-      pulseVal.value = withTiming(1.0, { duration: 200 });
-    }
-  }
 
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [showEconModal, setShowEconModal] = useState(false);
@@ -225,7 +220,6 @@ export default function GameScreen() {
   function openRibbon() {
     setRibbonOpen(true);
     ribbonAnim.value = withTiming(0, { duration: 280 });
-    handleAction();
   }
 
   function closeRibbon() {
@@ -238,6 +232,9 @@ export default function GameScreen() {
   const [entities, setEntities] = useState<Map<string, EntityType>>(new Map());
   const [territoryBalances, setTerritoryBalances] = useState<Map<string, number>>(new Map());
   const [turn, setTurn] = useState(1);
+  const [selectedEntityKey, setSelectedEntityKey] = useState<string | null>(null);
+  const [spentUnits, setSpentUnits] = useState<Set<string>>(new Set());
+  const [mutableTileMap, setMutableTileMap] = useState<Map<string, HexTile>>(new Map());
 
   useEffect(() => {
     if (tiles.length > 0) {
@@ -245,15 +242,21 @@ export default function GameScreen() {
       setSelectedTileKey(null);
       setArmedEntityId(null);
       setEntities(new Map());
+      setSelectedEntityKey(null);
+      setSpentUnits(new Set());
+      setMutableTileMap(new Map(tileMap));
+      setLiveOwnerMap(new Map());
     }
   }, [tiles, tileMap]);
 
+  const activeTileMap = mutableTileMap.size > 0 ? mutableTileMap : tileMap;
+
   const selectedTerritory = useMemo<HexTile[]>(() => {
     if (!selectedTileKey) return [];
-    const tile = tileMap.get(selectedTileKey);
+    const tile = activeTileMap.get(selectedTileKey);
     if (!tile || tile.owner !== 'player') return [];
-    return getContiguousTerritory(tileMap, selectedTileKey, 'player');
-  }, [selectedTileKey, tileMap]);
+    return getContiguousTerritory(activeTileMap, selectedTileKey, 'player');
+  }, [selectedTileKey, activeTileMap]);
 
   const selectedTerritoryId = useMemo<string | null>(
     () => getTerritoryId(selectedTerritory),
@@ -275,6 +278,63 @@ export default function GameScreen() {
     () => new Set(selectedTerritory.map(t => t.key)),
     [selectedTerritory],
   );
+
+  const validMoveTiles = useMemo<Set<string>>(() => {
+    if (!selectedEntityKey) return new Set();
+    const tile = activeTileMap.get(selectedEntityKey);
+    if (!tile || tile.owner !== 'player') return new Set();
+    const entityId = entities.get(selectedEntityKey);
+    if (!entityId || !ENTITY_META[entityId].isUnit) return new Set();
+    return getValidMoves(selectedEntityKey, 'player', entities, activeTileMap, spentUnits);
+  }, [selectedEntityKey, entities, activeTileMap, spentUnits]);
+
+  const fortificationDots = useMemo<Set<string>>(() => {
+    if (!selectedEntityKey) return new Set();
+    const selEntity = entities.get(selectedEntityKey);
+    if (!selEntity || ENTITY_META[selEntity].isUnit || selEntity === 'city') return new Set();
+    const territory = getContiguousTerritory(activeTileMap, selectedEntityKey, 'player');
+    const territoryKeys = new Set(territory.map(t => t.key));
+    const dots = new Set<string>();
+    for (const t of territory) {
+      const e = entities.get(t.key);
+      if (!e || ENTITY_META[e].isUnit || e === 'city') continue;
+      dots.add(t.key);
+      const [q, r] = t.key.split(',').map(Number);
+      for (const { dir: [dq, dr] } of HEX_EDGES) {
+        const nk = tileKey(q + dq, r + dr);
+        if (territoryKeys.has(nk)) dots.add(nk);
+      }
+    }
+    return dots;
+  }, [selectedEntityKey, entities, activeTileMap]);
+
+  const allPlayerUnitsDone = useMemo(() => {
+    let count = 0;
+    for (const [key, entityId] of entities) {
+      const meta = ENTITY_META[entityId];
+      const tile = activeTileMap.get(key);
+      if (meta?.isUnit && tile?.owner === 'player') count++;
+    }
+    return count === 0 || spentUnits.size >= count;
+  }, [entities, activeTileMap, spentUnits]);
+
+  useEffect(() => {
+    const shouldPulse = allPlayerUnitsDone && !armedEntityId && !ribbonOpen;
+    if (shouldPulse) {
+      pulseVal.value = withRepeat(
+        withSequence(
+          withTiming(0.25, { duration: 600 }),
+          withTiming(1.0, { duration: 600 }),
+        ),
+        -1,
+        false,
+      );
+    } else {
+      cancelAnimation(pulseVal);
+      pulseVal.value = withTiming(1.0, { duration: 200 });
+    }
+    return () => { cancelAnimation(pulseVal); };
+  }, [allPlayerUnitsDone, armedEntityId, ribbonOpen]);
 
   const canBuild = selectedTerritory.length > 0;
 
@@ -337,29 +397,70 @@ export default function GameScreen() {
   const flagTileKeys = useMemo<Set<string>>(() => {
     const keys = new Set<string>();
     const visited = new Set<string>();
-    for (const tile of tiles) {
+    for (const tile of Array.from(activeTileMap.values())) {
       if (tile.owner !== 'player' || visited.has(tile.key)) continue;
-      const territory = getContiguousTerritory(tileMap, tile.key, 'player');
+      const territory = getContiguousTerritory(activeTileMap, tile.key, 'player');
       for (const t of territory) visited.add(t.key);
       const id = getTerritoryId(territory);
       if (!id) continue;
       const balance = territoryBalances.get(id) ?? 0;
       if (balance < 10) continue;
-      const central = findCentralTile(territory);
-      if (!central) continue;
-      keys.add(central.key);
+      const cityTile = territory.find(t => t.isCity || entities.get(t.key) === 'city');
+      const target = cityTile ?? findCentralTile(territory);
+      if (!target) continue;
+      keys.add(target.key);
     }
     return keys;
-  }, [tiles, tileMap, territoryBalances, entities]);
+  }, [activeTileMap, territoryBalances, entities]);
 
   const handleDeselect = useCallback(() => {
     setSelectedTileKey(null);
     setArmedEntityId(null);
+    setSelectedEntityKey(null);
     if (ribbonOpen) closeRibbon();
   }, [ribbonOpen]);
 
   const handleTileTap = useCallback((key: string) => {
-    const tile = tileMap.get(key);
+    const tile = activeTileMap.get(key);
+
+    if (selectedEntityKey && validMoveTiles.has(key)) {
+      const prevTile = activeTileMap.get(key);
+      const previousOwner = prevTile?.owner ?? 'neutral';
+      const newTileMap = new Map(activeTileMap);
+      const targetTile = newTileMap.get(key);
+      if (targetTile) {
+        newTileMap.set(key, { ...targetTile, owner: 'player' });
+      }
+      const newEntities = new Map(entities);
+      newEntities.delete(key);
+      const movingUnit = newEntities.get(selectedEntityKey)!;
+      newEntities.delete(selectedEntityKey);
+      newEntities.set(key, movingUnit);
+
+      const newSpentUnits = new Set(spentUnits);
+      newSpentUnits.add(key);
+
+      const { balances: newBalances } = recalculateTerritories(
+        key,
+        previousOwner as TerritoryOwner,
+        activeTileMap,
+        newTileMap,
+        territoryBalances,
+      );
+
+      const newLiveOwnerMap = new Map(liveOwnerMap);
+      newLiveOwnerMap.set(key, 'player');
+
+      setMutableTileMap(newTileMap);
+      setLiveOwnerMap(newLiveOwnerMap);
+      setEntities(newEntities);
+      setSpentUnits(newSpentUnits);
+      setTerritoryBalances(newBalances);
+      setSelectedEntityKey(null);
+      setSelectedTileKey(key);
+      if (ribbonOpen) closeRibbon();
+      return;
+    }
 
     if (armedEntityId && selectedTileKeys.has(key)) {
       const alreadyOccupied = entities.has(key);
@@ -381,14 +482,30 @@ export default function GameScreen() {
       return;
     }
 
+    const entityOnTile = entities.get(key);
+    const isSelectableEntity = entityOnTile && entityOnTile !== 'city' && tile?.owner === 'player';
+    if (isSelectableEntity) {
+      if (selectedEntityKey === key) {
+        setSelectedEntityKey(null);
+        setSelectedTileKey(key);
+      } else {
+        setSelectedEntityKey(key);
+        setSelectedTileKey(key);
+        setArmedEntityId(null);
+        if (ribbonOpen) closeRibbon();
+      }
+      return;
+    }
+
     if (!tile || tile.owner !== 'player') {
       setSelectedTileKey(null);
       setArmedEntityId(null);
+      setSelectedEntityKey(null);
       if (ribbonOpen) closeRibbon();
       return;
     }
 
-    if (selectedTileKeys.has(key)) {
+    if (selectedTileKeys.has(key) && !selectedEntityKey) {
       setSelectedTileKey(null);
       setArmedEntityId(null);
       if (ribbonOpen) closeRibbon();
@@ -396,18 +513,18 @@ export default function GameScreen() {
     }
 
     setSelectedTileKey(key);
+    setSelectedEntityKey(null);
     setArmedEntityId(null);
     if (ribbonOpen) closeRibbon();
-  }, [tileMap, selectedTileKeys, armedEntityId, entities, selectedTerritoryId, territoryBalances, ribbonOpen]);
+  }, [activeTileMap, selectedTileKeys, armedEntityId, entities, selectedTerritoryId, territoryBalances, ribbonOpen, selectedEntityKey, validMoveTiles, spentUnits, liveOwnerMap]);
 
   const handleEndTurn = useCallback(() => {
-    handleAction();
     setTerritoryBalances(prevBalances => {
       const next = new Map(prevBalances);
       const visited = new Set<string>();
-      for (const tile of tiles) {
+      for (const tile of Array.from(activeTileMap.values())) {
         if (tile.owner !== 'player' || visited.has(tile.key)) continue;
-        const territory = getContiguousTerritory(tileMap, tile.key, 'player');
+        const territory = getContiguousTerritory(activeTileMap, tile.key, 'player');
         for (const t of territory) visited.add(t.key);
         const territoryId = getTerritoryId(territory);
         if (!territoryId) continue;
@@ -438,8 +555,10 @@ export default function GameScreen() {
     setTurn(t => t + 1);
     setSelectedTileKey(null);
     setArmedEntityId(null);
+    setSelectedEntityKey(null);
+    setSpentUnits(new Set());
     closeRibbon();
-  }, [tiles, tileMap, entities]);
+  }, [activeTileMap, entities]);
 
   const panGesture = Gesture.Pan()
     .onUpdate(e => {
@@ -498,13 +617,15 @@ export default function GameScreen() {
             <Svg width={boardW} height={boardH}>
               <Rect x={0} y={0} width={boardW} height={boardH} fill="transparent" onPress={handleDeselect} />
               {tileData.map(({ tile, cx, cy }) => {
+                const liveTile = activeTileMap.get(tile.key) ?? tile;
+                const isCityZone = tile.cityBuffer || tile.isCity;
                 const fill = hasSelection
                   ? (TERRAIN_FILLS[tile.terrain] ?? TERRAIN_FILLS.grass)
                   : (tile.terrain === 'mountain'
                       ? TERRAIN_FILLS.mountain
-                      : (tile.cityBuffer || tile.isCity)
+                      : (isCityZone && liveTile.owner === 'neutral')
                         ? CITY_NEUTRAL_FILL
-                        : (TERRITORY_FILLS[tile.owner] ?? TERRITORY_FILLS.neutral));
+                        : (TERRITORY_FILLS[liveTile.owner] ?? TERRITORY_FILLS.neutral));
                 return (
                   <Polygon
                     key={tile.key}
@@ -513,6 +634,61 @@ export default function GameScreen() {
                     stroke="#080603"
                     strokeWidth={1}
                     onPress={() => handleTileTap(tile.key)}
+                  />
+                );
+              })}
+
+              {tileData.filter(({ tile }) => tile.isCity || entities.get(tile.key) === 'city').map(({ tile, cx, cy }) => (
+                <SvgText
+                  key={`city-${tile.key}`}
+                  x={cx}
+                  y={cy + HEX_SIZE * 0.28}
+                  textAnchor="middle"
+                  fontSize={HEX_SIZE * 0.72}
+                  fill="#fff"
+                  opacity={0.9}
+                  onPress={() => handleTileTap(tile.key)}
+                >
+                  🏙️
+                </SvgText>
+              ))}
+
+              {validMoveTiles.size > 0 && Array.from(validMoveTiles).map(key => {
+                const pos = tileDataMap.get(key);
+                if (!pos) return null;
+                const tileOwner = activeTileMap.get(key)?.owner ?? 'neutral';
+                const isAttack = tileOwner !== 'player';
+                const dotColor = isAttack ? '#FF4040' : '#FFD700';
+                return (
+                  <React.Fragment key={`move-${key}`}>
+                    <Polygon
+                      points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
+                      fill="transparent"
+                      onPress={() => handleTileTap(key)}
+                    />
+                    <Circle
+                      cx={pos.cx}
+                      cy={pos.cy}
+                      r={HEX_SIZE * 0.18}
+                      fill={dotColor}
+                      opacity={0.85}
+                      onPress={() => handleTileTap(key)}
+                    />
+                  </React.Fragment>
+                );
+              })}
+
+              {fortificationDots.size > 0 && Array.from(fortificationDots).map(key => {
+                const pos = tileDataMap.get(key);
+                if (!pos) return null;
+                return (
+                  <Circle
+                    key={`fort-${key}`}
+                    cx={pos.cx}
+                    cy={pos.cy}
+                    r={HEX_SIZE * 0.15}
+                    fill="#4488FF"
+                    opacity={0.75}
                   />
                 );
               })}
@@ -549,7 +725,19 @@ export default function GameScreen() {
                 if (!pos) return null;
                 const meta = ENTITY_META[entityId];
                 const r = HEX_SIZE * 0.38;
-                const bgColor = meta.isUnit ? 'rgba(30,50,120,0.9)' : 'rgba(80,40,10,0.9)';
+                const isSelected = selectedEntityKey === key;
+                const isSpent = spentUnits.has(key);
+                const liveTile = activeTileMap.get(key);
+                const isPlayerUnit = liveTile?.owner === 'player' && meta.isUnit;
+                const bgColor = isSpent && isPlayerUnit
+                  ? 'rgba(60,60,80,0.85)'
+                  : isSelected
+                    ? 'rgba(20,80,20,0.95)'
+                    : meta.isUnit
+                      ? 'rgba(30,50,120,0.9)'
+                      : 'rgba(80,40,10,0.9)';
+                const strokeColor = isSelected ? '#50FF50' : isSpent && isPlayerUnit ? '#888888' : '#FFD700';
+                const strokeWidth = isSelected ? 2.5 : 1.2;
                 return (
                   <React.Fragment key={`entity-${key}`}>
                     <Circle
@@ -557,9 +745,9 @@ export default function GameScreen() {
                       cy={pos.cy}
                       r={r}
                       fill={bgColor}
-                      stroke="#FFD700"
-                      strokeWidth={1.2}
-                      onPress={() => handleTileTap(key)}
+                      stroke={strokeColor}
+                      strokeWidth={strokeWidth}
+                      opacity={isSpent && isPlayerUnit ? 0.6 : 1.0}
                     />
                     <SvgText
                       x={pos.cx}
@@ -567,29 +755,20 @@ export default function GameScreen() {
                       textAnchor="middle"
                       fontSize={r * 1.2}
                       fill="#fff"
+                      opacity={isSpent && isPlayerUnit ? 0.5 : 1.0}
                     >
                       {meta.icon}
                     </SvgText>
+                    <Polygon
+                      points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
+                      fill="transparent"
+                      onPress={() => handleTileTap(key)}
+                    />
                   </React.Fragment>
                 );
               })}
 
-              {tileData.filter(({ tile }) => tile.isCity || entities.get(tile.key) === 'city').map(({ tile, cx, cy }) => (
-                <SvgText
-                  key={`city-${tile.key}`}
-                  x={cx}
-                  y={cy + HEX_SIZE * 0.28}
-                  textAnchor="middle"
-                  fontSize={HEX_SIZE * 0.72}
-                  fill="#fff"
-                  opacity={0.9}
-                  onPress={() => handleTileTap(tile.key)}
-                >
-                  🏙️
-                </SvgText>
-              ))}
-
-              {Array.from(flagTileKeys).filter(key => !selectedTileKeys.has(key)).map(key => {
+              {Array.from(flagTileKeys).filter(key => !selectedTileKeys.has(key) && (!entities.has(key) || entities.get(key) === 'city')).map(key => {
                 const pos = tileDataMap.get(key);
                 if (!pos) return null;
                 const fs = HEX_SIZE * 0.58;
@@ -663,42 +842,98 @@ export default function GameScreen() {
 
       <View style={[styles.bottomBar, { paddingBottom: botInset }]}>
         <View style={styles.bottomBarInner}>
-          <TouchableOpacity
-            style={[
-              styles.buildBtn,
-              ribbonOpen && styles.buildBtnActive,
-              !canBuild && styles.buildBtnDisabled,
-            ]}
-            onPress={() => {
-              if (!canBuild) return;
-              if (ribbonOpen) {
-                closeRibbon();
-                setArmedEntityId(null);
-              } else {
-                openRibbon();
-              }
-            }}
-            activeOpacity={canBuild ? 0.75 : 1}
-          >
-            <Ionicons
-              name="hammer"
-              size={14}
-              color={ribbonOpen ? '#0D0A06' : canBuild ? '#C8A24A' : '#3A2E14'}
-            />
-            <Text style={[
-              styles.buildBtnText,
-              ribbonOpen && styles.buildBtnTextActive,
-              !canBuild && styles.buildBtnTextDisabled,
-            ]}>
-              Build
-            </Text>
-          </TouchableOpacity>
-
-          {hasSelection && (
-            <TouchableOpacity style={styles.creditsDisplay} onPress={() => setShowEconModal(true)} activeOpacity={0.75}>
-              <Text style={styles.creditsIcon}>⚜️</Text>
-              <Text style={styles.creditsAmount}>{selectedTerritoryBalance}</Text>
-            </TouchableOpacity>
+          {selectedEntityKey ? (() => {
+            const entityId = entities.get(selectedEntityKey);
+            const isUnit = entityId ? ENTITY_META[entityId].isUnit : false;
+            const upgradeTarget = entityId ? UNIT_UPGRADE[entityId] : undefined;
+            const canUpgrade = !!upgradeTarget;
+            const isSpent = spentUnits.has(selectedEntityKey);
+            const entityTile = activeTileMap.get(selectedEntityKey);
+            const entityTerritoryId = entityTile
+              ? getTerritoryId(getContiguousTerritory(activeTileMap, selectedEntityKey, 'player'))
+              : null;
+            const entityTerritoryBalance = entityTerritoryId ? (territoryBalances.get(entityTerritoryId) ?? 0) : 0;
+            const removeCost = isUnit ? 0 : 10;
+            const upgradeEnabled = canUpgrade && entityTerritoryBalance >= 10 && (!isUnit || !isSpent);
+            const removeEnabled = isUnit ? !isSpent : (!!entityTerritoryId && entityTerritoryBalance >= removeCost);
+            return (
+              <>
+                <TouchableOpacity
+                  style={[styles.buildBtn, !upgradeEnabled && styles.buildBtnDisabled]}
+                  activeOpacity={upgradeEnabled ? 0.75 : 1}
+                  onPress={() => {
+                    if (!upgradeEnabled || !entityId || !upgradeTarget || !entityTerritoryId) return;
+                    setEntities(prev => { const next = new Map(prev); next.set(selectedEntityKey, upgradeTarget); return next; });
+                    setTerritoryBalances(prev => { const next = new Map(prev); next.set(entityTerritoryId, entityTerritoryBalance - 10); return next; });
+                    setSelectedEntityKey(null);
+                  }}
+                >
+                  <Text style={[styles.buildBtnText, !upgradeEnabled && styles.buildBtnTextDisabled]}>
+                    ⬆ Upgrade {canUpgrade ? '(10g)' : '(Max)'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.buildBtn, { borderColor: '#AA3A2A', backgroundColor: '#3A1A10' }, !removeEnabled && styles.buildBtnDisabled]}
+                  activeOpacity={removeEnabled ? 0.75 : 1}
+                  onPress={() => {
+                    if (!removeEnabled || !entityTerritoryId) return;
+                    setEntities(prev => { const next = new Map(prev); next.delete(selectedEntityKey); return next; });
+                    if (removeCost > 0) {
+                      setTerritoryBalances(prev => { const next = new Map(prev); next.set(entityTerritoryId, entityTerritoryBalance - removeCost); return next; });
+                    }
+                    setSelectedEntityKey(null);
+                  }}
+                >
+                  <Text style={[styles.buildBtnText, { color: removeEnabled ? '#F07060' : '#7A3020' }]}>
+                    ✕ Remove{removeCost > 0 ? ` (${removeCost}g)` : ''}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            );
+          })() : (
+            <>
+              <TouchableOpacity
+                style={[
+                  styles.buildBtn,
+                  ribbonOpen && styles.buildBtnActive,
+                  !canBuild && styles.buildBtnDisabled,
+                ]}
+                onPress={() => {
+                  if (!canBuild) return;
+                  if (ribbonOpen) {
+                    closeRibbon();
+                    setArmedEntityId(null);
+                  } else {
+                    openRibbon();
+                  }
+                }}
+                activeOpacity={canBuild ? 0.75 : 1}
+              >
+                <Ionicons
+                  name="hammer"
+                  size={14}
+                  color={ribbonOpen ? '#0D0A06' : canBuild ? '#C8A24A' : '#3A2E14'}
+                />
+                <Text style={[
+                  styles.buildBtnText,
+                  ribbonOpen && styles.buildBtnTextActive,
+                  !canBuild && styles.buildBtnTextDisabled,
+                ]}>
+                  Build
+                </Text>
+              </TouchableOpacity>
+              {hasSelection && (
+                <TouchableOpacity style={styles.creditsDisplay} onPress={() => setShowEconModal(true)} activeOpacity={0.75}>
+                  <Text style={styles.creditsIcon}>⚜️</Text>
+                  <Text style={styles.creditsAmount}>{selectedTerritoryBalance}</Text>
+                  {econBreakdown !== null && (
+                    <Text style={[styles.creditsNet, econBreakdown.net >= 0 ? styles.creditsNetPos : styles.creditsNetNeg]}>
+                      {econBreakdown.net >= 0 ? `+${econBreakdown.net}` : `${econBreakdown.net}`}/turn
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+            </>
           )}
 
           <View style={styles.spacer} />
@@ -955,6 +1190,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter_700Bold',
     color: '#C8A24A',
+  },
+  creditsNet: {
+    fontSize: 10,
+    fontFamily: 'Inter_400Regular',
+    marginLeft: 2,
+  },
+  creditsNetPos: {
+    color: '#70C870',
+  },
+  creditsNetNeg: {
+    color: '#E07060',
   },
   spacer: {
     flex: 1,
