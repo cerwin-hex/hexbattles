@@ -123,11 +123,19 @@ export function getValidMoves(
       if (neighbor.owner === owner) {
         visited.add(nk);
         if (depth < 3) {
-          const hasAlly = entities.has(nk);
-          if (!hasAlly) {
+          const allyEntity = entities.get(nk);
+          const allyIsUnit = allyEntity ? ENTITY_META[allyEntity].isUnit : false;
+          if (!allyEntity) {
             result.add(nk);
             queue.push({ key: nk, depth: depth + 1 });
+          } else if (!allyIsUnit) {
+            queue.push({ key: nk, depth: depth + 1 });
           }
+        }
+      } else if (neighbor.owner === 'neutral') {
+        visited.add(nk);
+        if (depth < 3) {
+          result.add(nk);
         }
       } else {
         visited.add(nk);
@@ -251,6 +259,115 @@ export function recalculateTerritories(
   }
 
   return { balances, tiles: newTiles };
+}
+
+export function recalculateTerritoriesForCapture(
+  changedTileKey: string,
+  newOwner: TerritoryOwner,
+  previousOwner: TerritoryOwner,
+  previousTileMap: Map<string, HexTile>,
+  newTileMap: Map<string, HexTile>,
+  previousBalances: Map<string, number>,
+): Map<string, number> {
+  const balances = new Map(previousBalances);
+
+  function clusterOwner(map: Map<string, HexTile>, startKey: string, owner: TerritoryOwner): HexTile[] {
+    const start = map.get(startKey);
+    if (!start || start.owner !== owner) return [];
+    const cluster: HexTile[] = [];
+    const visited = new Set<string>([startKey]);
+    const q = [startKey];
+    while (q.length > 0) {
+      const curr = q.shift()!;
+      const t = map.get(curr);
+      if (!t || t.owner !== owner) continue;
+      cluster.push(t);
+      const [cq, cr] = curr.split(',').map(Number);
+      for (const { dir: [dq, dr] } of HEX_EDGES) {
+        const nk = tileKey(cq + dq, cr + dr);
+        if (visited.has(nk)) continue;
+        visited.add(nk);
+        const nt = map.get(nk);
+        if (nt && nt.owner === owner) q.push(nk);
+      }
+    }
+    return cluster;
+  }
+
+  if (previousOwner !== 'neutral' && previousOwner !== newOwner) {
+    const oldTerr = clusterOwner(previousTileMap, changedTileKey, previousOwner);
+    const oldId = getTerritoryId(oldTerr);
+    const oldBalance = oldId ? (previousBalances.get(oldId) ?? 0) : 0;
+    if (oldId) balances.delete(oldId);
+
+    const oldKeys = new Set(oldTerr.map(t => t.key));
+    oldKeys.delete(changedTileKey);
+
+    const dispVisited = new Set<string>();
+    const dispClusters: HexTile[][] = [];
+    for (const key of oldKeys) {
+      if (dispVisited.has(key)) continue;
+      const tile = newTileMap.get(key);
+      if (!tile || tile.owner !== previousOwner) continue;
+      const cluster = clusterOwner(newTileMap, key, previousOwner);
+      for (const ct of cluster) dispVisited.add(ct.key);
+      dispClusters.push(cluster);
+    }
+
+    if (dispClusters.length === 1) {
+      const newId = getTerritoryId(dispClusters[0]);
+      if (newId) balances.set(newId, oldBalance);
+    } else if (dispClusters.length > 1) {
+      const maxSize = Math.max(...dispClusters.map(c => c.length));
+      const largestClusters = dispClusters.filter(c => c.length === maxSize);
+      const exactlyTwoEqual = dispClusters.length === 2 && largestClusters.length === 2;
+      const winnerCluster = largestClusters[0];
+      for (const cluster of dispClusters) {
+        const newId = getTerritoryId(cluster);
+        if (!newId) continue;
+        if (exactlyTwoEqual) {
+          const half = Math.floor(oldBalance / 2);
+          const extra = oldBalance % 2;
+          const firstId = getTerritoryId(dispClusters[0]) ?? '';
+          balances.set(newId, half + (newId === firstId ? extra : 0));
+        } else if (cluster === winnerCluster) {
+          balances.set(newId, oldBalance);
+        } else {
+          balances.set(newId, 0);
+        }
+      }
+    }
+  }
+
+  if (newOwner !== 'neutral') {
+    const oldNewOwnerTerr = clusterOwner(previousTileMap, changedTileKey, newOwner);
+    const oldNewOwnerId = getTerritoryId(oldNewOwnerTerr);
+
+    const newTerr = clusterOwner(newTileMap, changedTileKey, newOwner);
+    const newTerrId = getTerritoryId(newTerr);
+
+    if (newTerrId) {
+      const mergedIds = new Set<string>();
+      for (const t of newTerr) {
+        if (t.key === changedTileKey) continue;
+        const oldTerr2 = clusterOwner(previousTileMap, t.key, newOwner);
+        const oldId2 = getTerritoryId(oldTerr2);
+        if (oldId2) mergedIds.add(oldId2);
+      }
+      if (oldNewOwnerId) mergedIds.add(oldNewOwnerId);
+
+      let mergedTotal = 0;
+      for (const id of mergedIds) {
+        mergedTotal += previousBalances.get(id) ?? 0;
+      }
+      for (const id of mergedIds) {
+        balances.delete(id);
+      }
+      balances.set(newTerrId, mergedTotal);
+    }
+  }
+
+  return balances;
 }
 
 export function getContiguousTerritory(

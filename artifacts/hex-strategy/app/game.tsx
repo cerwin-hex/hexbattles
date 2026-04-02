@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Modal,
   Platform,
@@ -37,12 +37,15 @@ import {
   generateHexGrid,
   getBoardBounds,
   getContiguousTerritory,
+  getMaxEnemyZoC,
   getTerritoryId,
   getValidMoves,
   hexCornerPoint,
   hexCornersString,
+  hexDistance,
   hexToPixel,
   recalculateTerritories,
+  recalculateTerritoriesForCapture,
   tileKey,
 } from '@/utils/hexGrid';
 
@@ -76,13 +79,13 @@ interface BorderEdge {
 function initTerritoryBalances(
   tiles: HexTile[],
   tileMap: Map<string, HexTile>,
-  owner: TerritoryOwner,
 ): Map<string, number> {
   const balances = new Map<string, number>();
   const visited = new Set<string>();
+  const owners: TerritoryOwner[] = ['player', 'ai1', 'ai2', 'ai3'];
   for (const tile of tiles) {
-    if (tile.owner !== owner || visited.has(tile.key)) continue;
-    const territory = getContiguousTerritory(tileMap, tile.key, owner);
+    if (!owners.includes(tile.owner) || visited.has(tile.key)) continue;
+    const territory = getContiguousTerritory(tileMap, tile.key, tile.owner);
     const id = getTerritoryId(territory);
     if (!id) continue;
     balances.set(id, 0);
@@ -235,10 +238,13 @@ export default function GameScreen() {
   const [selectedEntityKey, setSelectedEntityKey] = useState<string | null>(null);
   const [spentUnits, setSpentUnits] = useState<Set<string>>(new Set());
   const [mutableTileMap, setMutableTileMap] = useState<Map<string, HexTile>>(new Map());
+  const [isAiTurn, setIsAiTurn] = useState(false);
+  const [gameResult, setGameResult] = useState<'victory' | 'defeat' | null>(null);
+  const aiTurnRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (tiles.length > 0) {
-      setTerritoryBalances(initTerritoryBalances(tiles, tileMap, 'player'));
+      setTerritoryBalances(initTerritoryBalances(tiles, tileMap));
       setSelectedTileKey(null);
       setArmedEntityId(null);
       setEntities(new Map());
@@ -250,6 +256,159 @@ export default function GameScreen() {
   }, [tiles, tileMap]);
 
   const activeTileMap = mutableTileMap.size > 0 ? mutableTileMap : tileMap;
+
+  const aiOwners = useMemo<TerritoryOwner[]>(() => {
+    const all: TerritoryOwner[] = ['ai1', 'ai2', 'ai3'];
+    return all.slice(0, numOpponents);
+  }, [numOpponents]);
+
+  const checkWinLoss = useCallback((currentTileMap: Map<string, HexTile>) => {
+    const playerTiles = Array.from(currentTileMap.values()).filter(t => t.owner === 'player');
+    if (playerTiles.length === 0) {
+      setGameResult('defeat');
+      return true;
+    }
+    const allAiEliminated = aiOwners.every(ai =>
+      !Array.from(currentTileMap.values()).some(t => t.owner === ai),
+    );
+    if (allAiEliminated) {
+      setGameResult('victory');
+      return true;
+    }
+    return false;
+  }, [aiOwners]);
+
+  const delay = (ms: number) => new Promise<void>(res => setTimeout(res, ms));
+
+  const runAiTurn = useCallback(async (
+    currentTileMap: Map<string, HexTile>,
+    currentEntities: Map<string, EntityType>,
+    currentBalances: Map<string, number>,
+  ) => {
+    let workingTileMap = new Map(currentTileMap);
+    let workingEntities = new Map(currentEntities);
+    let workingBalances = new Map(currentBalances);
+
+    for (const aiOwner of aiOwners) {
+      if (aiTurnRef.current === false) return;
+
+      const visited = new Set<string>();
+      const aiTiles = Array.from(workingTileMap.values()).filter(t => t.owner === aiOwner);
+      if (aiTiles.length === 0) continue;
+
+      for (const startTile of aiTiles) {
+        if (visited.has(startTile.key)) continue;
+        const territory = getContiguousTerritory(workingTileMap, startTile.key, aiOwner);
+        for (const t of territory) visited.add(t.key);
+        const territoryId = getTerritoryId(territory);
+        if (!territoryId) continue;
+        const balance = workingBalances.get(territoryId) ?? 0;
+        if (balance < 10) continue;
+
+        const vacantTiles = territory.filter(
+          t => t.terrain !== 'mountain' && !workingEntities.has(t.key),
+        );
+        if (vacantTiles.length === 0) continue;
+
+        const target = vacantTiles[Math.floor(Math.random() * vacantTiles.length)];
+        workingEntities = new Map(workingEntities);
+        workingEntities.set(target.key, 'simple_unit');
+        workingBalances = new Map(workingBalances);
+        workingBalances.set(territoryId, balance - 10);
+
+        setEntities(new Map(workingEntities));
+        setTerritoryBalances(new Map(workingBalances));
+        await delay(200);
+        if (!aiTurnRef.current) return;
+      }
+
+      const aiUnits = Array.from(workingEntities.entries()).filter(([key, entityId]) => {
+        const tile = workingTileMap.get(key);
+        return tile?.owner === aiOwner && ENTITY_META[entityId].isUnit;
+      });
+
+      for (const [unitKey] of aiUnits) {
+        if (!aiTurnRef.current) return;
+        const unitEntity = workingEntities.get(unitKey);
+        if (!unitEntity) continue;
+        const unitStrength = ENTITY_META[unitEntity].strength;
+
+        const allValidMoves = Array.from(
+          getValidMoves(unitKey, aiOwner, workingEntities, workingTileMap, new Set()),
+        );
+        if (allValidMoves.length === 0) continue;
+
+        const attackMoves = allValidMoves.filter(k => {
+          const t = workingTileMap.get(k);
+          return t && t.owner !== aiOwner;
+        });
+
+        let moveTargets: string[];
+        if (attackMoves.length > 0) {
+          moveTargets = attackMoves;
+        } else {
+          const nonAiTiles = Array.from(workingTileMap.values()).filter(t => {
+            if (t.owner === aiOwner || t.terrain === 'mountain') return false;
+            if (t.owner === 'neutral') return true;
+            return getMaxEnemyZoC(t.key, aiOwner, workingEntities, workingTileMap) < unitStrength;
+          });
+          if (nonAiTiles.length === 0) {
+            moveTargets = allValidMoves;
+          } else {
+            let closestAfterMove = Infinity;
+            let bestMoves: string[] = [];
+            for (const mk of allValidMoves) {
+              const [mq, mr] = mk.split(',').map(Number);
+              let minD = Infinity;
+              for (const t of nonAiTiles) {
+                const d = hexDistance(mq, mr, t.q, t.r);
+                if (d < minD) minD = d;
+              }
+              if (minD < closestAfterMove) {
+                closestAfterMove = minD;
+                bestMoves = [mk];
+              } else if (minD === closestAfterMove) {
+                bestMoves.push(mk);
+              }
+            }
+            moveTargets = bestMoves.length > 0 ? bestMoves : allValidMoves;
+          }
+        }
+
+        const destKey = moveTargets[Math.floor(Math.random() * moveTargets.length)];
+        const destTile = workingTileMap.get(destKey);
+        if (!destTile) continue;
+
+        const previousOwner = destTile.owner;
+        const prevTileMapSnapshot = new Map(workingTileMap);
+        workingTileMap = new Map(workingTileMap);
+        workingTileMap.set(destKey, { ...destTile, owner: aiOwner });
+        workingEntities = new Map(workingEntities);
+        workingEntities.delete(destKey);
+        workingEntities.delete(unitKey);
+        workingEntities.set(destKey, unitEntity);
+        workingBalances = recalculateTerritoriesForCapture(
+          destKey,
+          aiOwner,
+          previousOwner,
+          prevTileMapSnapshot,
+          workingTileMap,
+          workingBalances,
+        );
+
+        setMutableTileMap(new Map(workingTileMap));
+        setLiveOwnerMap(prev => { const next = new Map(prev); next.set(destKey, aiOwner); return next; });
+        setEntities(new Map(workingEntities));
+        setTerritoryBalances(new Map(workingBalances));
+        await delay(200);
+        if (!aiTurnRef.current) return;
+      }
+    }
+
+    setIsAiTurn(false);
+    aiTurnRef.current = false;
+    checkWinLoss(workingTileMap);
+  }, [aiOwners, checkWinLoss]);
 
   const selectedTerritory = useMemo<HexTile[]>(() => {
     if (!selectedTileKey) return [];
@@ -308,18 +467,40 @@ export default function GameScreen() {
     return dots;
   }, [selectedEntityKey, entities, activeTileMap]);
 
-  const allPlayerUnitsDone = useMemo(() => {
-    let count = 0;
-    for (const [key, entityId] of entities) {
+  const minUnitCost = useMemo(() => {
+    return Math.min(...(Object.values(ENTITY_META).filter(m => m.isUnit).map(m => m.cost)));
+  }, []);
+
+  const shouldPulseEndTurn = useMemo(() => {
+    if (isAiTurn) return false;
+    const hasValidMove = Array.from(entities.entries()).some(([key, entityId]) => {
       const meta = ENTITY_META[entityId];
+      if (!meta.isUnit) return false;
       const tile = activeTileMap.get(key);
-      if (meta?.isUnit && tile?.owner === 'player') count++;
+      if (tile?.owner !== 'player') return false;
+      if (spentUnits.has(key)) return false;
+      const moves = getValidMoves(key, 'player', entities, activeTileMap, spentUnits);
+      return moves.size > 0;
+    });
+    if (hasValidMove) return false;
+    const playerTerritoryIds = new Set<string>();
+    const visited = new Set<string>();
+    for (const tile of Array.from(activeTileMap.values())) {
+      if (tile.owner !== 'player' || visited.has(tile.key)) continue;
+      const territory = getContiguousTerritory(activeTileMap, tile.key, 'player');
+      for (const t of territory) visited.add(t.key);
+      const id = getTerritoryId(territory);
+      if (id) playerTerritoryIds.add(id);
     }
-    return count === 0 || spentUnits.size >= count;
-  }, [entities, activeTileMap, spentUnits]);
+    const hasAffordableTerritory = Array.from(playerTerritoryIds).some(
+      id => (territoryBalances.get(id) ?? 0) >= minUnitCost,
+    );
+    if (hasAffordableTerritory) return false;
+    return true;
+  }, [entities, activeTileMap, spentUnits, territoryBalances, minUnitCost, isAiTurn]);
 
   useEffect(() => {
-    const shouldPulse = allPlayerUnitsDone && !armedEntityId && !ribbonOpen;
+    const shouldPulse = shouldPulseEndTurn && !armedEntityId && !ribbonOpen;
     if (shouldPulse) {
       pulseVal.value = withRepeat(
         withSequence(
@@ -334,7 +515,7 @@ export default function GameScreen() {
       pulseVal.value = withTiming(1.0, { duration: 200 });
     }
     return () => { cancelAnimation(pulseVal); };
-  }, [allPlayerUnitsDone, armedEntityId, ribbonOpen]);
+  }, [shouldPulseEndTurn, armedEntityId, ribbonOpen]);
 
   const canBuild = selectedTerritory.length > 0;
 
@@ -421,6 +602,7 @@ export default function GameScreen() {
   }, [ribbonOpen]);
 
   const handleTileTap = useCallback((key: string) => {
+    if (isAiTurn || gameResult !== null) return;
     const tile = activeTileMap.get(key);
 
     if (selectedEntityKey && validMoveTiles.has(key)) {
@@ -516,49 +698,86 @@ export default function GameScreen() {
     setSelectedEntityKey(null);
     setArmedEntityId(null);
     if (ribbonOpen) closeRibbon();
-  }, [activeTileMap, selectedTileKeys, armedEntityId, entities, selectedTerritoryId, territoryBalances, ribbonOpen, selectedEntityKey, validMoveTiles, spentUnits, liveOwnerMap]);
+  }, [activeTileMap, selectedTileKeys, armedEntityId, entities, selectedTerritoryId, territoryBalances, ribbonOpen, selectedEntityKey, validMoveTiles, spentUnits, liveOwnerMap, isAiTurn, gameResult]);
 
   const handleEndTurn = useCallback(() => {
-    setTerritoryBalances(prevBalances => {
-      const next = new Map(prevBalances);
-      const visited = new Set<string>();
+    if (isAiTurn || gameResult !== null) return;
+
+    const nextBalances = new Map(territoryBalances);
+    let nextEntities = new Map(entities);
+    const visited = new Set<string>();
+
+    for (const tile of Array.from(activeTileMap.values())) {
+      if (tile.owner !== 'player' || visited.has(tile.key)) continue;
+      const territory = getContiguousTerritory(activeTileMap, tile.key, 'player');
+      for (const t of territory) visited.add(t.key);
+      const territoryId = getTerritoryId(territory);
+      if (!territoryId) continue;
+      const income = territory.reduce((s, t) =>
+        s + TERRAIN_INCOME[t.terrain] + (t.isCity ? CITY_BONUS : 0) + (nextEntities.get(t.key) === 'city' ? CITY_BONUS : 0), 0);
+      const upkeep = territory.reduce((s, t) => {
+        const e = nextEntities.get(t.key);
+        return s + (e ? ENTITY_META[e].upkeep : 0);
+      }, 0);
+      const current = nextBalances.get(territoryId) ?? 0;
+      const newBalance = current + income - upkeep;
+      if (newBalance < 0) {
+        nextBalances.set(territoryId, 0);
+        nextEntities = new Map(nextEntities);
+        for (const t of territory) {
+          const e = nextEntities.get(t.key);
+          if (e && ENTITY_META[e].isUnit) nextEntities.delete(t.key);
+        }
+      } else {
+        nextBalances.set(territoryId, newBalance);
+      }
+    }
+
+    for (const aiOwner of aiOwners) {
+      const aiVisited = new Set<string>();
       for (const tile of Array.from(activeTileMap.values())) {
-        if (tile.owner !== 'player' || visited.has(tile.key)) continue;
-        const territory = getContiguousTerritory(activeTileMap, tile.key, 'player');
-        for (const t of territory) visited.add(t.key);
+        if (tile.owner !== aiOwner || aiVisited.has(tile.key)) continue;
+        const territory = getContiguousTerritory(activeTileMap, tile.key, aiOwner);
+        for (const t of territory) aiVisited.add(t.key);
         const territoryId = getTerritoryId(territory);
         if (!territoryId) continue;
+        if (!nextBalances.has(territoryId)) nextBalances.set(territoryId, 0);
         const income = territory.reduce((s, t) =>
-          s + TERRAIN_INCOME[t.terrain] + (t.isCity ? CITY_BONUS : 0) + (entities.get(t.key) === 'city' ? CITY_BONUS : 0), 0);
+          s + TERRAIN_INCOME[t.terrain] + (t.isCity ? CITY_BONUS : 0) + (nextEntities.get(t.key) === 'city' ? CITY_BONUS : 0), 0);
         const upkeep = territory.reduce((s, t) => {
-          const e = entities.get(t.key);
+          const e = nextEntities.get(t.key);
           return s + (e ? ENTITY_META[e].upkeep : 0);
         }, 0);
-        const current = next.get(territoryId) ?? 0;
+        const current = nextBalances.get(territoryId) ?? 0;
         const newBalance = current + income - upkeep;
         if (newBalance < 0) {
-          next.set(territoryId, 0);
-          setEntities(prevEntities => {
-            const nextE = new Map(prevEntities);
-            for (const t of territory) {
-              const e = nextE.get(t.key);
-              if (e && ENTITY_META[e].isUnit) nextE.delete(t.key);
-            }
-            return nextE;
-          });
+          nextBalances.set(territoryId, 0);
+          nextEntities = new Map(nextEntities);
+          for (const t of territory) {
+            const e = nextEntities.get(t.key);
+            if (e && ENTITY_META[e].isUnit) nextEntities.delete(t.key);
+          }
         } else {
-          next.set(territoryId, newBalance);
+          nextBalances.set(territoryId, newBalance);
         }
       }
-      return next;
-    });
+    }
+
+    setTerritoryBalances(nextBalances);
+    setEntities(nextEntities);
     setTurn(t => t + 1);
     setSelectedTileKey(null);
     setArmedEntityId(null);
     setSelectedEntityKey(null);
     setSpentUnits(new Set());
     closeRibbon();
-  }, [activeTileMap, entities]);
+
+    if (!checkWinLoss(activeTileMap)) {
+      setIsAiTurn(true);
+      aiTurnRef.current = true;
+      runAiTurn(new Map(activeTileMap), nextEntities, nextBalances);
+    }
+  }, [activeTileMap, entities, territoryBalances, isAiTurn, gameResult, aiOwners, checkWinLoss, runAiTurn]);
 
   const panGesture = Gesture.Pan()
     .onUpdate(e => {
@@ -653,31 +872,6 @@ export default function GameScreen() {
                 </SvgText>
               ))}
 
-              {validMoveTiles.size > 0 && Array.from(validMoveTiles).map(key => {
-                const pos = tileDataMap.get(key);
-                if (!pos) return null;
-                const tileOwner = activeTileMap.get(key)?.owner ?? 'neutral';
-                const isAttack = tileOwner !== 'player';
-                const dotColor = isAttack ? '#FF4040' : '#FFD700';
-                return (
-                  <React.Fragment key={`move-${key}`}>
-                    <Polygon
-                      points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
-                      fill="transparent"
-                      onPress={() => handleTileTap(key)}
-                    />
-                    <Circle
-                      cx={pos.cx}
-                      cy={pos.cy}
-                      r={HEX_SIZE * 0.18}
-                      fill={dotColor}
-                      opacity={0.85}
-                      onPress={() => handleTileTap(key)}
-                    />
-                  </React.Fragment>
-                );
-              })}
-
               {fortificationDots.size > 0 && Array.from(fortificationDots).map(key => {
                 const pos = tileDataMap.get(key);
                 if (!pos) return null;
@@ -762,6 +956,31 @@ export default function GameScreen() {
                     <Polygon
                       points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
                       fill="transparent"
+                      onPress={() => handleTileTap(key)}
+                    />
+                  </React.Fragment>
+                );
+              })}
+
+              {validMoveTiles.size > 0 && Array.from(validMoveTiles).map(key => {
+                const pos = tileDataMap.get(key);
+                if (!pos) return null;
+                const tileOwner = activeTileMap.get(key)?.owner ?? 'neutral';
+                const isAttack = tileOwner !== 'player';
+                const dotColor = isAttack ? '#FF4040' : '#FFD700';
+                return (
+                  <React.Fragment key={`move-${key}`}>
+                    <Polygon
+                      points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
+                      fill="transparent"
+                      onPress={() => handleTileTap(key)}
+                    />
+                    <Circle
+                      cx={pos.cx}
+                      cy={pos.cy}
+                      r={HEX_SIZE * 0.18}
+                      fill={dotColor}
+                      opacity={0.85}
                       onPress={() => handleTileTap(key)}
                     />
                   </React.Fragment>
@@ -862,6 +1081,7 @@ export default function GameScreen() {
                   style={[styles.buildBtn, !upgradeEnabled && styles.buildBtnDisabled]}
                   activeOpacity={upgradeEnabled ? 0.75 : 1}
                   onPress={() => {
+                    if (isAiTurn || gameResult !== null) return;
                     if (!upgradeEnabled || !entityId || !upgradeTarget || !entityTerritoryId) return;
                     setEntities(prev => { const next = new Map(prev); next.set(selectedEntityKey, upgradeTarget); return next; });
                     setTerritoryBalances(prev => { const next = new Map(prev); next.set(entityTerritoryId, entityTerritoryBalance - 10); return next; });
@@ -876,6 +1096,7 @@ export default function GameScreen() {
                   style={[styles.buildBtn, { borderColor: '#AA3A2A', backgroundColor: '#3A1A10' }, !removeEnabled && styles.buildBtnDisabled]}
                   activeOpacity={removeEnabled ? 0.75 : 1}
                   onPress={() => {
+                    if (isAiTurn || gameResult !== null) return;
                     if (!removeEnabled || !entityTerritoryId) return;
                     setEntities(prev => { const next = new Map(prev); next.delete(selectedEntityKey); return next; });
                     if (removeCost > 0) {
@@ -899,7 +1120,7 @@ export default function GameScreen() {
                   !canBuild && styles.buildBtnDisabled,
                 ]}
                 onPress={() => {
-                  if (!canBuild) return;
+                  if (isAiTurn || gameResult !== null || !canBuild) return;
                   if (ribbonOpen) {
                     closeRibbon();
                     setArmedEntityId(null);
@@ -940,12 +1161,18 @@ export default function GameScreen() {
 
           <Text style={styles.turnText}>T{turn}</Text>
 
-          <Animated.View style={endTurnStyle}>
-            <TouchableOpacity style={styles.endTurnBtn} onPress={handleEndTurn}>
-              <Text style={styles.endTurnText}>End Turn</Text>
-              <Ionicons name="arrow-forward" size={13} color="#F0D080" />
-            </TouchableOpacity>
-          </Animated.View>
+          {isAiTurn ? (
+            <View style={[styles.endTurnBtn, styles.aiTurnBtn]}>
+              <Text style={styles.aiTurnText}>AI Turn...</Text>
+            </View>
+          ) : (
+            <Animated.View style={endTurnStyle}>
+              <TouchableOpacity style={styles.endTurnBtn} onPress={handleEndTurn} disabled={gameResult !== null}>
+                <Text style={styles.endTurnText}>End Turn</Text>
+                <Ionicons name="arrow-forward" size={13} color="#F0D080" />
+              </TouchableOpacity>
+            </Animated.View>
+          )}
         </View>
       </View>
 
@@ -1021,6 +1248,30 @@ export default function GameScreen() {
             </View>
             <TouchableOpacity style={styles.econCloseBtn} onPress={() => setShowEconModal(false)}>
               <Text style={styles.econCloseBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={gameResult !== null} transparent animationType="fade">
+        <View style={styles.gameResultOverlay}>
+          <View style={styles.gameResultCard}>
+            <Text style={styles.gameResultEmoji}>
+              {gameResult === 'victory' ? '🏆' : '💀'}
+            </Text>
+            <Text style={[styles.gameResultTitle, gameResult === 'victory' ? styles.gameResultVictoryTitle : styles.gameResultDefeatTitle]}>
+              {gameResult === 'victory' ? 'Victory!' : 'Game Over'}
+            </Text>
+            <Text style={styles.gameResultBody}>
+              {gameResult === 'victory'
+                ? 'All opponents have been eliminated. The realm is yours!'
+                : 'Your territory has been conquered. The campaign is lost.'}
+            </Text>
+            <TouchableOpacity
+              style={styles.gameResultBtn}
+              onPress={() => { setGameResult(null); router.back(); }}
+            >
+              <Text style={styles.gameResultBtnText}>Return to Main Menu</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1371,5 +1622,68 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Cinzel_400Regular',
     color: '#C8A24A',
+  },
+  aiTurnBtn: {
+    backgroundColor: '#1A1A3A',
+    borderColor: '#4A4A8A',
+  },
+  aiTurnText: {
+    fontSize: 12,
+    fontFamily: 'Cinzel_400Regular',
+    color: '#8888CC',
+    letterSpacing: 0.5,
+  },
+  gameResultOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.80)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gameResultCard: {
+    width: 320,
+    backgroundColor: '#1E1608',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#9A7830',
+    padding: 36,
+    alignItems: 'center',
+    gap: 16,
+  },
+  gameResultEmoji: {
+    fontSize: 56,
+  },
+  gameResultTitle: {
+    fontSize: 28,
+    fontFamily: 'Cinzel_700Bold',
+    letterSpacing: 1,
+  },
+  gameResultVictoryTitle: {
+    color: '#F0D060',
+  },
+  gameResultDefeatTitle: {
+    color: '#E06050',
+  },
+  gameResultBody: {
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    color: '#C8A870',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  gameResultBtn: {
+    marginTop: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#9A7830',
+    backgroundColor: '#3A2A10',
+    alignItems: 'center',
+  },
+  gameResultBtnText: {
+    fontSize: 14,
+    fontFamily: 'Cinzel_700Bold',
+    color: '#F0D080',
+    letterSpacing: 0.5,
   },
 });
