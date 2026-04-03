@@ -411,10 +411,19 @@ export default function GameScreen() {
         );
         if (allValidMoves.length === 0) continue;
 
+        const isMergeTarget = (k: string) => {
+          const t = workingTileMap.get(k);
+          if (!t || t.owner !== aiOwner) return false;
+          const e = workingEntities.get(k);
+          return !!e && ENTITY_META[e].isUnit;
+        };
+
         const attackMoves = allValidMoves.filter(k => {
           const t = workingTileMap.get(k);
           return t && t.owner !== aiOwner;
         });
+        const nonMergeMoves = allValidMoves.filter(k => !isMergeTarget(k));
+        const movesPool = nonMergeMoves.length > 0 ? nonMergeMoves : allValidMoves;
 
         let moveTargets: string[];
         if (attackMoves.length > 0) {
@@ -426,11 +435,11 @@ export default function GameScreen() {
             return getMaxEnemyZoC(t.key, aiOwner, workingEntities, workingTileMap) < unitStrength;
           });
           if (nonAiTiles.length === 0) {
-            moveTargets = allValidMoves;
+            moveTargets = movesPool;
           } else {
             let closestAfterMove = Infinity;
             let bestMoves: string[] = [];
-            for (const mk of allValidMoves) {
+            for (const mk of movesPool) {
               const [mq, mr] = mk.split(',').map(Number);
               let minD = Infinity;
               for (const t of nonAiTiles) {
@@ -444,7 +453,7 @@ export default function GameScreen() {
                 bestMoves.push(mk);
               }
             }
-            moveTargets = bestMoves.length > 0 ? bestMoves : allValidMoves;
+            moveTargets = bestMoves.length > 0 ? bestMoves : movesPool;
           }
         }
 
