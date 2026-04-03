@@ -219,10 +219,12 @@ export default function GameScreen() {
   const [showEconModal, setShowEconModal] = useState(false);
   const [ribbonOpen, setRibbonOpen] = useState(false);
   const ribbonAnim = useSharedValue(RIBBON_H);
+  const ribbonScrollRef = useRef<ScrollView>(null);
 
   function openRibbon() {
     setRibbonOpen(true);
     ribbonAnim.value = withTiming(0, { duration: 280 });
+    ribbonScrollRef.current?.scrollTo({ x: 0, animated: false });
   }
 
   function closeRibbon() {
@@ -850,8 +852,6 @@ export default function GameScreen() {
                     key={tile.key}
                     points={hexCornersString(cx, cy, HEX_SIZE)}
                     fill={fill}
-                    stroke="#080603"
-                    strokeWidth={1}
                     onPress={() => handleTileTap(tile.key)}
                   />
                 );
@@ -1012,6 +1012,7 @@ export default function GameScreen() {
         style={[styles.ribbon, { bottom: BOTTOM_BAR_H + botInset }, ribbonStyle]}
       >
         <ScrollView
+          ref={ribbonScrollRef}
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.ribbonContent}
