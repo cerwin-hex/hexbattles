@@ -55,7 +55,7 @@ const BTN_H = 36;
 const BOTTOM_BAR_H = BTN_H + 16;
 const RIBBON_H = 130;
 const ENTITY_PANEL_H = 56;
-const EXTRA_PAN = 300;
+const EXTRA_PAN = 150;
 
 const ORDERED_EDGES: ReadonlyArray<{ dir: [number, number]; verts: [number, number] }> = [
   { dir: [1, 0],   verts: [0, 1] },
@@ -809,7 +809,8 @@ export default function GameScreen() {
     }
 
     if (armedEntityId && selectedTileKeys.has(key)) {
-      const alreadyOccupied = entities.has(key);
+      const existingOnTile = entities.get(key);
+      const alreadyOccupied = !!existingOnTile && existingOnTile !== 'rebel';
       if (!alreadyOccupied && selectedTerritoryId) {
         const meta = ENTITY_META[armedEntityId];
         const balance = territoryBalances.get(selectedTerritoryId) ?? 0;
@@ -1346,7 +1347,8 @@ export default function GameScreen() {
               })}
 
               {armedEntityId && Array.from(selectedTileKeys).map(key => {
-                if (entities.has(key)) return null;
+                const existingDot = entities.get(key);
+                if (existingDot && existingDot !== 'rebel') return null;
                 const pos = tileDataMap.get(key);
                 if (!pos) return null;
                 return (
