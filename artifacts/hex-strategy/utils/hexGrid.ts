@@ -640,6 +640,7 @@ export function generateHexGrid(tileCount: number, playerCount: number): HexTile
     });
     if (!hasMountainNeighbor) {
       tile.terrain = 'grass';
+      if (tile.cityBuffer || tile.isCity) continue;
       const neighborOwners = getNeighborsOf(tile.q, tile.r)
         .map(([nq, nr]) => tileMap.get(tileKey(nq, nr))?.owner)
         .filter((o): o is TerritoryOwner => !!o && o !== 'neutral');
