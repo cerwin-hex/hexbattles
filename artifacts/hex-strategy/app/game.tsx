@@ -822,6 +822,9 @@ export default function GameScreen() {
             next.set(selectedTerritoryId, balance - meta.cost);
             return next;
           });
+          if (existingOnTile === 'rebel') {
+            setSpentUnits(prev => { const next = new Set(prev); next.add(key); return next; });
+          }
           setArmedEntityId(null);
           closeRibbon();
           return;
