@@ -138,7 +138,10 @@ export function getValidMoves(
           if (!allyEntity || allyIsRebel) {
             result.add(nk);
             queue.push({ key: nk, depth: depth + 1 });
-          } else if (!allyIsUnit) {
+          } else if (allyIsUnit) {
+            result.add(nk);
+            queue.push({ key: nk, depth: depth + 1 });
+          } else {
             queue.push({ key: nk, depth: depth + 1 });
           }
         }

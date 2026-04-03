@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  Easing,
   cancelAnimation,
   runOnJS,
   useAnimatedStyle,
@@ -68,6 +69,17 @@ const PURCHASABLES = (Object.keys(ENTITY_META) as EntityType[]).filter(id => id 
   id,
   ...ENTITY_META[id],
 }));
+
+const STRENGTH_TO_UNIT: Record<number, EntityType> = {
+  1: 'simple_unit',
+  2: 'advanced_unit',
+  3: 'expert_unit',
+};
+
+function mergedUnitType(strA: number, strB: number): EntityType {
+  const total = Math.min(strA + strB, 3);
+  return STRENGTH_TO_UNIT[total] ?? 'expert_unit';
+}
 
 interface BorderEdge {
   x1: number;
@@ -273,6 +285,23 @@ export default function GameScreen() {
   const [isAiTurn, setIsAiTurn] = useState(false);
   const [gameResult, setGameResult] = useState<'victory' | 'defeat' | null>(null);
   const aiTurnRef = useRef<boolean>(false);
+  const [graveyard, setGraveyard] = useState<Set<string>>(new Set());
+
+  const idleBounceY = useSharedValue(0);
+  useEffect(() => {
+    idleBounceY.value = withRepeat(
+      withSequence(
+        withTiming(-4, { duration: 550, easing: Easing.inOut(Easing.sin) }),
+        withTiming(0, { duration: 550, easing: Easing.inOut(Easing.sin) }),
+      ),
+      -1,
+      false,
+    );
+  }, []);
+
+  const idleBounceStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: idleBounceY.value }],
+  }));
 
   useEffect(() => {
     if (tiles.length > 0) {
@@ -283,6 +312,7 @@ export default function GameScreen() {
       setSpentUnits(new Set());
       setMutableTileMap(new Map(tileMap));
       setLiveOwnerMap(new Map());
+      setGraveyard(new Set());
 
       const initialEntities = new Map<string, EntityType>();
       const owners: TerritoryOwner[] = ['player', 'ai1', 'ai2', 'ai3'];
@@ -427,9 +457,17 @@ export default function GameScreen() {
         workingTileMap = new Map(workingTileMap);
         workingTileMap.set(destKey, { ...destTile, owner: aiOwner });
         workingEntities = new Map(workingEntities);
-        workingEntities.delete(destKey);
-        workingEntities.delete(unitKey);
-        workingEntities.set(destKey, unitEntity);
+        const destExisting = workingEntities.get(destKey);
+        const isAllyMerge = destExisting && ENTITY_META[destExisting].isUnit && destTile.owner === aiOwner;
+        if (isAllyMerge) {
+          const merged = mergedUnitType(ENTITY_META[unitEntity].strength, ENTITY_META[destExisting].strength);
+          workingEntities.delete(unitKey);
+          workingEntities.set(destKey, merged);
+        } else {
+          workingEntities.delete(destKey);
+          workingEntities.delete(unitKey);
+          workingEntities.set(destKey, unitEntity);
+        }
         workingBalances = recalculateTerritoriesForCapture(
           destKey,
           aiOwner,
@@ -443,6 +481,7 @@ export default function GameScreen() {
         setLiveOwnerMap(prev => { const next = new Map(prev); next.set(destKey, aiOwner); return next; });
         setEntities(new Map(workingEntities));
         setTerritoryBalances(new Map(workingBalances));
+        setGraveyard(prev => { const next = new Set(prev); next.delete(destKey); return next; });
         await delay(200);
         if (!aiTurnRef.current) return;
       }
@@ -688,10 +727,23 @@ export default function GameScreen() {
         newTileMap.set(key, { ...targetTile, owner: 'player' });
       }
       const newEntities = new Map(entities);
-      newEntities.delete(key);
       const movingUnit = newEntities.get(selectedEntityKey)!;
-      newEntities.delete(selectedEntityKey);
-      newEntities.set(key, movingUnit);
+      const existingUnit = newEntities.get(key);
+      if (
+        existingUnit &&
+        existingUnit !== 'city' &&
+        existingUnit !== 'rebel' &&
+        ENTITY_META[existingUnit].isUnit &&
+        activeTileMap.get(key)?.owner === 'player'
+      ) {
+        const merged = mergedUnitType(ENTITY_META[movingUnit].strength, ENTITY_META[existingUnit].strength);
+        newEntities.delete(selectedEntityKey);
+        newEntities.set(key, merged);
+      } else {
+        newEntities.delete(key);
+        newEntities.delete(selectedEntityKey);
+        newEntities.set(key, movingUnit);
+      }
 
       const newSpentUnits = new Set(spentUnits);
       newSpentUnits.add(key);
@@ -714,6 +766,7 @@ export default function GameScreen() {
       setTerritoryBalances(newBalances);
       setSelectedEntityKey(null);
       setSelectedTileKey(key);
+      setGraveyard(prev => { const next = new Set(prev); next.delete(key); return next; });
       if (ribbonOpen) closeRibbon();
       return;
     }
@@ -812,6 +865,7 @@ export default function GameScreen() {
     const nextBalances = new Map(territoryBalances);
     let nextEntities = new Map(entities);
     const visited = new Set<string>();
+    const nextGraveyard = new Set<string>();
 
     for (const tile of Array.from(activeTileMap.values())) {
       if (tile.owner !== 'player' || visited.has(tile.key)) continue;
@@ -834,7 +888,10 @@ export default function GameScreen() {
         nextEntities = new Map(nextEntities);
         for (const t of territory) {
           const e = nextEntities.get(t.key);
-          if (e && ENTITY_META[e].isUnit) nextEntities.delete(t.key);
+          if (e && ENTITY_META[e].isUnit) {
+            nextEntities.delete(t.key);
+            nextGraveyard.add(t.key);
+          }
         }
       } else {
         nextBalances.set(territoryId, newBalance);
@@ -865,7 +922,10 @@ export default function GameScreen() {
           nextEntities = new Map(nextEntities);
           for (const t of territory) {
             const e = nextEntities.get(t.key);
-            if (e && ENTITY_META[e].isUnit) nextEntities.delete(t.key);
+            if (e && ENTITY_META[e].isUnit) {
+              nextEntities.delete(t.key);
+              nextGraveyard.add(t.key);
+            }
           }
         } else {
           nextBalances.set(territoryId, newBalance);
@@ -894,6 +954,7 @@ export default function GameScreen() {
 
     setTerritoryBalances(nextBalances);
     setEntities(nextEntities);
+    setGraveyard(nextGraveyard);
     setTurn(t => t + 1);
     setSelectedTileKey(null);
     setArmedEntityId(null);
@@ -1136,6 +1197,7 @@ export default function GameScreen() {
                 const isSpent = spentUnits.has(key);
                 const liveTile = activeTileMap.get(key);
                 const isPlayerUnit = liveTile?.owner === 'player' && meta.isUnit;
+                const isIdleBouncing = isPlayerUnit && !isSpent && !isSelected;
                 const bgColor = isRebel
                   ? 'rgba(140,20,20,0.92)'
                   : isSpent && isPlayerUnit
@@ -1153,6 +1215,7 @@ export default function GameScreen() {
                       ? '#888888'
                       : '#FFD700';
                 const strokeWidth = isRebel ? 1.8 : isSelected ? 2.5 : 1.2;
+                if (isIdleBouncing) return null;
                 return (
                   <React.Fragment key={`entity-${key}`}>
                     <Circle
@@ -1180,6 +1243,25 @@ export default function GameScreen() {
                       onPress={() => handleTileTap(key)}
                     />
                   </React.Fragment>
+                );
+              })}
+
+              {graveyard.size > 0 && Array.from(graveyard).map(key => {
+                const pos = tileDataMap.get(key);
+                if (!pos) return null;
+                if (entities.has(key)) return null;
+                const fs = HEX_SIZE * 0.5;
+                return (
+                  <SvgText
+                    key={`grave-${key}`}
+                    x={pos.cx}
+                    y={pos.cy + fs * 0.38}
+                    textAnchor="middle"
+                    fontSize={fs}
+                    opacity={0.85}
+                  >
+                    ☠️
+                  </SvgText>
                 );
               })}
 
@@ -1256,6 +1338,41 @@ export default function GameScreen() {
                 );
               })}
             </Svg>
+
+            <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+              {Array.from(entities.entries()).map(([key, entityId]) => {
+                if (entityId === 'city' || entityId === 'rebel') return null;
+                const meta = ENTITY_META[entityId];
+                if (!meta.isUnit) return null;
+                const liveTile = activeTileMap.get(key);
+                if (liveTile?.owner !== 'player') return null;
+                if (spentUnits.has(key)) return null;
+                if (selectedEntityKey === key) return null;
+                const pos = tileDataMap.get(key);
+                if (!pos) return null;
+                const r = HEX_SIZE * 0.38;
+                return (
+                  <Animated.View
+                    key={`bounce-${key}`}
+                    style={[{
+                      position: 'absolute',
+                      left: pos.cx - r,
+                      top: pos.cy - r,
+                      width: r * 2,
+                      height: r * 2,
+                      borderRadius: r,
+                      backgroundColor: 'rgba(30,50,120,0.9)',
+                      borderWidth: 1.2,
+                      borderColor: '#FFD700',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }, idleBounceStyle]}
+                  >
+                    <Text style={{ fontSize: r * 1.1, lineHeight: r * 1.6 }}>{meta.icon}</Text>
+                  </Animated.View>
+                );
+              })}
+            </View>
           </Animated.View>
         </View>
       </GestureDetector>
