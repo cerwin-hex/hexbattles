@@ -779,22 +779,36 @@ export default function GameScreen() {
     }
   }, [activeTileMap, entities, territoryBalances, isAiTurn, gameResult, aiOwners, checkWinLoss, runAiTurn]);
 
+  const HEX_MARGIN = HEX_SIZE * 1.5 * 3;
+
   const panGesture = Gesture.Pan()
     .onUpdate(e => {
-      translateX.value = savedX.value + e.translationX;
-      translateY.value = savedY.value + e.translationY;
+      'worklet';
+      const margin = HEX_MARGIN * scale.value;
+      const rawX = savedX.value + e.translationX;
+      const rawY = savedY.value + e.translationY;
+      translateX.value = Math.max(-(boardW * scale.value + margin), Math.min(SW + margin, rawX));
+      translateY.value = Math.max(-(boardH * scale.value + margin), Math.min(SH + margin, rawY));
     })
     .onEnd(() => {
+      'worklet';
       savedX.value = translateX.value;
       savedY.value = translateY.value;
     });
 
   const pinchGesture = Gesture.Pinch()
     .onUpdate(e => {
+      'worklet';
       scale.value = Math.max(0.3, Math.min(3, savedScale.value * e.scale));
     })
     .onEnd(() => {
+      'worklet';
       savedScale.value = scale.value;
+      const margin = HEX_MARGIN * scale.value;
+      translateX.value = Math.max(-(boardW * scale.value + margin), Math.min(SW + margin, translateX.value));
+      translateY.value = Math.max(-(boardH * scale.value + margin), Math.min(SH + margin, translateY.value));
+      savedX.value = translateX.value;
+      savedY.value = translateY.value;
     });
 
   const gesture = Gesture.Simultaneous(panGesture, pinchGesture);
