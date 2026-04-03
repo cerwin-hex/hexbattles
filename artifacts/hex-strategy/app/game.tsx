@@ -826,6 +826,7 @@ export default function GameScreen() {
             setSpentUnits(prev => { const next = new Set(prev); next.add(key); return next; });
           }
           setArmedEntityId(null);
+          setSelectedEntityKey(null);
           closeRibbon();
           return;
         }
@@ -860,6 +861,7 @@ export default function GameScreen() {
         setTerritoryBalances(newBalances);
         setSpentUnits(prev => { const next = new Set(prev); next.add(key); return next; });
         setArmedEntityId(null);
+        setSelectedEntityKey(null);
         closeRibbon();
         setSelectedTileKey(key);
         checkWinLoss(newTileMap);
