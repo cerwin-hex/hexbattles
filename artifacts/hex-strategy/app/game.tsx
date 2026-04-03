@@ -55,6 +55,7 @@ const BTN_H = 36;
 const BOTTOM_BAR_H = BTN_H + 16;
 const RIBBON_H = 130;
 const ENTITY_PANEL_H = 56;
+const EXTRA_PAN = 300;
 
 const ORDERED_EDGES: ReadonlyArray<{ dir: [number, number]; verts: [number, number] }> = [
   { dir: [1, 0],   verts: [0, 1] },
@@ -296,6 +297,11 @@ export default function GameScreen() {
 
   const idleBounceY = useSharedValue(0);
   useEffect(() => {
+    if (isAiTurn) {
+      cancelAnimation(idleBounceY);
+      idleBounceY.value = withTiming(0, { duration: 150 });
+      return;
+    }
     idleBounceY.value = withRepeat(
       withSequence(
         withTiming(-4, { duration: 550, easing: Easing.inOut(Easing.sin) }),
@@ -305,7 +311,7 @@ export default function GameScreen() {
       false,
     );
     return () => { cancelAnimation(idleBounceY); };
-  }, []);
+  }, [isAiTurn]);
 
   const idleBounceStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: idleBounceY.value }],
@@ -1038,20 +1044,16 @@ export default function GameScreen() {
     let clampedX: number;
     let clampedY: number;
     if (scaledW <= SW) {
-      clampedX = centeredX;
+      clampedX = Math.max(centeredX - EXTRA_PAN, Math.min(centeredX + EXTRA_PAN, x));
     } else {
-      // min: right edge == SW  →  tx = SW - (boardW + scaledW)/2
-      // max: left edge  == 0   →  tx = (scaledW - boardW)/2
-      clampedX = Math.max(SW - (boardW + scaledW) / 2, Math.min((scaledW - boardW) / 2, x));
+      clampedX = Math.max(SW - (boardW + scaledW) / 2 - EXTRA_PAN, Math.min((scaledW - boardW) / 2 + EXTRA_PAN, x));
     }
     if (scaledH <= availH) {
-      clampedY = centeredY;
+      clampedY = Math.max(centeredY - EXTRA_PAN, Math.min(centeredY + EXTRA_PAN, y));
     } else {
-      // min: bottom edge == topInset + availH  →  ty = topInset + availH - (boardH + scaledH)/2
-      // max: top edge    == topInset           →  ty = topInset + (scaledH - boardH)/2
       clampedY = Math.max(
-        topInset + availH - (boardH + scaledH) / 2,
-        Math.min(topInset + (scaledH - boardH) / 2, y),
+        topInset + availH - (boardH + scaledH) / 2 - EXTRA_PAN,
+        Math.min(topInset + (scaledH - boardH) / 2 + EXTRA_PAN, y),
       );
     }
     return { x: clampedX, y: clampedY };
