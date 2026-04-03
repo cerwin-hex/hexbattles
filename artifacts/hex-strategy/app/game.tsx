@@ -14,6 +14,7 @@ import {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   cancelAnimation,
+  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
@@ -915,7 +916,31 @@ export default function GameScreen() {
       savedY.value = clamped.y;
     });
 
-  const gesture = Gesture.Simultaneous(panGesture, pinchGesture);
+  const handleBoardTap = useCallback((touchX: number, touchY: number, tx: number, ty: number, s: number) => {
+    const boardX = (touchX - tx) / s;
+    const boardY = (touchY - ty) / s;
+    const hx = boardX + bounds.minX;
+    const hy = boardY + bounds.minY;
+    const fq = (2 / 3) * hx / HEX_SIZE;
+    const fr = hy / (HEX_SIZE * Math.sqrt(3)) - fq / 2;
+    const fs = -fq - fr;
+    let rq = Math.round(fq);
+    let rr = Math.round(fr);
+    let rs = Math.round(fs);
+    const qd = Math.abs(rq - fq), rd = Math.abs(rr - fr), sd = Math.abs(rs - fs);
+    if (qd > rd && qd > sd) rq = -rr - rs;
+    else if (rd > sd) rr = -rq - rs;
+    const key = tileKey(rq, rr);
+    if (activeTileMap.has(key)) handleTileTap(key);
+    else handleDeselect();
+  }, [bounds, HEX_SIZE, activeTileMap, handleTileTap, handleDeselect]);
+
+  const tapGesture = Gesture.Tap()
+    .onEnd(e => {
+      runOnJS(handleBoardTap)(e.x, e.y, translateX.value, translateY.value, scale.value);
+    });
+
+  const gesture = Gesture.Simultaneous(panGesture, pinchGesture, tapGesture);
 
   const boardStyle = useAnimatedStyle(() => ({
     transform: [
