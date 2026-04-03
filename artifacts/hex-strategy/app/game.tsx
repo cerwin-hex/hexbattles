@@ -53,6 +53,7 @@ import {
 const BTN_H = 36;
 const BOTTOM_BAR_H = BTN_H + 16;
 const RIBBON_H = 130;
+const ENTITY_PANEL_H = 56;
 
 const ORDERED_EDGES: ReadonlyArray<{ dir: [number, number]; verts: [number, number] }> = [
   { dir: [1, 0],   verts: [0, 1] },
@@ -509,6 +510,30 @@ export default function GameScreen() {
     return dots;
   }, [selectedEntityKey, entities, activeTileMap]);
 
+  const validPlacementAttackTiles = useMemo<Set<string>>(() => {
+    if (!armedEntityId) return new Set();
+    const meta = ENTITY_META[armedEntityId];
+    if (!meta.isUnit) return new Set();
+    const result = new Set<string>();
+    for (const tile of selectedTerritory) {
+      if (tile.terrain === 'mountain') continue;
+      const [q, r] = tile.key.split(',').map(Number);
+      for (const { dir: [dq, dr] } of HEX_EDGES) {
+        const nk = tileKey(q + dq, r + dr);
+        if (selectedTileKeys.has(nk)) continue;
+        const neighbor = activeTileMap.get(nk);
+        if (!neighbor) continue;
+        if (neighbor.terrain === 'mountain') continue;
+        if (neighbor.cityBuffer || neighbor.isCity) continue;
+        const existingEntity = entities.get(nk);
+        if (existingEntity && existingEntity !== 'rebel') continue;
+        const enemyZoC = getMaxEnemyZoC(nk, 'player', entities, activeTileMap);
+        if (meta.strength > enemyZoC) result.add(nk);
+      }
+    }
+    return result;
+  }, [armedEntityId, selectedTerritory, selectedTileKeys, activeTileMap, entities]);
+
   const minUnitCost = useMemo(() => {
     return Math.min(...(Object.values(ENTITY_META).filter(m => m.isUnit).map(m => m.cost)));
   }, []);
@@ -713,6 +738,38 @@ export default function GameScreen() {
       return;
     }
 
+    if (armedEntityId && validPlacementAttackTiles.has(key)) {
+      if (!selectedTerritoryId) return;
+      const meta = ENTITY_META[armedEntityId];
+      const balance = territoryBalances.get(selectedTerritoryId) ?? 0;
+      if (balance >= meta.cost) {
+        const previousOwner = (activeTileMap.get(key)?.owner ?? 'neutral') as TerritoryOwner;
+        const newTileMap = new Map(activeTileMap);
+        const targetTile = newTileMap.get(key);
+        if (targetTile) newTileMap.set(key, { ...targetTile, owner: 'player' });
+        const newEntities = new Map(entities);
+        newEntities.delete(key);
+        newEntities.set(key, armedEntityId);
+        const newBalances = recalculateTerritoriesForCapture(
+          key, 'player', previousOwner, activeTileMap, newTileMap, territoryBalances,
+        );
+        const mergedTerritory = getContiguousTerritory(newTileMap, key, 'player');
+        const mergedId = getTerritoryId(mergedTerritory);
+        if (mergedId) newBalances.set(mergedId, (newBalances.get(mergedId) ?? 0) - meta.cost);
+        const newLiveOwnerMap = new Map(liveOwnerMap);
+        newLiveOwnerMap.set(key, 'player');
+        setMutableTileMap(newTileMap);
+        setLiveOwnerMap(newLiveOwnerMap);
+        setEntities(newEntities);
+        setTerritoryBalances(newBalances);
+        setArmedEntityId(null);
+        closeRibbon();
+        setSelectedTileKey(key);
+        checkWinLoss(newTileMap);
+      }
+      return;
+    }
+
     const entityOnTile = entities.get(key);
     const isSelectableEntity = entityOnTile && entityOnTile !== 'city' && entityOnTile !== 'rebel' && tile?.owner === 'player';
     if (isSelectableEntity) {
@@ -747,7 +804,7 @@ export default function GameScreen() {
     setSelectedEntityKey(null);
     setArmedEntityId(null);
     if (ribbonOpen) closeRibbon();
-  }, [activeTileMap, selectedTileKeys, armedEntityId, entities, selectedTerritoryId, territoryBalances, ribbonOpen, selectedEntityKey, validMoveTiles, spentUnits, liveOwnerMap, isAiTurn, gameResult]);
+  }, [activeTileMap, selectedTileKeys, armedEntityId, entities, selectedTerritoryId, territoryBalances, ribbonOpen, selectedEntityKey, validMoveTiles, validPlacementAttackTiles, spentUnits, liveOwnerMap, isAiTurn, gameResult, checkWinLoss]);
 
   const handleEndTurn = useCallback(() => {
     if (isAiTurn || gameResult !== null) return;
@@ -1151,6 +1208,37 @@ export default function GameScreen() {
                 );
               })}
 
+              {armedEntityId && Array.from(selectedTileKeys).map(key => {
+                if (entities.has(key)) return null;
+                const pos = tileDataMap.get(key);
+                if (!pos) return null;
+                return (
+                  <Circle
+                    key={`place-${key}`}
+                    cx={pos.cx}
+                    cy={pos.cy}
+                    r={HEX_SIZE * 0.15}
+                    fill="#FFD700"
+                    opacity={0.7}
+                  />
+                );
+              })}
+
+              {armedEntityId && Array.from(validPlacementAttackTiles).map(key => {
+                const pos = tileDataMap.get(key);
+                if (!pos) return null;
+                return (
+                  <Circle
+                    key={`atk-${key}`}
+                    cx={pos.cx}
+                    cy={pos.cy}
+                    r={HEX_SIZE * 0.18}
+                    fill="#FF4040"
+                    opacity={0.85}
+                  />
+                );
+              })}
+
               {Array.from(flagTileKeys).filter(key => !selectedTileKeys.has(key) && (!entities.has(key) || entities.get(key) === 'city')).map(key => {
                 const pos = tileDataMap.get(key);
                 if (!pos) return null;
@@ -1173,7 +1261,7 @@ export default function GameScreen() {
       </GestureDetector>
 
       <Animated.View
-        style={[styles.ribbon, { bottom: BOTTOM_BAR_H + botInset }, ribbonStyle]}
+        style={[styles.ribbon, { bottom: BOTTOM_BAR_H + botInset + (selectedEntityKey ? ENTITY_PANEL_H : 0) }, ribbonStyle]}
       >
         <ScrollView
           ref={ribbonScrollRef}
@@ -1224,103 +1312,103 @@ export default function GameScreen() {
         <Text style={styles.menuBtnText}>Menu</Text>
       </TouchableOpacity>
 
+      {selectedEntityKey && (() => {
+        const entityId = entities.get(selectedEntityKey);
+        const isUnit = entityId ? ENTITY_META[entityId].isUnit : false;
+        const upgradeTarget = entityId ? UNIT_UPGRADE[entityId] : undefined;
+        const canUpgrade = !!upgradeTarget;
+        const isSpent = spentUnits.has(selectedEntityKey);
+        const entityTile = activeTileMap.get(selectedEntityKey);
+        const entityTerritoryId = entityTile
+          ? getTerritoryId(getContiguousTerritory(activeTileMap, selectedEntityKey, 'player'))
+          : null;
+        const entityTerritoryBalance = entityTerritoryId ? (territoryBalances.get(entityTerritoryId) ?? 0) : 0;
+        const removeCost = isUnit ? 0 : 10;
+        const upgradeEnabled = canUpgrade && entityTerritoryBalance >= 10 && (!isUnit || !isSpent);
+        const removeEnabled = isUnit ? !isSpent : (!!entityTerritoryId && entityTerritoryBalance >= removeCost);
+        return (
+          <View style={[styles.entityPanel, { bottom: BOTTOM_BAR_H + botInset }]}>
+            <TouchableOpacity
+              style={[styles.buildBtn, !upgradeEnabled && styles.buildBtnDisabled]}
+              activeOpacity={upgradeEnabled ? 0.75 : 1}
+              onPress={() => {
+                if (isAiTurn || gameResult !== null) return;
+                if (!upgradeEnabled || !entityId || !upgradeTarget || !entityTerritoryId) return;
+                setEntities(prev => { const next = new Map(prev); next.set(selectedEntityKey, upgradeTarget); return next; });
+                setTerritoryBalances(prev => { const next = new Map(prev); next.set(entityTerritoryId, entityTerritoryBalance - 10); return next; });
+                setSelectedEntityKey(null);
+              }}
+            >
+              <Text style={[styles.buildBtnText, !upgradeEnabled && styles.buildBtnTextDisabled]}>
+                ⬆ Upgrade {canUpgrade ? '(10g)' : '(Max)'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.buildBtn, { borderColor: '#AA3A2A', backgroundColor: '#3A1A10' }, !removeEnabled && styles.buildBtnDisabled]}
+              activeOpacity={removeEnabled ? 0.75 : 1}
+              onPress={() => {
+                if (isAiTurn || gameResult !== null) return;
+                if (!removeEnabled || !entityTerritoryId) return;
+                setEntities(prev => { const next = new Map(prev); next.delete(selectedEntityKey); return next; });
+                if (removeCost > 0) {
+                  setTerritoryBalances(prev => { const next = new Map(prev); next.set(entityTerritoryId, entityTerritoryBalance - removeCost); return next; });
+                }
+                setSelectedEntityKey(null);
+              }}
+            >
+              <Text style={[styles.buildBtnText, { color: removeEnabled ? '#F07060' : '#7A3020' }]}>
+                ✕ Remove{removeCost > 0 ? ` (${removeCost}g)` : ''}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        );
+      })()}
+
       <View style={[styles.bottomBar, { paddingBottom: botInset }]}>
         <View style={styles.bottomBarInner}>
-          {selectedEntityKey ? (() => {
-            const entityId = entities.get(selectedEntityKey);
-            const isUnit = entityId ? ENTITY_META[entityId].isUnit : false;
-            const upgradeTarget = entityId ? UNIT_UPGRADE[entityId] : undefined;
-            const canUpgrade = !!upgradeTarget;
-            const isSpent = spentUnits.has(selectedEntityKey);
-            const entityTile = activeTileMap.get(selectedEntityKey);
-            const entityTerritoryId = entityTile
-              ? getTerritoryId(getContiguousTerritory(activeTileMap, selectedEntityKey, 'player'))
-              : null;
-            const entityTerritoryBalance = entityTerritoryId ? (territoryBalances.get(entityTerritoryId) ?? 0) : 0;
-            const removeCost = isUnit ? 0 : 10;
-            const upgradeEnabled = canUpgrade && entityTerritoryBalance >= 10 && (!isUnit || !isSpent);
-            const removeEnabled = isUnit ? !isSpent : (!!entityTerritoryId && entityTerritoryBalance >= removeCost);
-            return (
-              <>
-                <TouchableOpacity
-                  style={[styles.buildBtn, !upgradeEnabled && styles.buildBtnDisabled]}
-                  activeOpacity={upgradeEnabled ? 0.75 : 1}
-                  onPress={() => {
-                    if (isAiTurn || gameResult !== null) return;
-                    if (!upgradeEnabled || !entityId || !upgradeTarget || !entityTerritoryId) return;
-                    setEntities(prev => { const next = new Map(prev); next.set(selectedEntityKey, upgradeTarget); return next; });
-                    setTerritoryBalances(prev => { const next = new Map(prev); next.set(entityTerritoryId, entityTerritoryBalance - 10); return next; });
-                    setSelectedEntityKey(null);
-                  }}
-                >
-                  <Text style={[styles.buildBtnText, !upgradeEnabled && styles.buildBtnTextDisabled]}>
-                    ⬆ Upgrade {canUpgrade ? '(10g)' : '(Max)'}
+          <>
+            <TouchableOpacity
+              style={[
+                styles.buildBtn,
+                ribbonOpen && styles.buildBtnActive,
+                !canBuild && styles.buildBtnDisabled,
+              ]}
+              onPress={() => {
+                if (isAiTurn || gameResult !== null || !canBuild) return;
+                if (ribbonOpen) {
+                  closeRibbon();
+                  setArmedEntityId(null);
+                } else {
+                  openRibbon();
+                }
+              }}
+              activeOpacity={canBuild ? 0.75 : 1}
+            >
+              <Ionicons
+                name="hammer"
+                size={14}
+                color={ribbonOpen ? '#0D0A06' : canBuild ? '#C8A24A' : '#3A2E14'}
+              />
+              <Text style={[
+                styles.buildBtnText,
+                ribbonOpen && styles.buildBtnTextActive,
+                !canBuild && styles.buildBtnTextDisabled,
+              ]}>
+                Build
+              </Text>
+            </TouchableOpacity>
+            {hasSelection && (
+              <TouchableOpacity style={styles.creditsDisplay} onPress={() => setShowEconModal(true)} activeOpacity={0.75}>
+                <Text style={styles.creditsIcon}>⚜️</Text>
+                <Text style={styles.creditsAmount}>{selectedTerritoryBalance}</Text>
+                {econBreakdown !== null && (
+                  <Text style={[styles.creditsNet, econBreakdown.net >= 0 ? styles.creditsNetPos : styles.creditsNetNeg]}>
+                    {econBreakdown.net >= 0 ? `+${econBreakdown.net}` : `${econBreakdown.net}`}/turn
                   </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.buildBtn, { borderColor: '#AA3A2A', backgroundColor: '#3A1A10' }, !removeEnabled && styles.buildBtnDisabled]}
-                  activeOpacity={removeEnabled ? 0.75 : 1}
-                  onPress={() => {
-                    if (isAiTurn || gameResult !== null) return;
-                    if (!removeEnabled || !entityTerritoryId) return;
-                    setEntities(prev => { const next = new Map(prev); next.delete(selectedEntityKey); return next; });
-                    if (removeCost > 0) {
-                      setTerritoryBalances(prev => { const next = new Map(prev); next.set(entityTerritoryId, entityTerritoryBalance - removeCost); return next; });
-                    }
-                    setSelectedEntityKey(null);
-                  }}
-                >
-                  <Text style={[styles.buildBtnText, { color: removeEnabled ? '#F07060' : '#7A3020' }]}>
-                    ✕ Remove{removeCost > 0 ? ` (${removeCost}g)` : ''}
-                  </Text>
-                </TouchableOpacity>
-              </>
-            );
-          })() : (
-            <>
-              <TouchableOpacity
-                style={[
-                  styles.buildBtn,
-                  ribbonOpen && styles.buildBtnActive,
-                  !canBuild && styles.buildBtnDisabled,
-                ]}
-                onPress={() => {
-                  if (isAiTurn || gameResult !== null || !canBuild) return;
-                  if (ribbonOpen) {
-                    closeRibbon();
-                    setArmedEntityId(null);
-                  } else {
-                    openRibbon();
-                  }
-                }}
-                activeOpacity={canBuild ? 0.75 : 1}
-              >
-                <Ionicons
-                  name="hammer"
-                  size={14}
-                  color={ribbonOpen ? '#0D0A06' : canBuild ? '#C8A24A' : '#3A2E14'}
-                />
-                <Text style={[
-                  styles.buildBtnText,
-                  ribbonOpen && styles.buildBtnTextActive,
-                  !canBuild && styles.buildBtnTextDisabled,
-                ]}>
-                  Build
-                </Text>
+                )}
               </TouchableOpacity>
-              {hasSelection && (
-                <TouchableOpacity style={styles.creditsDisplay} onPress={() => setShowEconModal(true)} activeOpacity={0.75}>
-                  <Text style={styles.creditsIcon}>⚜️</Text>
-                  <Text style={styles.creditsAmount}>{selectedTerritoryBalance}</Text>
-                  {econBreakdown !== null && (
-                    <Text style={[styles.creditsNet, econBreakdown.net >= 0 ? styles.creditsNetPos : styles.creditsNetNeg]}>
-                      {econBreakdown.net >= 0 ? `+${econBreakdown.net}` : `${econBreakdown.net}`}/turn
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              )}
-            </>
-          )}
+            )}
+          </>
 
           <View style={styles.spacer} />
 
@@ -1469,6 +1557,20 @@ const styles = StyleSheet.create({
         shadowRadius: 24,
       },
     }),
+  },
+  entityPanel: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: ENTITY_PANEL_H,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    gap: 8,
+    backgroundColor: 'rgba(18, 12, 4, 0.97)',
+    borderTopWidth: 1,
+    borderTopColor: '#6A4A1C',
+    zIndex: 18,
   },
   ribbon: {
     position: 'absolute',
