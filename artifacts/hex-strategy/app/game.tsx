@@ -88,7 +88,7 @@ function initTerritoryBalances(
     const territory = getContiguousTerritory(tileMap, tile.key, tile.owner);
     const id = getTerritoryId(territory);
     if (!id) continue;
-    balances.set(id, 0);
+    balances.set(id, territory.length >= 2 ? 10 : 0);
     for (const t of territory) visited.add(t.key);
   }
   return balances;
