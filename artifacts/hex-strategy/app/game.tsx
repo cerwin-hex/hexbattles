@@ -282,6 +282,13 @@ export default function GameScreen() {
   const [selectedEntityKey, setSelectedEntityKey] = useState<string | null>(null);
   const [spentUnits, setSpentUnits] = useState<Set<string>>(new Set());
   const [mutableTileMap, setMutableTileMap] = useState<Map<string, HexTile>>(new Map());
+  const [moveHistory, setMoveHistory] = useState<Array<{
+    entities: Map<string, EntityType>;
+    mutableTileMap: Map<string, HexTile>;
+    territoryBalances: Map<string, number>;
+    spentUnits: Set<string>;
+    liveOwnerMap: Map<string, TerritoryOwner>;
+  }>>([]);
   const [isAiTurn, setIsAiTurn] = useState(false);
   const [gameResult, setGameResult] = useState<'victory' | 'defeat' | null>(null);
   const aiTurnRef = useRef<boolean>(false);
@@ -717,6 +724,19 @@ export default function GameScreen() {
     return keys;
   }, [activeTileMap, territoryBalances, entities]);
 
+  const pushHistory = useCallback(() => {
+    setMoveHistory(prev => [
+      ...prev,
+      {
+        entities: new Map(entities),
+        mutableTileMap: new Map(mutableTileMap),
+        territoryBalances: new Map(territoryBalances),
+        spentUnits: new Set(spentUnits),
+        liveOwnerMap: new Map(liveOwnerMap),
+      },
+    ]);
+  }, [entities, mutableTileMap, territoryBalances, spentUnits, liveOwnerMap]);
+
   const handleDeselect = useCallback(() => {
     setSelectedTileKey(null);
     setArmedEntityId(null);
@@ -729,6 +749,7 @@ export default function GameScreen() {
     const tile = activeTileMap.get(key);
 
     if (selectedEntityKey && validMoveTiles.has(key)) {
+      pushHistory();
       const prevTile = activeTileMap.get(key);
       const previousOwner = prevTile?.owner ?? 'neutral';
       const newTileMap = new Map(activeTileMap);
@@ -787,6 +808,7 @@ export default function GameScreen() {
         const meta = ENTITY_META[armedEntityId];
         const balance = territoryBalances.get(selectedTerritoryId) ?? 0;
         if (balance >= meta.cost) {
+          pushHistory();
           setEntities(prev => { const next = new Map(prev); next.set(key, armedEntityId); return next; });
           setTerritoryBalances(prev => {
             const next = new Map(prev);
@@ -806,6 +828,7 @@ export default function GameScreen() {
       const meta = ENTITY_META[armedEntityId];
       const balance = territoryBalances.get(selectedTerritoryId) ?? 0;
       if (balance >= meta.cost) {
+        pushHistory();
         const previousOwner = (activeTileMap.get(key)?.owner ?? 'neutral') as TerritoryOwner;
         const newTileMap = new Map(activeTileMap);
         const targetTile = newTileMap.get(key);
@@ -868,10 +891,29 @@ export default function GameScreen() {
     setSelectedEntityKey(null);
     setArmedEntityId(null);
     if (ribbonOpen) closeRibbon();
-  }, [activeTileMap, selectedTileKeys, armedEntityId, entities, selectedTerritoryId, territoryBalances, ribbonOpen, selectedEntityKey, validMoveTiles, validPlacementAttackTiles, spentUnits, liveOwnerMap, isAiTurn, gameResult, checkWinLoss]);
+  }, [activeTileMap, selectedTileKeys, armedEntityId, entities, selectedTerritoryId, territoryBalances, ribbonOpen, selectedEntityKey, validMoveTiles, validPlacementAttackTiles, spentUnits, liveOwnerMap, isAiTurn, gameResult, checkWinLoss, pushHistory]);
+
+  const handleUndo = useCallback(() => {
+    if (isAiTurn || gameResult !== null) return;
+    setMoveHistory(prev => {
+      if (prev.length === 0) return prev;
+      const snapshot = prev[prev.length - 1];
+      setEntities(snapshot.entities);
+      setMutableTileMap(snapshot.mutableTileMap);
+      setTerritoryBalances(snapshot.territoryBalances);
+      setSpentUnits(snapshot.spentUnits);
+      setLiveOwnerMap(snapshot.liveOwnerMap);
+      setSelectedEntityKey(null);
+      setSelectedTileKey(null);
+      setArmedEntityId(null);
+      if (ribbonOpen) closeRibbon();
+      return prev.slice(0, -1);
+    });
+  }, [isAiTurn, gameResult, ribbonOpen]);
 
   const handleEndTurn = useCallback(() => {
     if (isAiTurn || gameResult !== null) return;
+    setMoveHistory([]);
 
     const nextBalances = new Map(territoryBalances);
     let nextEntities = new Map(entities);
@@ -1462,6 +1504,7 @@ export default function GameScreen() {
               onPress={() => {
                 if (isAiTurn || gameResult !== null) return;
                 if (!upgradeEnabled || !entityId || !upgradeTarget || !entityTerritoryId) return;
+                pushHistory();
                 setEntities(prev => { const next = new Map(prev); next.set(selectedEntityKey, upgradeTarget); return next; });
                 setTerritoryBalances(prev => { const next = new Map(prev); next.set(entityTerritoryId, entityTerritoryBalance - 10); return next; });
                 setSelectedEntityKey(null);
@@ -1477,6 +1520,7 @@ export default function GameScreen() {
               onPress={() => {
                 if (isAiTurn || gameResult !== null) return;
                 if (!removeEnabled || !entityTerritoryId) return;
+                pushHistory();
                 setEntities(prev => { const next = new Map(prev); next.delete(selectedEntityKey); return next; });
                 if (removeCost > 0) {
                   setTerritoryBalances(prev => { const next = new Map(prev); next.set(entityTerritoryId, entityTerritoryBalance - removeCost); return next; });
@@ -1494,53 +1538,63 @@ export default function GameScreen() {
 
       <View style={[styles.bottomBar, { paddingBottom: botInset }]}>
         <View style={styles.bottomBarInner}>
-          <>
-            <TouchableOpacity
-              style={[
-                styles.buildBtn,
-                ribbonOpen && styles.buildBtnActive,
-                !canBuild && styles.buildBtnDisabled,
-              ]}
-              onPress={() => {
-                if (isAiTurn || gameResult !== null || !canBuild) return;
-                if (ribbonOpen) {
-                  closeRibbon();
-                  setArmedEntityId(null);
-                } else {
-                  openRibbon();
-                }
-              }}
-              activeOpacity={canBuild ? 0.75 : 1}
-            >
-              <Ionicons
-                name="hammer"
-                size={14}
-                color={ribbonOpen ? '#0D0A06' : canBuild ? '#C8A24A' : '#3A2E14'}
-              />
-              <Text style={[
-                styles.buildBtnText,
-                ribbonOpen && styles.buildBtnTextActive,
-                !canBuild && styles.buildBtnTextDisabled,
-              ]}>
-                Build
-              </Text>
+          <TouchableOpacity
+            style={[styles.undoBtn, (isAiTurn || gameResult !== null || moveHistory.length === 0) && styles.undoBtnDisabled]}
+            onPress={handleUndo}
+            activeOpacity={(isAiTurn || gameResult !== null || moveHistory.length === 0) ? 1 : 0.75}
+            disabled={isAiTurn || gameResult !== null || moveHistory.length === 0}
+          >
+            <Ionicons
+              name="arrow-back"
+              size={16}
+              color={(isAiTurn || gameResult !== null || moveHistory.length === 0) ? '#3A2E14' : '#C8A24A'}
+            />
+          </TouchableOpacity>
+
+          {hasSelection && (
+            <TouchableOpacity style={styles.creditsDisplay} onPress={() => setShowEconModal(true)} activeOpacity={0.75}>
+              <Text style={styles.creditsIcon}>⚜️</Text>
+              <Text style={styles.creditsAmount}>{selectedTerritoryBalance}</Text>
+              {econBreakdown !== null && (
+                <Text style={[styles.creditsNet, econBreakdown.net >= 0 ? styles.creditsNetPos : styles.creditsNetNeg]}>
+                  {econBreakdown.net >= 0 ? `+${econBreakdown.net}` : `${econBreakdown.net}`}/turn
+                </Text>
+              )}
             </TouchableOpacity>
-            {hasSelection && (
-              <TouchableOpacity style={styles.creditsDisplay} onPress={() => setShowEconModal(true)} activeOpacity={0.75}>
-                <Text style={styles.creditsIcon}>⚜️</Text>
-                <Text style={styles.creditsAmount}>{selectedTerritoryBalance}</Text>
-                {econBreakdown !== null && (
-                  <Text style={[styles.creditsNet, econBreakdown.net >= 0 ? styles.creditsNetPos : styles.creditsNetNeg]}>
-                    {econBreakdown.net >= 0 ? `+${econBreakdown.net}` : `${econBreakdown.net}`}/turn
-                  </Text>
-                )}
-              </TouchableOpacity>
-            )}
-          </>
+          )}
 
           <View style={styles.spacer} />
 
-          <Text style={styles.turnText}>T{turn}</Text>
+          <TouchableOpacity
+            style={[
+              styles.buildBtn,
+              ribbonOpen && styles.buildBtnActive,
+              !canBuild && styles.buildBtnDisabled,
+            ]}
+            onPress={() => {
+              if (isAiTurn || gameResult !== null || !canBuild) return;
+              if (ribbonOpen) {
+                closeRibbon();
+                setArmedEntityId(null);
+              } else {
+                openRibbon();
+              }
+            }}
+            activeOpacity={canBuild ? 0.75 : 1}
+          >
+            <Ionicons
+              name="hammer"
+              size={14}
+              color={ribbonOpen ? '#0D0A06' : canBuild ? '#C8A24A' : '#3A2E14'}
+            />
+            <Text style={[
+              styles.buildBtnText,
+              ribbonOpen && styles.buildBtnTextActive,
+              !canBuild && styles.buildBtnTextDisabled,
+            ]}>
+              Build
+            </Text>
+          </TouchableOpacity>
 
           {isAiTurn ? (
             <View style={[styles.endTurnBtn, styles.aiTurnBtn]}>
@@ -1851,10 +1905,19 @@ const styles = StyleSheet.create({
   spacer: {
     flex: 1,
   },
-  turnText: {
-    fontSize: 11,
-    fontFamily: 'Cinzel_400Regular',
-    color: '#786A54',
+  undoBtn: {
+    height: BTN_H,
+    width: BTN_H,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: '#9A7830',
+    backgroundColor: '#3A2A10',
+  },
+  undoBtnDisabled: {
+    borderColor: '#4A3A1A',
+    backgroundColor: '#2A1E08',
   },
   endTurnBtn: {
     height: BTN_H,
