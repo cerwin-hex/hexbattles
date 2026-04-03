@@ -541,9 +541,9 @@ export function generateHexGrid(tileCount: number, playerCount: number): HexTile
 
   for (const tile of tiles) {
     const rand = Math.random();
-    if (rand < 0.05) tile.terrain = 'mountain';
-    else if (rand < 0.20) tile.terrain = 'desert';
-    else if (rand < 0.21) pendingCityKeys.add(tile.key);
+    if (rand < 0.08) tile.terrain = 'mountain';
+    else if (rand < 0.23) tile.terrain = 'desert';
+    else if (rand < 0.25) pendingCityKeys.add(tile.key);
     else tile.terrain = 'grass';
   }
 
