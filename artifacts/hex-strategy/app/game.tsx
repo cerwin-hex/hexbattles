@@ -297,6 +297,7 @@ export default function GameScreen() {
       -1,
       false,
     );
+    return () => { cancelAnimation(idleBounceY); };
   }, []);
 
   const idleBounceStyle = useAnimatedStyle(() => ({
