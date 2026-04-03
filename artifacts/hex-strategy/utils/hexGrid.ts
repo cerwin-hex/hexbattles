@@ -1,6 +1,6 @@
 export type TerrainType = 'grass' | 'desert' | 'mountain';
 export type TerritoryOwner = 'neutral' | 'player' | 'ai1' | 'ai2' | 'ai3';
-export type EntityType = 'simple_unit' | 'advanced_unit' | 'expert_unit' | 'tower' | 'castle' | 'city';
+export type EntityType = 'simple_unit' | 'advanced_unit' | 'expert_unit' | 'tower' | 'castle' | 'city' | 'rebel';
 
 export interface HexTile {
   q: number;
@@ -27,7 +27,8 @@ export const ENTITY_META: Record<EntityType, EntityMeta> = {
   expert_unit:   { name: 'Expert Unit',   icon: '🗡️',  cost: 30, upkeep: 18, isUnit: true,  strength: 3 },
   tower:         { name: 'Tower',         icon: '🗼',  cost: 15, upkeep: 1,  isUnit: false, strength: 2 },
   castle:        { name: 'Castle',        icon: '🏰',  cost: 30, upkeep: 5,  isUnit: false, strength: 3 },
-  city:          { name: 'City',          icon: '🏙️',  cost: 10, upkeep: 0, isUnit: false, strength: 1 },
+  city:          { name: 'City',          icon: '🏙️',  cost: 10, upkeep: 0,  isUnit: false, strength: 1 },
+  rebel:         { name: 'Rebel',         icon: '✊',   cost: 0,  upkeep: 0,  isUnit: false, strength: 0 },
 };
 
 export const TERRAIN_INCOME: Record<TerrainType, number> = {
@@ -132,8 +133,9 @@ export function getValidMoves(
         visited.add(nk);
         if (depth < 3) {
           const allyEntity = entities.get(nk);
+          const allyIsRebel = allyEntity === 'rebel';
           const allyIsUnit = allyEntity ? ENTITY_META[allyEntity].isUnit : false;
-          if (!allyEntity) {
+          if (!allyEntity || allyIsRebel) {
             result.add(nk);
             queue.push({ key: nk, depth: depth + 1 });
           } else if (!allyIsUnit) {

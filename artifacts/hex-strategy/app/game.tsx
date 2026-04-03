@@ -62,7 +62,7 @@ const ORDERED_EDGES: ReadonlyArray<{ dir: [number, number]; verts: [number, numb
   { dir: [1, -1],  verts: [5, 0] },
 ];
 
-const PURCHASABLES = (Object.keys(ENTITY_META) as EntityType[]).map(id => ({
+const PURCHASABLES = (Object.keys(ENTITY_META) as EntityType[]).filter(id => id !== 'rebel').map(id => ({
   id,
   ...ENTITY_META[id],
 }));
@@ -277,11 +277,22 @@ export default function GameScreen() {
       setTerritoryBalances(initTerritoryBalances(tiles, tileMap));
       setSelectedTileKey(null);
       setArmedEntityId(null);
-      setEntities(new Map());
       setSelectedEntityKey(null);
       setSpentUnits(new Set());
       setMutableTileMap(new Map(tileMap));
       setLiveOwnerMap(new Map());
+
+      const initialEntities = new Map<string, EntityType>();
+      const owners: TerritoryOwner[] = ['player', 'ai1', 'ai2', 'ai3'];
+      for (const tile of tiles) {
+        if (!owners.includes(tile.owner)) continue;
+        if (tile.terrain === 'mountain') continue;
+        if (initialEntities.has(tile.key)) continue;
+        if (Math.random() < 0.10) {
+          initialEntities.set(tile.key, 'rebel');
+        }
+      }
+      setEntities(initialEntities);
     }
   }, [tiles, tileMap]);
 
@@ -486,7 +497,7 @@ export default function GameScreen() {
     const dots = new Set<string>();
     for (const t of territory) {
       const e = entities.get(t.key);
-      if (!e || ENTITY_META[e].isUnit || e === 'city') continue;
+      if (!e || ENTITY_META[e].isUnit || e === 'city' || e === 'rebel') continue;
       dots.add(t.key);
       const [q, r] = t.key.split(',').map(Number);
       for (const { dir: [dq, dr] } of HEX_EDGES) {
@@ -561,13 +572,20 @@ export default function GameScreen() {
     let mountainCount = 0;
     let cityCount = 0;
     const upkeepGroupMap = new Map<EntityType, number>();
+    let activeGrassCount = 0;
+    let activeCityCount = 0;
     for (const t of selectedTerritory) {
       if (t.terrain === 'grass') grassCount++;
       else if (t.terrain === 'desert') desertCount++;
       else if (t.terrain === 'mountain') mountainCount++;
       const entityId = entities.get(t.key);
+      const hasRebel = entityId === 'rebel';
       if (t.isCity || entityId === 'city') cityCount++;
-      if (entityId && entityId !== 'city') {
+      if (!hasRebel) {
+        if (t.terrain === 'grass') activeGrassCount++;
+        if (t.isCity || entityId === 'city') activeCityCount++;
+      }
+      if (entityId && entityId !== 'city' && entityId !== 'rebel') {
         const meta = ENTITY_META[entityId];
         if (meta.upkeep > 0) {
           upkeepGroupMap.set(entityId, (upkeepGroupMap.get(entityId) ?? 0) + 1);
@@ -578,8 +596,8 @@ export default function GameScreen() {
       const meta = ENTITY_META[type];
       return { icon: meta.icon, name: meta.name, count, upkeepPerUnit: meta.upkeep, total: meta.upkeep * count };
     });
-    const grassIncome = grassCount;
-    const cityIncome = cityCount * CITY_BONUS;
+    const grassIncome = activeGrassCount;
+    const cityIncome = activeCityCount * CITY_BONUS;
     const totalIncome = grassIncome + cityIncome;
     const totalUpkeep = upkeepGroups.reduce((s, g) => s + g.total, 0);
     const net = totalIncome - totalUpkeep;
@@ -695,7 +713,7 @@ export default function GameScreen() {
     }
 
     const entityOnTile = entities.get(key);
-    const isSelectableEntity = entityOnTile && entityOnTile !== 'city' && tile?.owner === 'player';
+    const isSelectableEntity = entityOnTile && entityOnTile !== 'city' && entityOnTile !== 'rebel' && tile?.owner === 'player';
     if (isSelectableEntity) {
       if (selectedEntityKey === key) {
         setSelectedEntityKey(null);
@@ -743,8 +761,10 @@ export default function GameScreen() {
       for (const t of territory) visited.add(t.key);
       const territoryId = getTerritoryId(territory);
       if (!territoryId) continue;
-      const income = territory.reduce((s, t) =>
-        s + TERRAIN_INCOME[t.terrain] + (t.isCity ? CITY_BONUS : 0) + (nextEntities.get(t.key) === 'city' ? CITY_BONUS : 0), 0);
+      const income = territory.reduce((s, t) => {
+        if (nextEntities.get(t.key) === 'rebel') return s;
+        return s + TERRAIN_INCOME[t.terrain] + (t.isCity ? CITY_BONUS : 0) + (nextEntities.get(t.key) === 'city' ? CITY_BONUS : 0);
+      }, 0);
       const upkeep = territory.reduce((s, t) => {
         const e = nextEntities.get(t.key);
         return s + (e ? ENTITY_META[e].upkeep : 0);
@@ -772,8 +792,10 @@ export default function GameScreen() {
         const territoryId = getTerritoryId(territory);
         if (!territoryId) continue;
         if (!nextBalances.has(territoryId)) nextBalances.set(territoryId, 0);
-        const income = territory.reduce((s, t) =>
-          s + TERRAIN_INCOME[t.terrain] + (t.isCity ? CITY_BONUS : 0) + (nextEntities.get(t.key) === 'city' ? CITY_BONUS : 0), 0);
+        const income = territory.reduce((s, t) => {
+          if (nextEntities.get(t.key) === 'rebel') return s;
+          return s + TERRAIN_INCOME[t.terrain] + (t.isCity ? CITY_BONUS : 0) + (nextEntities.get(t.key) === 'city' ? CITY_BONUS : 0);
+        }, 0);
         const upkeep = territory.reduce((s, t) => {
           const e = nextEntities.get(t.key);
           return s + (e ? ENTITY_META[e].upkeep : 0);
@@ -792,6 +814,25 @@ export default function GameScreen() {
         }
       }
     }
+
+    const allOwners: TerritoryOwner[] = ['player', 'ai1', 'ai2', 'ai3'];
+    const preSpawnEntities = nextEntities;
+    const rebelSpawns = new Map(nextEntities);
+    for (const tile of Array.from(activeTileMap.values())) {
+      if (!allOwners.includes(tile.owner)) continue;
+      if (tile.terrain === 'mountain') continue;
+      if (preSpawnEntities.has(tile.key)) continue;
+      const [tq, tr] = tile.key.split(',').map(Number);
+      const neighborRebelCount = HEX_EDGES.filter(({ dir: [dq, dr] }) => {
+        const nk = tileKey(tq + dq, tr + dr);
+        return preSpawnEntities.get(nk) === 'rebel';
+      }).length;
+      const chance = neighborRebelCount >= 2 ? 0.10 : neighborRebelCount === 1 ? 0.075 : 0.02;
+      if (Math.random() < chance) {
+        rebelSpawns.set(tile.key, 'rebel');
+      }
+    }
+    nextEntities = rebelSpawns;
 
     setTerritoryBalances(nextBalances);
     setEntities(nextEntities);
@@ -959,20 +1000,29 @@ export default function GameScreen() {
                 const pos = tileDataMap.get(key);
                 if (!pos) return null;
                 const meta = ENTITY_META[entityId];
+                const isRebel = entityId === 'rebel';
                 const r = HEX_SIZE * 0.38;
                 const isSelected = selectedEntityKey === key;
                 const isSpent = spentUnits.has(key);
                 const liveTile = activeTileMap.get(key);
                 const isPlayerUnit = liveTile?.owner === 'player' && meta.isUnit;
-                const bgColor = isSpent && isPlayerUnit
-                  ? 'rgba(60,60,80,0.85)'
+                const bgColor = isRebel
+                  ? 'rgba(140,20,20,0.92)'
+                  : isSpent && isPlayerUnit
+                    ? 'rgba(60,60,80,0.85)'
+                    : isSelected
+                      ? 'rgba(20,80,20,0.95)'
+                      : meta.isUnit
+                        ? 'rgba(30,50,120,0.9)'
+                        : 'rgba(80,40,10,0.9)';
+                const strokeColor = isRebel
+                  ? '#FF4040'
                   : isSelected
-                    ? 'rgba(20,80,20,0.95)'
-                    : meta.isUnit
-                      ? 'rgba(30,50,120,0.9)'
-                      : 'rgba(80,40,10,0.9)';
-                const strokeColor = isSelected ? '#50FF50' : isSpent && isPlayerUnit ? '#888888' : '#FFD700';
-                const strokeWidth = isSelected ? 2.5 : 1.2;
+                    ? '#50FF50'
+                    : isSpent && isPlayerUnit
+                      ? '#888888'
+                      : '#FFD700';
+                const strokeWidth = isRebel ? 1.8 : isSelected ? 2.5 : 1.2;
                 return (
                   <React.Fragment key={`entity-${key}`}>
                     <Circle
