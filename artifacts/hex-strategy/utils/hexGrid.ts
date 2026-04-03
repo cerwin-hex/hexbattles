@@ -73,12 +73,20 @@ export function getMaxEnemyZoC(
   entities: Map<string, EntityType>,
   tileMap: Map<string, HexTile>,
 ): number {
+  const targetTile = tileMap.get(targetKey);
+  // Neutral tiles have no defending faction — no ZoC.
+  // Player's own tiles are never attacked via this path.
+  if (!targetTile || targetTile.owner === playerOwner || targetTile.owner === 'neutral') return 0;
+
+  // Only units belonging to the tile's own faction count as defenders.
+  const defenderOwner = targetTile.owner;
+
   const [q, r] = targetKey.split(',').map(Number);
   const candidateKeys = [targetKey, ...HEX_EDGES.map(({ dir: [dq, dr] }) => tileKey(q + dq, r + dr))];
   let maxStr = 0;
   for (const ck of candidateKeys) {
     const t = tileMap.get(ck);
-    if (!t || t.owner === playerOwner || t.owner === 'neutral') continue;
+    if (!t || t.owner !== defenderOwner) continue;
     const e = entities.get(ck);
     if (e) {
       const str = ENTITY_META[e].strength;
