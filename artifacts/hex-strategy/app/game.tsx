@@ -886,6 +886,7 @@ export default function GameScreen() {
   };
 
   const panGesture = Gesture.Pan()
+    .minDistance(10)
     .onUpdate(e => {
       const raw = { x: savedX.value + e.translationX, y: savedY.value + e.translationY };
       const clamped = clampXY(raw.x, raw.y, scale.value);
