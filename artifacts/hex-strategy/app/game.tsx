@@ -204,6 +204,26 @@ export default function GameScreen() {
   const savedX = useSharedValue(initX);
   const savedY = useSharedValue(initY);
 
+  const svBoardW = useSharedValue(boardW);
+  const svBoardH = useSharedValue(boardH);
+  const svSW = useSharedValue(SW);
+  const svSH = useSharedValue(SH);
+  const svHexMargin = useSharedValue(HEX_SIZE * 1.5 * 3);
+
+  useEffect(() => {
+    svBoardW.value = boardW;
+    svBoardH.value = boardH;
+  }, [boardW, boardH]);
+
+  useEffect(() => {
+    svSW.value = SW;
+    svSH.value = SH;
+  }, [SW, SH]);
+
+  useEffect(() => {
+    svHexMargin.value = HEX_SIZE * 1.5 * 3;
+  }, [HEX_SIZE]);
+
   useEffect(() => {
     translateX.value = initX;
     translateY.value = initY;
@@ -779,16 +799,14 @@ export default function GameScreen() {
     }
   }, [activeTileMap, entities, territoryBalances, isAiTurn, gameResult, aiOwners, checkWinLoss, runAiTurn]);
 
-  const HEX_MARGIN = HEX_SIZE * 1.5 * 3;
-
   const panGesture = Gesture.Pan()
     .onUpdate(e => {
       'worklet';
-      const margin = HEX_MARGIN * scale.value;
+      const margin = svHexMargin.value * scale.value;
       const rawX = savedX.value + e.translationX;
       const rawY = savedY.value + e.translationY;
-      translateX.value = Math.max(-(boardW * scale.value + margin), Math.min(SW + margin, rawX));
-      translateY.value = Math.max(-(boardH * scale.value + margin), Math.min(SH + margin, rawY));
+      translateX.value = Math.max(-(svBoardW.value * scale.value + margin), Math.min(svSW.value + margin, rawX));
+      translateY.value = Math.max(-(svBoardH.value * scale.value + margin), Math.min(svSH.value + margin, rawY));
     })
     .onEnd(() => {
       'worklet';
@@ -804,9 +822,9 @@ export default function GameScreen() {
     .onEnd(() => {
       'worklet';
       savedScale.value = scale.value;
-      const margin = HEX_MARGIN * scale.value;
-      translateX.value = Math.max(-(boardW * scale.value + margin), Math.min(SW + margin, translateX.value));
-      translateY.value = Math.max(-(boardH * scale.value + margin), Math.min(SH + margin, translateY.value));
+      const margin = svHexMargin.value * scale.value;
+      translateX.value = Math.max(-(svBoardW.value * scale.value + margin), Math.min(svSW.value + margin, translateX.value));
+      translateY.value = Math.max(-(svBoardH.value * scale.value + margin), Math.min(svSH.value + margin, translateY.value));
       savedX.value = translateX.value;
       savedY.value = translateY.value;
     });
