@@ -850,10 +850,47 @@ export default function GameScreen() {
     }
   }, [activeTileMap, entities, territoryBalances, isAiTurn, gameResult, aiOwners, checkWinLoss, runAiTurn]);
 
+  // React Native scales around the element's centre, so the board's screen edges are:
+  //   left  = tx + boardW/2 - scaledW/2
+  //   right = tx + boardW/2 + scaledW/2
+  //   top   = ty + boardH/2 - scaledH/2
+  //   bottom= ty + boardH/2 + scaledH/2
+  // Solving for tx/ty that keeps each edge inside the viewport gives the ranges below.
+  const clampXY = (x: number, y: number, s: number) => {
+    'worklet';
+    const scaledW = boardW * s;
+    const scaledH = boardH * s;
+    // centred position keeps board centre aligned with viewport centre (independent of scale)
+    const centeredX = (SW - boardW) / 2;
+    const centeredY = topInset + (availH - boardH) / 2;
+    let clampedX: number;
+    let clampedY: number;
+    if (scaledW <= SW) {
+      clampedX = centeredX;
+    } else {
+      // min: right edge == SW  →  tx = SW - (boardW + scaledW)/2
+      // max: left edge  == 0   →  tx = (scaledW - boardW)/2
+      clampedX = Math.max(SW - (boardW + scaledW) / 2, Math.min((scaledW - boardW) / 2, x));
+    }
+    if (scaledH <= availH) {
+      clampedY = centeredY;
+    } else {
+      // min: bottom edge == topInset + availH  →  ty = topInset + availH - (boardH + scaledH)/2
+      // max: top edge    == topInset           →  ty = topInset + (scaledH - boardH)/2
+      clampedY = Math.max(
+        topInset + availH - (boardH + scaledH) / 2,
+        Math.min(topInset + (scaledH - boardH) / 2, y),
+      );
+    }
+    return { x: clampedX, y: clampedY };
+  };
+
   const panGesture = Gesture.Pan()
     .onUpdate(e => {
-      translateX.value = savedX.value + e.translationX;
-      translateY.value = savedY.value + e.translationY;
+      const raw = { x: savedX.value + e.translationX, y: savedY.value + e.translationY };
+      const clamped = clampXY(raw.x, raw.y, scale.value);
+      translateX.value = clamped.x;
+      translateY.value = clamped.y;
     })
     .onEnd(() => {
       savedX.value = translateX.value;
@@ -862,10 +899,19 @@ export default function GameScreen() {
 
   const pinchGesture = Gesture.Pinch()
     .onUpdate(e => {
-      scale.value = Math.max(0.3, Math.min(3, savedScale.value * e.scale));
+      const newScale = Math.max(0.3, Math.min(3, savedScale.value * e.scale));
+      scale.value = newScale;
+      const clamped = clampXY(translateX.value, translateY.value, newScale);
+      translateX.value = clamped.x;
+      translateY.value = clamped.y;
     })
     .onEnd(() => {
       savedScale.value = scale.value;
+      const clamped = clampXY(translateX.value, translateY.value, scale.value);
+      translateX.value = clamped.x;
+      translateY.value = clamped.y;
+      savedX.value = clamped.x;
+      savedY.value = clamped.y;
     });
 
   const gesture = Gesture.Simultaneous(panGesture, pinchGesture);
