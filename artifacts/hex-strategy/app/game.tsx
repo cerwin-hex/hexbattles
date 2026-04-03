@@ -825,6 +825,7 @@ export default function GameScreen() {
         setLiveOwnerMap(newLiveOwnerMap);
         setEntities(newEntities);
         setTerritoryBalances(newBalances);
+        setSpentUnits(prev => { const next = new Set(prev); next.add(key); return next; });
         setArmedEntityId(null);
         closeRibbon();
         setSelectedTileKey(key);
