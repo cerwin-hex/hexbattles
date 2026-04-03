@@ -917,8 +917,8 @@ export default function GameScreen() {
     });
 
   const handleBoardTap = useCallback((touchX: number, touchY: number, tx: number, ty: number, s: number) => {
-    const boardX = (touchX - tx) / s;
-    const boardY = (touchY - ty) / s;
+    const boardX = boardW / 2 + (touchX - tx - boardW / 2) / s;
+    const boardY = boardH / 2 + (touchY - ty - boardH / 2) / s;
     const hx = boardX + bounds.minX;
     const hy = boardY + bounds.minY;
     const fq = (2 / 3) * hx / HEX_SIZE;
@@ -933,9 +933,10 @@ export default function GameScreen() {
     const key = tileKey(rq, rr);
     if (activeTileMap.has(key)) handleTileTap(key);
     else handleDeselect();
-  }, [bounds, HEX_SIZE, activeTileMap, handleTileTap, handleDeselect]);
+  }, [boardW, boardH, bounds, HEX_SIZE, activeTileMap, handleTileTap, handleDeselect]);
 
   const tapGesture = Gesture.Tap()
+    .maxDistance(5)
     .onEnd(e => {
       runOnJS(handleBoardTap)(e.x, e.y, translateX.value, translateY.value, scale.value);
     });
