@@ -698,26 +698,20 @@ export default function GameScreen() {
       const meta = ENTITY_META[type];
       return { icon: meta.icon, name: meta.name, count, upkeepPerUnit: meta.upkeep, total: meta.upkeep * count };
     });
-    const grassIncome = activeGrassCount;
-    const cityIncome = activeCityCount * CITY_BONUS;
+    const grassIncome = grassCount;
+    const cityIncome = cityCount * CITY_BONUS;
     const totalIncome = grassIncome + cityIncome;
     const totalUpkeep = upkeepGroups.reduce((s, g) => s + g.total, 0);
-    let rebelGrassCount = 0;
-    let rebelCityCount = 0;
+    let rebelCount = 0;
+    let rebelTotalLoss = 0;
     for (const t of selectedTerritory) {
       if (entities.get(t.key) !== 'rebel') continue;
-      if (t.isCity) rebelCityCount++;
-      else if (t.terrain === 'grass') rebelGrassCount++;
+      rebelCount++;
+      if (t.isCity || entities.get(t.key) === 'city') rebelTotalLoss += CITY_BONUS;
+      else if (t.terrain === 'grass') rebelTotalLoss += 1;
     }
-    const rebelGrassLoss = rebelGrassCount;
-    const rebelCityLoss = rebelCityCount * CITY_BONUS;
-    const rebelTotalLoss = rebelGrassLoss + rebelCityLoss;
-    const rebelGroups = [
-      ...(rebelGrassCount > 0 ? [{ label: '🌿 Grass', count: rebelGrassCount, lossPerUnit: 1, total: rebelGrassLoss }] : []),
-      ...(rebelCityCount > 0 ? [{ label: '🏙️ City', count: rebelCityCount, lossPerUnit: CITY_BONUS, total: rebelCityLoss }] : []),
-    ];
-    const net = totalIncome - totalUpkeep;
-    return { grassCount, desertCount, mountainCount, cityCount, grassIncome, cityIncome, upkeepGroups, totalIncome, totalUpkeep, rebelGroups, rebelTotalLoss, net };
+    const net = totalIncome - totalUpkeep - rebelTotalLoss;
+    return { grassCount, desertCount, mountainCount, cityCount, grassIncome, cityIncome, upkeepGroups, totalIncome, totalUpkeep, rebelCount, rebelTotalLoss, net };
   }, [selectedTerritory, entities]);
 
   const selectionBorderEdges = useMemo<BorderEdge[]>(() => {
@@ -750,8 +744,13 @@ export default function GameScreen() {
       if (!id) continue;
       const balance = territoryBalances.get(id) ?? 0;
       if (balance < 10) continue;
-      const cityTile = territory.find(t => t.isCity || entities.get(t.key) === 'city');
-      const target = cityTile ?? findCentralTile(territory);
+      const cityTile = territory.find(t => (t.isCity || entities.get(t.key) === 'city') && entities.get(t.key) !== 'rebel');
+      const centralTile = findCentralTile(territory);
+      const candidate = cityTile ?? centralTile;
+      if (!candidate) continue;
+      const target = entities.get(candidate.key) === 'rebel'
+        ? territory.find(t => !entities.has(t.key) && t.terrain !== 'mountain') ?? null
+        : candidate;
       if (!target) continue;
       keys.add(target.key);
     }
@@ -1504,10 +1503,10 @@ export default function GameScreen() {
             const affordable = item.cost <= selectedTerritoryBalance;
             const isArmed = armedEntityId === item.id;
             const cityAlreadyBuilt = item.id === 'city' && territoryHasCity;
-            const cityTooSmall = item.id === 'city' && selectedTerritory.length < 10;
+            const cityTooSmall = item.id === 'city' && selectedTerritory.length < 6;
             const cityLocked = cityAlreadyBuilt || cityTooSmall;
             const enabled = affordable && !cityLocked;
-            const costLabel = cityAlreadyBuilt ? 'Built' : cityTooSmall ? '<10 tiles' : `${item.cost}g`;
+            const costLabel = cityAlreadyBuilt ? 'Built' : cityTooSmall ? '<6 tiles' : `${item.cost}g`;
             return (
               <TouchableOpacity
                 key={item.id}
@@ -1626,7 +1625,7 @@ export default function GameScreen() {
 
           <View style={styles.spacer} />
 
-          {(['units', 'buildings'] as const).map(mode => {
+          {canBuild && (['units', 'buildings'] as const).map(mode => {
             const isActive = ribbonMode === mode;
             return (
               <TouchableOpacity
@@ -1727,6 +1726,12 @@ export default function GameScreen() {
                   <Text style={styles.econRowValue}>+{econBreakdown.cityIncome}</Text>
                 </View>
               )}
+              {econBreakdown && econBreakdown.rebelTotalLoss > 0 && (
+                <View style={styles.econRow}>
+                  <Text style={styles.econRowLabel}>✊ Rebels ×{econBreakdown.rebelCount}</Text>
+                  <Text style={[styles.econRowValue, { color: '#E07060' }]}>−{econBreakdown.rebelTotalLoss}</Text>
+                </View>
+              )}
             </View>
             {econBreakdown && econBreakdown.upkeepGroups.length > 0 && (
               <View style={styles.econSection}>
@@ -1734,17 +1739,6 @@ export default function GameScreen() {
                 {econBreakdown.upkeepGroups.map((g, i) => (
                   <View key={i} style={styles.econRow}>
                     <Text style={styles.econRowLabel}>{g.icon} {g.name} ×{g.count} <Text style={styles.econPer}>(−{g.upkeepPerUnit} each)</Text></Text>
-                    <Text style={[styles.econRowValue, { color: '#E07060' }]}>−{g.total}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-            {econBreakdown && econBreakdown.rebelGroups.length > 0 && (
-              <View style={styles.econSection}>
-                <Text style={styles.econSectionLabel}>REBELLION</Text>
-                {econBreakdown.rebelGroups.map((g, i) => (
-                  <View key={i} style={styles.econRow}>
-                    <Text style={styles.econRowLabel}>☠️ {g.label} ×{g.count} <Text style={styles.econPer}>(−{g.lossPerUnit} each)</Text></Text>
                     <Text style={[styles.econRowValue, { color: '#E07060' }]}>−{g.total}</Text>
                   </View>
                 ))}
