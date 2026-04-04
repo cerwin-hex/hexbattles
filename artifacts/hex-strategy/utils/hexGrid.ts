@@ -103,9 +103,11 @@ export function getValidMoves(
   entities: Map<string, EntityType>,
   tileMap: Map<string, HexTile>,
   spentUnits: Set<string>,
+  maxRange: number = 3,
 ): Set<string> {
   const result = new Set<string>();
   if (spentUnits.has(unitKey)) return result;
+  if (maxRange <= 0) return result;
 
   const unitTile = tileMap.get(unitKey);
   if (!unitTile) return result;
@@ -131,7 +133,7 @@ export function getValidMoves(
 
       if (neighbor.owner === owner) {
         visited.add(nk);
-        if (depth < 3) {
+        if (depth < maxRange) {
           const allyEntity = entities.get(nk);
           const allyIsRebel = allyEntity === 'rebel';
           const allyIsUnit = allyEntity ? ENTITY_META[allyEntity].isUnit : false;
@@ -147,12 +149,12 @@ export function getValidMoves(
         }
       } else if (neighbor.owner === 'neutral') {
         visited.add(nk);
-        if (depth < 3) {
+        if (depth < maxRange) {
           result.add(nk);
         }
       } else {
         visited.add(nk);
-        if (depth < 3) {
+        if (depth < maxRange) {
           const enemyZoC = getMaxEnemyZoC(nk, owner, entities, tileMap);
           if (unitStrength > enemyZoC) {
             result.add(nk);
@@ -163,6 +165,30 @@ export function getValidMoves(
   }
 
   return result;
+}
+
+export function getMoveCost(
+  fromKey: string,
+  toKey: string,
+  tileMap: Map<string, HexTile>,
+): number {
+  if (fromKey === toKey) return 0;
+  const visited = new Set<string>([fromKey]);
+  const queue: Array<{ key: string; depth: number }> = [{ key: fromKey, depth: 0 }];
+  while (queue.length > 0) {
+    const { key: curr, depth } = queue.shift()!;
+    const [cq, cr] = curr.split(',').map(Number);
+    for (const { dir: [dq, dr] } of HEX_EDGES) {
+      const nk = tileKey(cq + dq, cr + dr);
+      if (visited.has(nk)) continue;
+      const neighbor = tileMap.get(nk);
+      if (!neighbor || neighbor.terrain === 'mountain') continue;
+      if (nk === toKey) return depth + 1;
+      visited.add(nk);
+      queue.push({ key: nk, depth: depth + 1 });
+    }
+  }
+  return Infinity;
 }
 
 export function recalculateTerritories(

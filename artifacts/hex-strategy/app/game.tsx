@@ -42,6 +42,7 @@ import {
   getMaxEnemyZoC,
   getTerritoryId,
   getValidMoves,
+  getMoveCost,
   hexCornerPoint,
   hexCornersString,
   hexDistance,
@@ -292,11 +293,13 @@ export default function GameScreen() {
     territoryBalances: Map<string, number>;
     spentUnits: Set<string>;
     liveOwnerMap: Map<string, TerritoryOwner>;
+    partialMoves: Map<string, number>;
   }>>([]);
   const [isAiTurn, setIsAiTurn] = useState(false);
   const [gameResult, setGameResult] = useState<'victory' | 'defeat' | null>(null);
   const aiTurnRef = useRef<boolean>(false);
   const [graveyard, setGraveyard] = useState<Set<string>>(new Set());
+  const [partialMoves, setPartialMoves] = useState<Map<string, number>>(new Map());
 
   const idleBounceY = useSharedValue(0);
   useEffect(() => {
@@ -327,6 +330,7 @@ export default function GameScreen() {
       setArmedEntityId(null);
       setSelectedEntityKey(null);
       setSpentUnits(new Set());
+      setPartialMoves(new Map());
       setMutableTileMap(new Map(tileMap));
       setLiveOwnerMap(new Map());
       setGraveyard(new Set());
@@ -552,8 +556,9 @@ export default function GameScreen() {
     if (!tile || tile.owner !== 'player') return new Set();
     const entityId = entities.get(selectedEntityKey);
     if (!entityId || !ENTITY_META[entityId].isUnit) return new Set();
-    return getValidMoves(selectedEntityKey, 'player', entities, activeTileMap, spentUnits);
-  }, [selectedEntityKey, entities, activeTileMap, spentUnits]);
+    const remaining = partialMoves.get(selectedEntityKey) ?? 3;
+    return getValidMoves(selectedEntityKey, 'player', entities, activeTileMap, spentUnits, remaining);
+  }, [selectedEntityKey, entities, activeTileMap, spentUnits, partialMoves]);
 
   const fortificationDots = useMemo<Set<string>>(() => {
     let territory: HexTile[];
@@ -697,8 +702,22 @@ export default function GameScreen() {
     const cityIncome = activeCityCount * CITY_BONUS;
     const totalIncome = grassIncome + cityIncome;
     const totalUpkeep = upkeepGroups.reduce((s, g) => s + g.total, 0);
+    let rebelGrassCount = 0;
+    let rebelCityCount = 0;
+    for (const t of selectedTerritory) {
+      if (entities.get(t.key) !== 'rebel') continue;
+      if (t.isCity) rebelCityCount++;
+      else if (t.terrain === 'grass') rebelGrassCount++;
+    }
+    const rebelGrassLoss = rebelGrassCount;
+    const rebelCityLoss = rebelCityCount * CITY_BONUS;
+    const rebelTotalLoss = rebelGrassLoss + rebelCityLoss;
+    const rebelGroups = [
+      ...(rebelGrassCount > 0 ? [{ label: '🌿 Grass', count: rebelGrassCount, lossPerUnit: 1, total: rebelGrassLoss }] : []),
+      ...(rebelCityCount > 0 ? [{ label: '🏙️ City', count: rebelCityCount, lossPerUnit: CITY_BONUS, total: rebelCityLoss }] : []),
+    ];
     const net = totalIncome - totalUpkeep;
-    return { grassCount, desertCount, mountainCount, cityCount, grassIncome, cityIncome, upkeepGroups, totalIncome, totalUpkeep, net };
+    return { grassCount, desertCount, mountainCount, cityCount, grassIncome, cityIncome, upkeepGroups, totalIncome, totalUpkeep, rebelGroups, rebelTotalLoss, net };
   }, [selectedTerritory, entities]);
 
   const selectionBorderEdges = useMemo<BorderEdge[]>(() => {
@@ -748,9 +767,10 @@ export default function GameScreen() {
         territoryBalances: new Map(territoryBalances),
         spentUnits: new Set(spentUnits),
         liveOwnerMap: new Map(liveOwnerMap),
+        partialMoves: new Map(partialMoves),
       },
     ]);
-  }, [entities, mutableTileMap, territoryBalances, spentUnits, liveOwnerMap]);
+  }, [entities, mutableTileMap, territoryBalances, spentUnits, liveOwnerMap, partialMoves]);
 
   const handleDeselect = useCallback(() => {
     setSelectedTileKey(null);
@@ -775,14 +795,15 @@ export default function GameScreen() {
       const newEntities = new Map(entities);
       const movingUnit = newEntities.get(selectedEntityKey)!;
       const existingUnit = newEntities.get(key);
-      if (
-        existingUnit &&
+      const isMerge =
+        !!existingUnit &&
         existingUnit !== 'city' &&
         existingUnit !== 'rebel' &&
         ENTITY_META[existingUnit].isUnit &&
-        activeTileMap.get(key)?.owner === 'player'
-      ) {
-        const merged = mergedUnitType(ENTITY_META[movingUnit].strength, ENTITY_META[existingUnit].strength);
+        activeTileMap.get(key)?.owner === 'player';
+
+      if (isMerge) {
+        const merged = mergedUnitType(ENTITY_META[movingUnit].strength, ENTITY_META[existingUnit!].strength);
         newEntities.delete(selectedEntityKey);
         newEntities.set(key, merged);
       } else {
@@ -791,8 +812,19 @@ export default function GameScreen() {
         newEntities.set(key, movingUnit);
       }
 
+      const stepsUsed = getMoveCost(selectedEntityKey, key, activeTileMap);
+      const prevRemaining = partialMoves.get(selectedEntityKey) ?? 3;
+      const remainingAfterMove = Math.max(0, prevRemaining - stepsUsed);
+
       const newSpentUnits = new Set(spentUnits);
-      newSpentUnits.add(key);
+      const newPartialMoves = new Map(partialMoves);
+      newPartialMoves.delete(selectedEntityKey);
+      if (isMerge && remainingAfterMove > 0) {
+        newPartialMoves.set(key, remainingAfterMove);
+      } else {
+        newSpentUnits.add(key);
+        newPartialMoves.delete(key);
+      }
 
       const { balances: newBalances } = recalculateTerritories(
         key,
@@ -809,6 +841,7 @@ export default function GameScreen() {
       setLiveOwnerMap(newLiveOwnerMap);
       setEntities(newEntities);
       setSpentUnits(newSpentUnits);
+      setPartialMoves(newPartialMoves);
       setTerritoryBalances(newBalances);
       setSelectedEntityKey(null);
       setSelectedTileKey(key);
@@ -925,6 +958,7 @@ export default function GameScreen() {
       setTerritoryBalances(snapshot.territoryBalances);
       setSpentUnits(snapshot.spentUnits);
       setLiveOwnerMap(snapshot.liveOwnerMap);
+      setPartialMoves(snapshot.partialMoves);
       setSelectedEntityKey(null);
       setSelectedTileKey(null);
       setArmedEntityId(null);
@@ -1008,6 +1042,13 @@ export default function GameScreen() {
       }
     }
 
+    for (const gravKey of Array.from(graveyard)) {
+      if (!nextEntities.has(gravKey) && Math.random() < 0.5) {
+        nextEntities = new Map(nextEntities);
+        nextEntities.set(gravKey, 'rebel');
+      }
+    }
+
     const allOwners: TerritoryOwner[] = ['player', 'ai1', 'ai2', 'ai3'];
     const preSpawnEntities = nextEntities;
     const rebelSpawns = new Map(nextEntities);
@@ -1035,6 +1076,7 @@ export default function GameScreen() {
     setArmedEntityId(null);
     setSelectedEntityKey(null);
     setSpentUnits(new Set());
+    setPartialMoves(new Map());
     closeRibbon();
 
     if (!checkWinLoss(activeTileMap)) {
@@ -1681,7 +1723,7 @@ export default function GameScreen() {
               )}
               {econBreakdown && econBreakdown.cityCount > 0 && (
                 <View style={styles.econRow}>
-                  <Text style={styles.econRowLabel}>🏙️ Cities ×{econBreakdown.cityCount} <Text style={styles.econPer}>(+1 each)</Text></Text>
+                  <Text style={styles.econRowLabel}>🏙️ Cities ×{econBreakdown.cityCount} <Text style={styles.econPer}>(+{CITY_BONUS} each)</Text></Text>
                   <Text style={styles.econRowValue}>+{econBreakdown.cityIncome}</Text>
                 </View>
               )}
@@ -1692,6 +1734,17 @@ export default function GameScreen() {
                 {econBreakdown.upkeepGroups.map((g, i) => (
                   <View key={i} style={styles.econRow}>
                     <Text style={styles.econRowLabel}>{g.icon} {g.name} ×{g.count} <Text style={styles.econPer}>(−{g.upkeepPerUnit} each)</Text></Text>
+                    <Text style={[styles.econRowValue, { color: '#E07060' }]}>−{g.total}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            {econBreakdown && econBreakdown.rebelGroups.length > 0 && (
+              <View style={styles.econSection}>
+                <Text style={styles.econSectionLabel}>REBELLION</Text>
+                {econBreakdown.rebelGroups.map((g, i) => (
+                  <View key={i} style={styles.econRow}>
+                    <Text style={styles.econRowLabel}>☠️ {g.label} ×{g.count} <Text style={styles.econPer}>(−{g.lossPerUnit} each)</Text></Text>
                     <Text style={[styles.econRowValue, { color: '#E07060' }]}>−{g.total}</Text>
                   </View>
                 ))}
