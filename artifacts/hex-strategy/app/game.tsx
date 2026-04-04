@@ -694,10 +694,14 @@ export default function GameScreen() {
         }
       }
     }
-    const upkeepGroups = Array.from(upkeepGroupMap.entries()).map(([type, count]) => {
-      const meta = ENTITY_META[type];
-      return { icon: meta.icon, name: meta.name, count, upkeepPerUnit: meta.upkeep, total: meta.upkeep * count };
-    });
+    const UPKEEP_ORDER: EntityType[] = ['simple_unit', 'advanced_unit', 'expert_unit', 'tower', 'castle'];
+    const upkeepGroups = UPKEEP_ORDER
+      .filter(type => upkeepGroupMap.has(type))
+      .map(type => {
+        const count = upkeepGroupMap.get(type)!;
+        const meta = ENTITY_META[type];
+        return { icon: meta.icon, name: meta.name, count, upkeepPerUnit: meta.upkeep, total: meta.upkeep * count };
+      });
     const grassIncome = grassCount;
     const cityIncome = cityCount * CITY_BONUS;
     const totalIncome = grassIncome + cityIncome;
@@ -851,22 +855,45 @@ export default function GameScreen() {
 
     if (armedEntityId && selectedTileKeys.has(key)) {
       const existingOnTile = entities.get(key);
-      const isBuilding = armedEntityId ? !ENTITY_META[armedEntityId].isUnit : false;
-      const alreadyOccupied = !!existingOnTile && (existingOnTile !== 'rebel' || isBuilding);
+      const armedIsUnit = ENTITY_META[armedEntityId].isUnit;
+      const existingIsAllyUnit =
+        !!existingOnTile &&
+        existingOnTile !== 'rebel' &&
+        existingOnTile !== 'city' &&
+        ENTITY_META[existingOnTile].isUnit &&
+        activeTileMap.get(key)?.owner === 'player';
+      const canMerge = armedIsUnit && existingIsAllyUnit;
+      const canOverwriteRebel = armedIsUnit && existingOnTile === 'rebel';
+      const alreadyOccupied = !!existingOnTile && !canMerge && !canOverwriteRebel;
       if (!alreadyOccupied && selectedTerritoryId) {
         const meta = ENTITY_META[armedEntityId];
         const balance = territoryBalances.get(selectedTerritoryId) ?? 0;
         if (balance >= meta.cost) {
           pushHistory();
-          setEntities(prev => { const next = new Map(prev); next.set(key, armedEntityId); return next; });
-          setTerritoryBalances(prev => {
-            const next = new Map(prev);
-            next.set(selectedTerritoryId, balance - meta.cost);
-            return next;
-          });
-          if (existingOnTile === 'rebel') {
-            setSpentUnits(prev => { const next = new Set(prev); next.add(key); return next; });
+          const newEntities = new Map(entities);
+          const newSpentUnits = new Set(spentUnits);
+          const newPartialMoves = new Map(partialMoves);
+          if (canMerge) {
+            const merged = mergedUnitType(ENTITY_META[armedEntityId].strength, ENTITY_META[existingOnTile!].strength);
+            newEntities.set(key, merged);
+            const existingRemaining = newPartialMoves.get(key) ?? (newSpentUnits.has(key) ? 0 : 3);
+            const mergedRemaining = Math.min(3, existingRemaining);
+            newPartialMoves.delete(key);
+            if (mergedRemaining <= 0) {
+              newSpentUnits.add(key);
+            } else if (mergedRemaining < 3) {
+              newPartialMoves.set(key, mergedRemaining);
+            }
+          } else {
+            newEntities.set(key, armedEntityId);
+            if (canOverwriteRebel) {
+              newSpentUnits.add(key);
+            }
           }
+          setEntities(newEntities);
+          setTerritoryBalances(prev => { const next = new Map(prev); next.set(selectedTerritoryId, balance - meta.cost); return next; });
+          setSpentUnits(newSpentUnits);
+          setPartialMoves(newPartialMoves);
           setArmedEntityId(null);
           setSelectedEntityKey(null);
           closeRibbon();
@@ -1559,22 +1586,6 @@ export default function GameScreen() {
         return (
           <View style={[styles.entityPanel, { bottom: BOTTOM_BAR_H + botInset }]}>
             <TouchableOpacity
-              style={[styles.buildBtn, !upgradeEnabled && styles.buildBtnDisabled]}
-              activeOpacity={upgradeEnabled ? 0.75 : 1}
-              onPress={() => {
-                if (isAiTurn || gameResult !== null) return;
-                if (!upgradeEnabled || !entityId || !upgradeTarget || !entityTerritoryId) return;
-                pushHistory();
-                setEntities(prev => { const next = new Map(prev); next.set(selectedEntityKey, upgradeTarget); return next; });
-                setTerritoryBalances(prev => { const next = new Map(prev); next.set(entityTerritoryId, entityTerritoryBalance - 10); return next; });
-                setSelectedEntityKey(null);
-              }}
-            >
-              <Text style={[styles.buildBtnText, !upgradeEnabled && styles.buildBtnTextDisabled]}>
-                ⬆ Upgrade {canUpgrade ? '(10g)' : '(Max)'}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
               style={[styles.buildBtn, { borderColor: '#AA3A2A', backgroundColor: '#3A1A10' }, !removeEnabled && styles.buildBtnDisabled]}
               activeOpacity={removeEnabled ? 0.75 : 1}
               onPress={() => {
@@ -1590,6 +1601,22 @@ export default function GameScreen() {
             >
               <Text style={[styles.buildBtnText, { color: removeEnabled ? '#F07060' : '#7A3020' }]}>
                 ✕ Remove{removeCost > 0 ? ` (${removeCost}g)` : ''}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.buildBtn, !upgradeEnabled && styles.buildBtnDisabled]}
+              activeOpacity={upgradeEnabled ? 0.75 : 1}
+              onPress={() => {
+                if (isAiTurn || gameResult !== null) return;
+                if (!upgradeEnabled || !entityId || !upgradeTarget || !entityTerritoryId) return;
+                pushHistory();
+                setEntities(prev => { const next = new Map(prev); next.set(selectedEntityKey, upgradeTarget); return next; });
+                setTerritoryBalances(prev => { const next = new Map(prev); next.set(entityTerritoryId, entityTerritoryBalance - 10); return next; });
+                setSelectedEntityKey(null);
+              }}
+            >
+              <Text style={[styles.buildBtnText, !upgradeEnabled && styles.buildBtnTextDisabled]}>
+                ⬆ Upgrade {canUpgrade ? '(10g)' : '(Max)'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1726,14 +1753,8 @@ export default function GameScreen() {
                   <Text style={styles.econRowValue}>+{econBreakdown.cityIncome}</Text>
                 </View>
               )}
-              {econBreakdown && econBreakdown.rebelTotalLoss > 0 && (
-                <View style={styles.econRow}>
-                  <Text style={styles.econRowLabel}>✊ Rebels ×{econBreakdown.rebelCount}</Text>
-                  <Text style={[styles.econRowValue, { color: '#E07060' }]}>−{econBreakdown.rebelTotalLoss}</Text>
-                </View>
-              )}
             </View>
-            {econBreakdown && econBreakdown.upkeepGroups.length > 0 && (
+            {econBreakdown && (econBreakdown.upkeepGroups.length > 0 || econBreakdown.rebelTotalLoss > 0) && (
               <View style={styles.econSection}>
                 <Text style={styles.econSectionLabel}>UPKEEP / TURN</Text>
                 {econBreakdown.upkeepGroups.map((g, i) => (
@@ -1742,6 +1763,12 @@ export default function GameScreen() {
                     <Text style={[styles.econRowValue, { color: '#E07060' }]}>−{g.total}</Text>
                   </View>
                 ))}
+                {econBreakdown.rebelTotalLoss > 0 && (
+                  <View style={styles.econRow}>
+                    <Text style={styles.econRowLabel}>✊ Rebels ×{econBreakdown.rebelCount}</Text>
+                    <Text style={[styles.econRowValue, { color: '#E07060' }]}>−{econBreakdown.rebelTotalLoss}</Text>
+                  </View>
+                )}
               </View>
             )}
             <View style={styles.econDivider} />
@@ -1882,7 +1909,7 @@ const styles = StyleSheet.create({
     color: '#A08C68',
   },
   ribbonDim: {
-    color: '#3A3020',
+    color: '#786848',
   },
   bottomBar: {
     position: 'absolute',
