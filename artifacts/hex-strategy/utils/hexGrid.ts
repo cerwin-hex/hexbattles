@@ -252,7 +252,7 @@ export function recalculateTerritories(
     const oldDispId = getTerritoryId(oldDispTerr);
     const oldDispBalance = oldDispId ? (previousBalances.get(oldDispId) ?? 0) : 0;
 
-    if (oldDispId) {
+    if (oldDispId && oldDispId !== newPlayerId) {
       balances.delete(oldDispId);
     }
 
