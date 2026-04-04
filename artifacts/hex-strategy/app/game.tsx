@@ -70,6 +70,8 @@ const PURCHASABLES = (Object.keys(ENTITY_META) as EntityType[]).filter(id => id 
   id,
   ...ENTITY_META[id],
 }));
+const UNIT_PURCHASABLES = PURCHASABLES.filter(p => p.isUnit);
+const BUILDING_PURCHASABLES = PURCHASABLES.filter(p => !p.isUnit);
 
 const STRENGTH_TO_UNIT: Record<number, EntityType> = {
   1: 'simple_unit',
@@ -260,19 +262,20 @@ export default function GameScreen() {
 
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [showEconModal, setShowEconModal] = useState(false);
-  const [ribbonOpen, setRibbonOpen] = useState(false);
+  const [ribbonMode, setRibbonMode] = useState<'units' | 'buildings' | null>(null);
+  const ribbonOpen = ribbonMode !== null;
   const ribbonAnim = useSharedValue(RIBBON_H);
   const ribbonScrollRef = useRef<ScrollView>(null);
 
-  function openRibbon() {
-    setRibbonOpen(true);
+  function openRibbon(mode: 'units' | 'buildings') {
+    setRibbonMode(mode);
     ribbonAnim.value = withTiming(0, { duration: 280 });
     ribbonScrollRef.current?.scrollTo({ x: 0, animated: false });
   }
 
   function closeRibbon() {
     ribbonAnim.value = withTiming(RIBBON_H, { duration: 220 });
-    setRibbonOpen(false);
+    setRibbonMode(null);
   }
 
   const [selectedTileKey, setSelectedTileKey] = useState<string | null>(null);
@@ -553,10 +556,16 @@ export default function GameScreen() {
   }, [selectedEntityKey, entities, activeTileMap, spentUnits]);
 
   const fortificationDots = useMemo<Set<string>>(() => {
-    if (!selectedEntityKey) return new Set();
-    const selEntity = entities.get(selectedEntityKey);
-    if (!selEntity || ENTITY_META[selEntity].isUnit || selEntity === 'city') return new Set();
-    const territory = getContiguousTerritory(activeTileMap, selectedEntityKey, 'player');
+    let territory: HexTile[];
+    if (selectedEntityKey) {
+      const selEntity = entities.get(selectedEntityKey);
+      if (!selEntity || ENTITY_META[selEntity].isUnit || selEntity === 'city') return new Set();
+      territory = getContiguousTerritory(activeTileMap, selectedEntityKey, 'player');
+    } else if (armedEntityId && !ENTITY_META[armedEntityId].isUnit && armedEntityId !== 'city') {
+      territory = selectedTerritory;
+    } else {
+      return new Set();
+    }
     const territoryKeys = new Set(territory.map(t => t.key));
     const dots = new Set<string>();
     for (const t of territory) {
@@ -570,7 +579,7 @@ export default function GameScreen() {
       }
     }
     return dots;
-  }, [selectedEntityKey, entities, activeTileMap]);
+  }, [selectedEntityKey, armedEntityId, selectedTerritory, entities, activeTileMap]);
 
   const validPlacementAttackTiles = useMemo<Set<string>>(() => {
     if (!armedEntityId) return new Set();
@@ -810,7 +819,8 @@ export default function GameScreen() {
 
     if (armedEntityId && selectedTileKeys.has(key)) {
       const existingOnTile = entities.get(key);
-      const alreadyOccupied = !!existingOnTile && existingOnTile !== 'rebel';
+      const isBuilding = armedEntityId ? !ENTITY_META[armedEntityId].isUnit : false;
+      const alreadyOccupied = !!existingOnTile && (existingOnTile !== 'rebel' || isBuilding);
       if (!alreadyOccupied && selectedTerritoryId) {
         const meta = ENTITY_META[armedEntityId];
         const balance = territoryBalances.get(selectedTerritoryId) ?? 0;
@@ -1448,7 +1458,7 @@ export default function GameScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.ribbonContent}
         >
-          {PURCHASABLES.map(item => {
+          {(ribbonMode === 'units' ? UNIT_PURCHASABLES : BUILDING_PURCHASABLES).map(item => {
             const affordable = item.cost <= selectedTerritoryBalance;
             const isArmed = armedEntityId === item.id;
             const cityAlreadyBuilt = item.id === 'city' && territoryHasCity;
@@ -1574,36 +1584,44 @@ export default function GameScreen() {
 
           <View style={styles.spacer} />
 
-          <TouchableOpacity
-            style={[
-              styles.buildBtn,
-              ribbonOpen && styles.buildBtnActive,
-              !canBuild && styles.buildBtnDisabled,
-            ]}
-            onPress={() => {
-              if (isAiTurn || gameResult !== null || !canBuild) return;
-              if (ribbonOpen) {
-                closeRibbon();
-                setArmedEntityId(null);
-              } else {
-                openRibbon();
-              }
-            }}
-            activeOpacity={canBuild ? 0.75 : 1}
-          >
-            <Ionicons
-              name="hammer"
-              size={14}
-              color={ribbonOpen ? '#0D0A06' : canBuild ? '#C8A24A' : '#3A2E14'}
-            />
-            <Text style={[
-              styles.buildBtnText,
-              ribbonOpen && styles.buildBtnTextActive,
-              !canBuild && styles.buildBtnTextDisabled,
-            ]}>
-              Build
-            </Text>
-          </TouchableOpacity>
+          {(['units', 'buildings'] as const).map(mode => {
+            const isActive = ribbonMode === mode;
+            return (
+              <TouchableOpacity
+                key={mode}
+                style={[
+                  styles.buildBtn,
+                  isActive && styles.buildBtnActive,
+                  !canBuild && styles.buildBtnDisabled,
+                ]}
+                onPress={() => {
+                  if (isAiTurn || gameResult !== null || !canBuild) return;
+                  setSelectedEntityKey(null);
+                  if (isActive) {
+                    closeRibbon();
+                    setArmedEntityId(null);
+                  } else {
+                    openRibbon(mode);
+                    setArmedEntityId(null);
+                  }
+                }}
+                activeOpacity={canBuild ? 0.75 : 1}
+              >
+                <Ionicons
+                  name={mode === 'units' ? 'people' : 'shield'}
+                  size={14}
+                  color={isActive ? '#0D0A06' : canBuild ? '#C8A24A' : '#3A2E14'}
+                />
+                <Text style={[
+                  styles.buildBtnText,
+                  isActive && styles.buildBtnTextActive,
+                  !canBuild && styles.buildBtnTextDisabled,
+                ]}>
+                  {mode === 'units' ? 'Units' : 'Builds'}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
 
           {isAiTurn ? (
             <View style={[styles.endTurnBtn, styles.aiTurnBtn]}>

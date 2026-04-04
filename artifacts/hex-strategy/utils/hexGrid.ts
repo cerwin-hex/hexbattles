@@ -37,7 +37,7 @@ export const TERRAIN_INCOME: Record<TerrainType, number> = {
   mountain: 0,
 };
 
-export const CITY_BONUS = 1;
+export const CITY_BONUS = 2;
 
 export const UNIT_UPGRADE: Partial<Record<EntityType, EntityType>> = {
   simple_unit: 'advanced_unit',
