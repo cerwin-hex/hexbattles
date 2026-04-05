@@ -502,16 +502,74 @@ export default function GameScreen() {
         const balance = workingBalances.get(territoryId) ?? 0;
         if (balance < 10) continue;
 
-        const vacantTiles = territory.filter(
+        const territoryKeys = new Set(territory.map(t => t.key));
+        const vacantInside = territory.filter(
           t => t.terrain !== 'mountain' && !workingEntities.has(t.key),
         );
-        if (vacantTiles.length === 0) continue;
 
-        const target = vacantTiles[Math.floor(Math.random() * vacantTiles.length)];
+        // Find adjacent tiles outside the territory that can be captured,
+        // mirroring the same rules the player uses for validPlacementAttackTiles.
+        const seenAdjacent = new Set<string>();
+        const enemyAdjacentKeys: string[] = [];
+        const neutralAdjacentKeys: string[] = [];
+        for (const t of territory) {
+          if (t.terrain === 'mountain') continue;
+          const [q, r] = t.key.split(',').map(Number);
+          for (const { dir: [dq, dr] } of HEX_EDGES) {
+            const nk = tileKey(q + dq, r + dr);
+            if (territoryKeys.has(nk) || seenAdjacent.has(nk)) continue;
+            seenAdjacent.add(nk);
+            const neighbor = workingTileMap.get(nk);
+            if (!neighbor || neighbor.terrain === 'mountain') continue;
+            const existingEntity = workingEntities.get(nk);
+            if (existingEntity && existingEntity !== 'rebel') continue;
+            const enemyZoC = getMaxEnemyZoC(nk, aiOwner, workingEntities, workingTileMap);
+            if (1 <= enemyZoC) continue; // simple_unit strength = 1
+            if (neighbor.owner !== 'neutral' && neighbor.owner !== aiOwner) {
+              enemyAdjacentKeys.push(nk);
+            } else {
+              neutralAdjacentKeys.push(nk);
+            }
+          }
+        }
+
+        type AiPlacement = { key: string; outside: boolean };
+        let candidates: AiPlacement[];
+        if (enemyAdjacentKeys.length > 0) {
+          candidates = enemyAdjacentKeys.map(k => ({ key: k, outside: true }));
+        } else if (neutralAdjacentKeys.length > 0) {
+          candidates = neutralAdjacentKeys.map(k => ({ key: k, outside: true }));
+        } else {
+          candidates = vacantInside.map(t => ({ key: t.key, outside: false }));
+        }
+        if (candidates.length === 0) continue;
+
+        const target = candidates[Math.floor(Math.random() * candidates.length)];
         workingEntities = new Map(workingEntities);
-        workingEntities.set(target.key, 'simple_unit');
         workingBalances = new Map(workingBalances);
-        workingBalances.set(territoryId, balance - 10);
+
+        if (!target.outside) {
+          workingEntities.set(target.key, 'simple_unit');
+          workingBalances.set(territoryId, balance - 10);
+        } else {
+          const previousOwner = (workingTileMap.get(target.key)?.owner ?? 'neutral') as TerritoryOwner;
+          const prevSnapshot = new Map(workingTileMap);
+          workingTileMap = new Map(workingTileMap);
+          const targetTile = workingTileMap.get(target.key);
+          if (targetTile) workingTileMap.set(target.key, { ...targetTile, owner: aiOwner });
+          workingEntities.delete(target.key);
+          workingEntities.set(target.key, 'simple_unit');
+          workingBalances = recalculateTerritoriesForCapture(
+            target.key, aiOwner, previousOwner, prevSnapshot, workingTileMap, workingBalances,
+          );
+          const mergedTerritory = getContiguousTerritory(workingTileMap, target.key, aiOwner);
+          const mergedId = getTerritoryId(mergedTerritory);
+          if (mergedId) workingBalances.set(mergedId, (workingBalances.get(mergedId) ?? 0) - 10);
+          workingLiveOwnerMap = new Map(workingLiveOwnerMap);
+          workingLiveOwnerMap.set(target.key, aiOwner);
+          setMutableTileMap(new Map(workingTileMap));
+          setLiveOwnerMap(new Map(workingLiveOwnerMap));
+        }
 
         setEntities(new Map(workingEntities));
         setTerritoryBalances(new Map(workingBalances));
