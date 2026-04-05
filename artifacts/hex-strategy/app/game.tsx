@@ -281,6 +281,7 @@ export default function GameScreen() {
 
   const [selectedTileKey, setSelectedTileKey] = useState<string | null>(null);
   const [armedEntityId, setArmedEntityId] = useState<EntityType | null>(null);
+  const tilePressedRef = useRef(false);
   const [entities, setEntities] = useState<Map<string, EntityType>>(new Map());
   const [territoryBalances, setTerritoryBalances] = useState<Map<string, number>>(new Map());
   const [turn, setTurn] = useState(1);
@@ -776,6 +777,10 @@ export default function GameScreen() {
   }, [entities, mutableTileMap, territoryBalances, spentUnits, liveOwnerMap, partialMoves]);
 
   const handleDeselect = useCallback(() => {
+    if (tilePressedRef.current) {
+      tilePressedRef.current = false;
+      return;
+    }
     setSelectedTileKey(null);
     setArmedEntityId(null);
     setSelectedEntityKey(null);
@@ -783,6 +788,7 @@ export default function GameScreen() {
   }, [ribbonOpen]);
 
   const handleTileTap = useCallback((key: string) => {
+    tilePressedRef.current = true;
     if (isAiTurn || gameResult !== null) return;
     const tile = activeTileMap.get(key);
 
