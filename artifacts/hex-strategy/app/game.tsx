@@ -473,6 +473,7 @@ export default function GameScreen() {
     let workingBalances = new Map(currentBalances);
     let workingLiveOwnerMap = new Map<string, TerritoryOwner>();
     let workingGraveyard = new Set<string>();
+    let workingSpentUnits = new Set<string>();
 
     // Seed history with the initial state (index 0 = before any AI action).
     const initialSnap: AiStepSnapshot = {
@@ -567,6 +568,8 @@ export default function GameScreen() {
           if (mergedId) workingBalances.set(mergedId, (workingBalances.get(mergedId) ?? 0) - 10);
           workingLiveOwnerMap = new Map(workingLiveOwnerMap);
           workingLiveOwnerMap.set(target.key, aiOwner);
+          workingSpentUnits = new Set(workingSpentUnits);
+          workingSpentUnits.add(target.key);
           setMutableTileMap(new Map(workingTileMap));
           setLiveOwnerMap(new Map(workingLiveOwnerMap));
         }
@@ -595,7 +598,7 @@ export default function GameScreen() {
         const unitStrength = ENTITY_META[unitEntity].strength;
 
         const allValidMoves = Array.from(
-          getValidMoves(unitKey, aiOwner, workingEntities, workingTileMap, new Set()),
+          getValidMoves(unitKey, aiOwner, workingEntities, workingTileMap, workingSpentUnits),
         );
         if (allValidMoves.length === 0) continue;
 
