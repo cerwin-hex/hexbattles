@@ -315,61 +315,17 @@ export default function GameScreen() {
   const resumeAiRef = useRef<(() => void) | null>(null);
   const isDeveloperModeRef = useRef(false);
 
-  interface AiStepSnapshot {
-    entities: Map<string, EntityType>;
-    mutableTileMap: Map<string, HexTile>;
-    territoryBalances: Map<string, number>;
-    liveOwnerMap: Map<string, TerritoryOwner>;
-    graveyard: Set<string>;
-  }
-  // History of snapshots: index 0 = state before any AI action, index N = state after action N.
-  // Navigation: aiHistoryIndex tracks what is currently displayed.
-  // "Next" when at end resumes the AI; "Next" mid-history advances the index without resuming.
-  const aiStepHistoryRef = useRef<AiStepSnapshot[]>([]);
-  const [aiHistoryIndex, setAiHistoryIndex] = useState(-1);
-  const [aiHistoryLen, setAiHistoryLen] = useState(0);
-
-  const restoreAiSnapshot = useCallback((snap: AiStepSnapshot) => {
-    setEntities(snap.entities);
-    setMutableTileMap(snap.mutableTileMap);
-    setTerritoryBalances(snap.territoryBalances);
-    setLiveOwnerMap(snap.liveOwnerMap);
-    setGraveyard(snap.graveyard);
-  }, []);
-
   useEffect(() => {
     isDeveloperModeRef.current = isDeveloperModeActive;
     if (!isDeveloperModeActive && isAiPaused) {
-      aiStepHistoryRef.current = [];
-      setAiHistoryIndex(-1);
-      setAiHistoryLen(0);
       resumeAiRef.current?.();
       resumeAiRef.current = null;
     }
   }, [isDeveloperModeActive, isAiPaused]);
 
   const handleAiStepNext = useCallback(() => {
-    const history = aiStepHistoryRef.current;
-    const idx = aiHistoryIndex;
-    if (idx < history.length - 1) {
-      // Navigate forward through already-recorded history (don't resume AI yet).
-      const newIdx = idx + 1;
-      setAiHistoryIndex(newIdx);
-      restoreAiSnapshot(history[newIdx]);
-    } else {
-      // At the latest snapshot — resume the AI to execute the next action.
-      resumeAiRef.current?.();
-    }
-  }, [aiHistoryIndex, restoreAiSnapshot]);
-
-  const handleAiStepBack = useCallback(() => {
-    const history = aiStepHistoryRef.current;
-    const idx = aiHistoryIndex;
-    if (idx <= 0) return;
-    const newIdx = idx - 1;
-    setAiHistoryIndex(newIdx);
-    restoreAiSnapshot(history[newIdx]);
-  }, [aiHistoryIndex, restoreAiSnapshot]);
+    resumeAiRef.current?.();
+  }, []);
 
   const idleBounceY = useSharedValue(0);
   useEffect(() => {
@@ -444,15 +400,7 @@ export default function GameScreen() {
 
   const delay = (ms: number) => new Promise<void>(res => setTimeout(res, ms));
 
-  const awaitStep = useCallback(async (afterSnap: AiStepSnapshot) => {
-    // Always record the snapshot so history is complete even if dev mode
-    // is activated mid-turn (the user can step back through all actions).
-    const newHistory = [...aiStepHistoryRef.current, afterSnap];
-    aiStepHistoryRef.current = newHistory;
-    const newIdx = newHistory.length - 1;
-    setAiHistoryIndex(newIdx);
-    setAiHistoryLen(newHistory.length);
-
+  const awaitStep = useCallback(async () => {
     if (isDeveloperModeRef.current) {
       setIsAiPaused(true);
       await new Promise<void>(resolve => { resumeAiRef.current = resolve; });
@@ -474,18 +422,6 @@ export default function GameScreen() {
     let workingLiveOwnerMap = new Map<string, TerritoryOwner>();
     let workingGraveyard = new Set<string>();
     let workingSpentUnits = new Set<string>();
-
-    // Seed history with the initial state (index 0 = before any AI action).
-    const initialSnap: AiStepSnapshot = {
-      entities: new Map(workingEntities),
-      mutableTileMap: new Map(workingTileMap),
-      territoryBalances: new Map(workingBalances),
-      liveOwnerMap: new Map(workingLiveOwnerMap),
-      graveyard: new Set(workingGraveyard),
-    };
-    aiStepHistoryRef.current = [initialSnap];
-    setAiHistoryIndex(0);
-    setAiHistoryLen(1);
 
     for (const aiOwner of aiOwners) {
       if (aiTurnRef.current === false) return;
@@ -576,13 +512,7 @@ export default function GameScreen() {
 
         setEntities(new Map(workingEntities));
         setTerritoryBalances(new Map(workingBalances));
-        await awaitStep({
-          entities: new Map(workingEntities),
-          mutableTileMap: new Map(workingTileMap),
-          territoryBalances: new Map(workingBalances),
-          liveOwnerMap: new Map(workingLiveOwnerMap),
-          graveyard: new Set(workingGraveyard),
-        });
+        await awaitStep();
         if (!aiTurnRef.current) return;
       }
 
@@ -686,13 +616,7 @@ export default function GameScreen() {
         setEntities(new Map(workingEntities));
         setTerritoryBalances(new Map(workingBalances));
         setGraveyard(new Set(workingGraveyard));
-        await awaitStep({
-          entities: new Map(workingEntities),
-          mutableTileMap: new Map(workingTileMap),
-          territoryBalances: new Map(workingBalances),
-          liveOwnerMap: new Map(workingLiveOwnerMap),
-          graveyard: new Set(workingGraveyard),
-        });
+        await awaitStep();
         if (!aiTurnRef.current) return;
       }
     }
@@ -1938,24 +1862,12 @@ export default function GameScreen() {
             );
           })}
 
-          {isDeveloperModeActive && isAiPaused && aiHistoryIndex > 0 && (
-            <TouchableOpacity
-              style={styles.prevActionBtn}
-              onPress={handleAiStepBack}
-            >
-              <Ionicons name="arrow-back" size={13} color="#00FF88" />
-              <Text style={styles.nextActionBtnText}>Prev</Text>
-            </TouchableOpacity>
-          )}
-
           {isDeveloperModeActive && isAiPaused && (
             <TouchableOpacity
               style={styles.nextActionBtn}
               onPress={handleAiStepNext}
             >
-              <Text style={styles.nextActionBtnText}>
-                {aiHistoryIndex < aiHistoryLen - 1 ? 'Next ▶' : 'Next'}
-              </Text>
+              <Text style={styles.nextActionBtnText}>Next</Text>
               <Ionicons name="arrow-forward" size={13} color="#00FF88" />
             </TouchableOpacity>
           )}
@@ -2078,9 +1990,6 @@ export default function GameScreen() {
                 aiTurnRef.current = false;
                 resumeAiRef.current?.();
                 resumeAiRef.current = null;
-                aiStepHistoryRef.current = [];
-                setAiHistoryIndex(-1);
-                setAiHistoryLen(0);
                 setGameResult(null);
                 setIsAiTurn(false);
                 setIsDeveloperModeActive(false);
@@ -2518,17 +2427,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#00FF88',
     backgroundColor: '#003322',
-  },
-  prevActionBtn: {
-    height: BTN_H,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: '#00BB66',
-    backgroundColor: '#002211',
   },
   nextActionBtnText: {
     fontSize: 11,
