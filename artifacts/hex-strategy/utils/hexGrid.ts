@@ -1,5 +1,5 @@
 export type TerrainType = 'grass' | 'desert' | 'mountain';
-export type TerritoryOwner = 'neutral' | 'player' | 'ai1' | 'ai2' | 'ai3';
+export type TerritoryOwner = 'neutral' | 'player' | 'ai1' | 'ai2' | 'ai3' | 'ai4' | 'ai5';
 export type EntityType = 'simple_unit' | 'advanced_unit' | 'expert_unit' | 'tower' | 'castle' | 'city' | 'rebel';
 
 export interface HexTile {
@@ -532,7 +532,7 @@ const MIN_CITY_DISTANCE = 5;
 
 export function generateHexGrid(tileCount: number, playerCount: number): HexTile[] {
   const clampedCount = Math.min(200, Math.max(40, tileCount));
-  const clampedPlayers = Math.min(4, Math.max(1, playerCount));
+  const clampedPlayers = Math.min(6, Math.max(1, playerCount));
 
   const tileMap = new Map<string, HexTile>();
   const frontier: [number, number][] = [[0, 0]];
@@ -645,7 +645,7 @@ export function generateHexGrid(tileCount: number, playerCount: number): HexTile
   }
 
   const ownerList: TerritoryOwner[] = (
-    ['player', 'ai1', 'ai2', 'ai3'] as TerritoryOwner[]
+    ['player', 'ai1', 'ai2', 'ai3', 'ai4', 'ai5'] as TerritoryOwner[]
   ).slice(0, clampedPlayers);
 
   const assignable = tiles.filter(

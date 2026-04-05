@@ -56,6 +56,8 @@ export const TERRITORY_FILLS: Record<string, string> = {
   ai1: '#E03838',
   ai2: '#38B838',
   ai3: '#E08828',
+  ai4: '#C838C8',
+  ai5: '#38C8C8',
 };
 
 export const CITY_NEUTRAL_FILL = '#C0B8B0';
@@ -65,6 +67,8 @@ export const TERRITORY_BORDERS: Record<string, string> = {
   ai1: '#F06060',
   ai2: '#60CC60',
   ai3: '#F0AA44',
+  ai4: '#E060E0',
+  ai5: '#60E0E0',
 };
 
 export const PLAYER_LABELS: Record<string, string> = {
@@ -72,6 +76,8 @@ export const PLAYER_LABELS: Record<string, string> = {
   ai1: 'Red',
   ai2: 'Green',
   ai3: 'Orange',
+  ai4: 'Purple',
+  ai5: 'Teal',
 };
 
 export const CITY_BORDER_COLOR = '#8B7A5A';

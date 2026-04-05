@@ -27,7 +27,7 @@ type Difficulty = 'easy' | 'medium' | 'hard';
 export default function MainMenuScreen() {
   const insets = useSafeAreaInsets();
   const [tileCount, setTileCount] = useState(100);
-  const [opponentCount, setOpponentCount] = useState(1);
+  const [opponentCount, setOpponentCount] = useState(3);
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [trackW, setTrackW] = useState(0);
 
@@ -114,7 +114,7 @@ export default function MainMenuScreen() {
           <View style={styles.section}>
             <Text style={styles.label}>Opponents</Text>
             <View style={styles.pills}>
-              {[1, 2, 3].map(n => (
+              {[1, 2, 3, 4, 5].map(n => (
                 <TouchableOpacity
                   key={n}
                   style={[styles.pill, opponentCount === n && styles.pillActive]}

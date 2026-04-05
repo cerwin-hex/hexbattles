@@ -100,7 +100,7 @@ function initTerritoryBalances(
 ): Map<string, number> {
   const balances = new Map<string, number>();
   const visited = new Set<string>();
-  const owners: TerritoryOwner[] = ['player', 'ai1', 'ai2', 'ai3'];
+  const owners: TerritoryOwner[] = ['player', 'ai1', 'ai2', 'ai3', 'ai4', 'ai5'];
   for (const tile of tiles) {
     if (!owners.includes(tile.owner) || visited.has(tile.key)) continue;
     const territory = getContiguousTerritory(tileMap, tile.key, tile.owner);
@@ -115,7 +115,7 @@ function initTerritoryBalances(
 export default function GameScreen() {
   const params = useLocalSearchParams<{ tileCount: string; opponentCount: string }>();
   const numTiles = Math.min(300, Math.max(40, Number(params.tileCount) || 100));
-  const numOpponents = Math.min(3, Math.max(1, Number(params.opponentCount) || 1));
+  const numOpponents = Math.min(5, Math.max(1, Number(params.opponentCount) || 3));
   const { width: SW, height: SH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const topInset = insets.top + (Platform.OS === 'web' ? 67 : 0);
@@ -337,7 +337,7 @@ export default function GameScreen() {
       setGraveyard(new Set());
 
       const initialEntities = new Map<string, EntityType>();
-      const owners: TerritoryOwner[] = ['player', 'ai1', 'ai2', 'ai3'];
+      const owners: TerritoryOwner[] = ['player', 'ai1', 'ai2', 'ai3', 'ai4', 'ai5'];
       for (const tile of tiles) {
         if (!owners.includes(tile.owner)) continue;
         if (tile.terrain === 'mountain') continue;
@@ -353,7 +353,7 @@ export default function GameScreen() {
   const activeTileMap = mutableTileMap.size > 0 ? mutableTileMap : tileMap;
 
   const aiOwners = useMemo<TerritoryOwner[]>(() => {
-    const all: TerritoryOwner[] = ['ai1', 'ai2', 'ai3'];
+    const all: TerritoryOwner[] = ['ai1', 'ai2', 'ai3', 'ai4', 'ai5'];
     return all.slice(0, numOpponents);
   }, [numOpponents]);
 
@@ -1078,7 +1078,7 @@ export default function GameScreen() {
       }
     }
 
-    const allOwners: TerritoryOwner[] = ['player', 'ai1', 'ai2', 'ai3'];
+    const allOwners: TerritoryOwner[] = ['player', 'ai1', 'ai2', 'ai3', 'ai4', 'ai5'];
     const preSpawnEntities = nextEntities;
     const rebelSpawns = new Map(nextEntities);
     for (const tile of Array.from(activeTileMap.values())) {
