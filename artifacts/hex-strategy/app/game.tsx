@@ -601,7 +601,6 @@ export default function GameScreen() {
         const neighbor = activeTileMap.get(nk);
         if (!neighbor) continue;
         if (neighbor.terrain === 'mountain') continue;
-        if (neighbor.isCity) continue;
         const existingEntity = entities.get(nk);
         if (existingEntity && existingEntity !== 'rebel') continue;
         const enemyZoC = getMaxEnemyZoC(nk, 'player', entities, activeTileMap);
