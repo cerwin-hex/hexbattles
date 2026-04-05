@@ -1197,6 +1197,7 @@ export default function GameScreen() {
 
   const tapGesture = Gesture.Tap()
     .maxDistance(5)
+    .enabled(Platform.OS !== 'web')
     .onEnd(e => {
       runOnJS(handleBoardTap)(e.x, e.y, translateX.value, translateY.value, scale.value);
     });
