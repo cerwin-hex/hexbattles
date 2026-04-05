@@ -125,9 +125,11 @@ export default function GameScreen() {
   const BORDER_W = 4.0;
   const INNER_SIZE = HEX_SIZE - BORDER_W * 0.65 * (2 / Math.sqrt(3));
 
+  const [gameKey, setGameKey] = useState(0);
+
   const tiles = useMemo(
     () => generateHexGrid(numTiles, numOpponents + 1),
-    [numTiles, numOpponents],
+    [numTiles, numOpponents, gameKey],
   );
 
   const tileMap = useMemo(() => {
@@ -154,12 +156,17 @@ export default function GameScreen() {
   }, [tileData]);
 
   const [liveOwnerMap, setLiveOwnerMap] = useState<Map<string, TerritoryOwner>>(new Map());
+  const [mutableTileMap, setMutableTileMap] = useState<Map<string, HexTile>>(new Map());
 
   const borderEdges = useMemo<BorderEdge[]>(() => {
     const edges: BorderEdge[] = [];
+    // Use mutableTileMap as the authoritative ownership source so borders
+    // stay correct across turns even as liveOwnerMap is a per-turn overlay.
+    const ownerOf = (key: string, base: HexTile) =>
+      mutableTileMap.get(key)?.owner ?? base.owner;
 
     for (const { tile, cx, cy } of tileData) {
-      const liveOwner = liveOwnerMap.get(tile.key) ?? tile.owner;
+      const liveOwner = ownerOf(tile.key, tile);
       if (tile.terrain === 'mountain' || liveOwner === 'neutral') continue;
       const color = TERRITORY_BORDERS[liveOwner as TerritoryOwner]!;
       if (!color) continue;
@@ -172,7 +179,7 @@ export default function GameScreen() {
           edges.push({ x1: ptA.x, y1: ptA.y, x2: ptB.x, y2: ptB.y, color, width: BORDER_W });
           continue;
         }
-        const neighborLiveOwner = liveOwnerMap.get(nk) ?? neighborBase.owner;
+        const neighborLiveOwner = ownerOf(nk, neighborBase);
         const needsBorder =
           neighborBase.terrain === 'mountain' ||
           neighborLiveOwner === 'neutral' ||
@@ -186,12 +193,12 @@ export default function GameScreen() {
 
     for (const { tile, cx, cy } of tileData) {
       if (!tile.cityBuffer && !tile.isCity) continue;
-      const liveOwner = liveOwnerMap.get(tile.key) ?? tile.owner;
+      const liveOwner = ownerOf(tile.key, tile);
       if (liveOwner !== 'neutral') continue;
       for (const { dir: [dq, dr], verts: [va, vb] } of ORDERED_EDGES) {
         const nk = tileKey(tile.q + dq, tile.r + dr);
         const neighborBase = tileMap.get(nk);
-        const neighborLiveOwner = neighborBase ? (liveOwnerMap.get(nk) ?? neighborBase.owner) : null;
+        const neighborLiveOwner = neighborBase ? ownerOf(nk, neighborBase) : null;
         const neighborIsNeutralCity =
           neighborBase !== undefined &&
           neighborLiveOwner === 'neutral' &&
@@ -205,12 +212,15 @@ export default function GameScreen() {
     }
 
     return edges;
-  }, [tileData, tileMap, liveOwnerMap, INNER_SIZE]);
+  }, [tileData, tileMap, mutableTileMap, INNER_SIZE]);
 
   const outerTerritoryEdges = useMemo<BorderEdge[]>(() => {
     const edges: BorderEdge[] = [];
+    const ownerOf = (key: string, base: HexTile) =>
+      mutableTileMap.get(key)?.owner ?? base.owner;
+
     for (const { tile, cx, cy } of tileData) {
-      const liveOwner = liveOwnerMap.get(tile.key) ?? tile.owner;
+      const liveOwner = ownerOf(tile.key, tile);
       if (tile.terrain === 'mountain' || liveOwner === 'neutral') continue;
       for (const { dir: [dq, dr], verts: [va, vb] } of ORDERED_EDGES) {
         const nk = tileKey(tile.q + dq, tile.r + dr);
@@ -221,7 +231,7 @@ export default function GameScreen() {
           edges.push({ x1: ptA.x, y1: ptA.y, x2: ptB.x, y2: ptB.y, color: '#000000', width: 2 });
           continue;
         }
-        const neighborLiveOwner = liveOwnerMap.get(nk) ?? neighborBase.owner;
+        const neighborLiveOwner = ownerOf(nk, neighborBase);
         const needsBorder =
           neighborBase.terrain === 'mountain' ||
           neighborLiveOwner === 'neutral' ||
@@ -233,7 +243,7 @@ export default function GameScreen() {
       }
     }
     return edges;
-  }, [tileData, tileMap, liveOwnerMap, HEX_SIZE]);
+  }, [tileData, tileMap, mutableTileMap, HEX_SIZE]);
 
   const boardW = bounds.width;
   const boardH = bounds.height;
@@ -287,7 +297,6 @@ export default function GameScreen() {
   const [turn, setTurn] = useState(1);
   const [selectedEntityKey, setSelectedEntityKey] = useState<string | null>(null);
   const [spentUnits, setSpentUnits] = useState<Set<string>>(new Set());
-  const [mutableTileMap, setMutableTileMap] = useState<Map<string, HexTile>>(new Map());
   const [moveHistory, setMoveHistory] = useState<Array<{
     entities: Map<string, EntityType>;
     mutableTileMap: Map<string, HexTile>;
@@ -301,6 +310,66 @@ export default function GameScreen() {
   const aiTurnRef = useRef<boolean>(false);
   const [graveyard, setGraveyard] = useState<Set<string>>(new Set());
   const [partialMoves, setPartialMoves] = useState<Map<string, number>>(new Map());
+  const [isDeveloperModeActive, setIsDeveloperModeActive] = useState(false);
+  const [isAiPaused, setIsAiPaused] = useState(false);
+  const resumeAiRef = useRef<(() => void) | null>(null);
+  const isDeveloperModeRef = useRef(false);
+
+  interface AiStepSnapshot {
+    entities: Map<string, EntityType>;
+    mutableTileMap: Map<string, HexTile>;
+    territoryBalances: Map<string, number>;
+    liveOwnerMap: Map<string, TerritoryOwner>;
+    graveyard: Set<string>;
+  }
+  // History of snapshots: index 0 = state before any AI action, index N = state after action N.
+  // Navigation: aiHistoryIndex tracks what is currently displayed.
+  // "Next" when at end resumes the AI; "Next" mid-history advances the index without resuming.
+  const aiStepHistoryRef = useRef<AiStepSnapshot[]>([]);
+  const [aiHistoryIndex, setAiHistoryIndex] = useState(-1);
+  const [aiHistoryLen, setAiHistoryLen] = useState(0);
+
+  const restoreAiSnapshot = useCallback((snap: AiStepSnapshot) => {
+    setEntities(snap.entities);
+    setMutableTileMap(snap.mutableTileMap);
+    setTerritoryBalances(snap.territoryBalances);
+    setLiveOwnerMap(snap.liveOwnerMap);
+    setGraveyard(snap.graveyard);
+  }, []);
+
+  useEffect(() => {
+    isDeveloperModeRef.current = isDeveloperModeActive;
+    if (!isDeveloperModeActive && isAiPaused) {
+      aiStepHistoryRef.current = [];
+      setAiHistoryIndex(-1);
+      setAiHistoryLen(0);
+      resumeAiRef.current?.();
+      resumeAiRef.current = null;
+    }
+  }, [isDeveloperModeActive, isAiPaused]);
+
+  const handleAiStepNext = useCallback(() => {
+    const history = aiStepHistoryRef.current;
+    const idx = aiHistoryIndex;
+    if (idx < history.length - 1) {
+      // Navigate forward through already-recorded history (don't resume AI yet).
+      const newIdx = idx + 1;
+      setAiHistoryIndex(newIdx);
+      restoreAiSnapshot(history[newIdx]);
+    } else {
+      // At the latest snapshot — resume the AI to execute the next action.
+      resumeAiRef.current?.();
+    }
+  }, [aiHistoryIndex, restoreAiSnapshot]);
+
+  const handleAiStepBack = useCallback(() => {
+    const history = aiStepHistoryRef.current;
+    const idx = aiHistoryIndex;
+    if (idx <= 0) return;
+    const newIdx = idx - 1;
+    setAiHistoryIndex(newIdx);
+    restoreAiSnapshot(history[newIdx]);
+  }, [aiHistoryIndex, restoreAiSnapshot]);
 
   const idleBounceY = useSharedValue(0);
   useEffect(() => {
@@ -375,6 +444,25 @@ export default function GameScreen() {
 
   const delay = (ms: number) => new Promise<void>(res => setTimeout(res, ms));
 
+  const awaitStep = useCallback(async (afterSnap: AiStepSnapshot) => {
+    // Always record the snapshot so history is complete even if dev mode
+    // is activated mid-turn (the user can step back through all actions).
+    const newHistory = [...aiStepHistoryRef.current, afterSnap];
+    aiStepHistoryRef.current = newHistory;
+    const newIdx = newHistory.length - 1;
+    setAiHistoryIndex(newIdx);
+    setAiHistoryLen(newHistory.length);
+
+    if (isDeveloperModeRef.current) {
+      setIsAiPaused(true);
+      await new Promise<void>(resolve => { resumeAiRef.current = resolve; });
+      resumeAiRef.current = null;
+      setIsAiPaused(false);
+    } else {
+      await delay(200);
+    }
+  }, []);
+
   const runAiTurn = useCallback(async (
     currentTileMap: Map<string, HexTile>,
     currentEntities: Map<string, EntityType>,
@@ -383,6 +471,20 @@ export default function GameScreen() {
     let workingTileMap = new Map(currentTileMap);
     let workingEntities = new Map(currentEntities);
     let workingBalances = new Map(currentBalances);
+    let workingLiveOwnerMap = new Map<string, TerritoryOwner>();
+    let workingGraveyard = new Set<string>();
+
+    // Seed history with the initial state (index 0 = before any AI action).
+    const initialSnap: AiStepSnapshot = {
+      entities: new Map(workingEntities),
+      mutableTileMap: new Map(workingTileMap),
+      territoryBalances: new Map(workingBalances),
+      liveOwnerMap: new Map(workingLiveOwnerMap),
+      graveyard: new Set(workingGraveyard),
+    };
+    aiStepHistoryRef.current = [initialSnap];
+    setAiHistoryIndex(0);
+    setAiHistoryLen(1);
 
     for (const aiOwner of aiOwners) {
       if (aiTurnRef.current === false) return;
@@ -413,7 +515,13 @@ export default function GameScreen() {
 
         setEntities(new Map(workingEntities));
         setTerritoryBalances(new Map(workingBalances));
-        await delay(200);
+        await awaitStep({
+          entities: new Map(workingEntities),
+          mutableTileMap: new Map(workingTileMap),
+          territoryBalances: new Map(workingBalances),
+          liveOwnerMap: new Map(workingLiveOwnerMap),
+          graveyard: new Set(workingGraveyard),
+        });
         if (!aiTurnRef.current) return;
       }
 
@@ -507,13 +615,23 @@ export default function GameScreen() {
           workingTileMap,
           workingBalances,
         );
+        workingLiveOwnerMap = new Map(workingLiveOwnerMap);
+        workingLiveOwnerMap.set(destKey, aiOwner);
+        workingGraveyard = new Set(workingGraveyard);
+        workingGraveyard.delete(destKey);
 
         setMutableTileMap(new Map(workingTileMap));
-        setLiveOwnerMap(prev => { const next = new Map(prev); next.set(destKey, aiOwner); return next; });
+        setLiveOwnerMap(new Map(workingLiveOwnerMap));
         setEntities(new Map(workingEntities));
         setTerritoryBalances(new Map(workingBalances));
-        setGraveyard(prev => { const next = new Set(prev); next.delete(destKey); return next; });
-        await delay(200);
+        setGraveyard(new Set(workingGraveyard));
+        await awaitStep({
+          entities: new Map(workingEntities),
+          mutableTileMap: new Map(workingTileMap),
+          territoryBalances: new Map(workingBalances),
+          liveOwnerMap: new Map(workingLiveOwnerMap),
+          graveyard: new Set(workingGraveyard),
+        });
         if (!aiTurnRef.current) return;
       }
     }
@@ -521,7 +639,7 @@ export default function GameScreen() {
     setIsAiTurn(false);
     aiTurnRef.current = false;
     checkWinLoss(workingTileMap);
-  }, [aiOwners, checkWinLoss]);
+  }, [aiOwners, checkWinLoss, awaitStep]);
 
   const selectedTerritory = useMemo<HexTile[]>(() => {
     if (!selectedTileKey) return [];
@@ -760,6 +878,38 @@ export default function GameScreen() {
     }
     return keys;
   }, [activeTileMap, territoryBalances, entities]);
+
+  const devEconomicOverlays = useMemo<Array<{ cx: number; cy: number; label: string }>>(() => {
+    if (!isDeveloperModeActive) return [];
+    const result: Array<{ cx: number; cy: number; label: string }> = [];
+    const visited = new Set<string>();
+    for (const aiOwner of aiOwners) {
+      for (const tile of Array.from(activeTileMap.values())) {
+        if (tile.owner !== aiOwner || visited.has(tile.key)) continue;
+        const territory = getContiguousTerritory(activeTileMap, tile.key, aiOwner);
+        for (const t of territory) visited.add(t.key);
+        const territoryId = getTerritoryId(territory);
+        if (!territoryId) continue;
+        const balance = territoryBalances.get(territoryId) ?? 0;
+        const income = territory.reduce((s, t) => {
+          if (entities.get(t.key) === 'rebel') return s;
+          return s + TERRAIN_INCOME[t.terrain] + (t.isCity ? CITY_BONUS : 0) + (entities.get(t.key) === 'city' ? CITY_BONUS : 0);
+        }, 0);
+        const upkeep = territory.reduce((s, t) => {
+          const e = entities.get(t.key);
+          return s + (e ? ENTITY_META[e].upkeep : 0);
+        }, 0);
+        const net = income - upkeep;
+        const label = net >= 0 ? `${balance}(+${net})` : `${balance}(${net})`;
+        const central = findCentralTile(territory);
+        if (!central) continue;
+        const pos = tileDataMap.get(central.key);
+        if (!pos) continue;
+        result.push({ cx: pos.cx, cy: pos.cy, label });
+      }
+    }
+    return result;
+  }, [isDeveloperModeActive, aiOwners, activeTileMap, territoryBalances, entities, tileDataMap]);
 
   const pushHistory = useCallback(() => {
     setMoveHistory(prev => [
@@ -1464,6 +1614,32 @@ export default function GameScreen() {
                 );
               })}
 
+              {isDeveloperModeActive && devEconomicOverlays.map(({ cx, cy, label }, i) => {
+                const fontSize = Math.max(7, Math.min(11, HEX_SIZE * 0.32));
+                return (
+                  <React.Fragment key={`dev-econ-${i}`}>
+                    <Rect
+                      x={cx - fontSize * label.length * 0.32}
+                      y={cy - fontSize * 0.85}
+                      width={fontSize * label.length * 0.64}
+                      height={fontSize * 1.4}
+                      fill="rgba(0,0,0,0.65)"
+                      rx={2}
+                    />
+                    <SvgText
+                      x={cx}
+                      y={cy + fontSize * 0.42}
+                      textAnchor="middle"
+                      fontSize={fontSize}
+                      fill="#00FF88"
+                      fontWeight="bold"
+                    >
+                      {label}
+                    </SvgText>
+                  </React.Fragment>
+                );
+              })}
+
               {Array.from(flagTileKeys).filter(key => !selectedTileKeys.has(key) && (!entities.has(key) || entities.get(key) === 'city')).map(key => {
                 const pos = tileDataMap.get(key);
                 if (!pos) return null;
@@ -1570,6 +1746,13 @@ export default function GameScreen() {
       >
         <Ionicons name="arrow-back" size={14} color="#A08860" />
         <Text style={styles.menuBtnText}>Menu</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={[styles.devBtn, isDeveloperModeActive && styles.devBtnActive, { top: topInset + 4, right: 4, position: 'absolute', zIndex: 20 }]}
+        onPress={() => setIsDeveloperModeActive(v => !v)}
+      >
+        <Text style={[styles.devBtnText, isDeveloperModeActive && styles.devBtnTextActive]}>DEV</Text>
       </TouchableOpacity>
 
       {selectedEntityKey && (() => {
@@ -1694,6 +1877,28 @@ export default function GameScreen() {
             );
           })}
 
+          {isDeveloperModeActive && isAiPaused && aiHistoryIndex > 0 && (
+            <TouchableOpacity
+              style={styles.prevActionBtn}
+              onPress={handleAiStepBack}
+            >
+              <Ionicons name="arrow-back" size={13} color="#00FF88" />
+              <Text style={styles.nextActionBtnText}>Prev</Text>
+            </TouchableOpacity>
+          )}
+
+          {isDeveloperModeActive && isAiPaused && (
+            <TouchableOpacity
+              style={styles.nextActionBtn}
+              onPress={handleAiStepNext}
+            >
+              <Text style={styles.nextActionBtnText}>
+                {aiHistoryIndex < aiHistoryLen - 1 ? 'Next ▶' : 'Next'}
+              </Text>
+              <Ionicons name="arrow-forward" size={13} color="#00FF88" />
+            </TouchableOpacity>
+          )}
+
           {isAiTurn ? (
             <View style={[styles.endTurnBtn, styles.aiTurnBtn]}>
               <Text style={styles.aiTurnText}>AI Turn...</Text>
@@ -1808,9 +2013,35 @@ export default function GameScreen() {
             </Text>
             <TouchableOpacity
               style={styles.gameResultBtn}
-              onPress={() => { setGameResult(null); router.back(); }}
+              onPress={() => {
+                aiTurnRef.current = false;
+                resumeAiRef.current?.();
+                resumeAiRef.current = null;
+                aiStepHistoryRef.current = [];
+                setAiHistoryIndex(-1);
+                setAiHistoryLen(0);
+                setGameResult(null);
+                setIsAiTurn(false);
+                setIsDeveloperModeActive(false);
+                setIsAiPaused(false);
+                setMoveHistory([]);
+                setTurn(1);
+                setGameKey(k => k + 1);
+              }}
             >
-              <Text style={styles.gameResultBtnText}>Return to Main Menu</Text>
+              <Text style={styles.gameResultBtnText}>Restart</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.gameResultBtn, styles.gameResultMenuBtn]}
+              onPress={() => {
+                setGameResult(null);
+                setIsDeveloperModeActive(false);
+                setIsAiPaused(false);
+                resumeAiRef.current = null;
+                router.back();
+              }}
+            >
+              <Text style={[styles.gameResultBtnText, styles.gameResultMenuBtnText]}>Return to Main Menu</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -2195,6 +2426,55 @@ const styles = StyleSheet.create({
     color: '#8888CC',
     letterSpacing: 0.5,
   },
+  devBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: '#3A3A3A',
+    backgroundColor: '#1A1A1A',
+  },
+  devBtnActive: {
+    borderColor: '#00FF88',
+    backgroundColor: '#003322',
+  },
+  devBtnText: {
+    fontSize: 10,
+    fontFamily: 'Cinzel_700Bold',
+    color: '#5A5A5A',
+    letterSpacing: 1,
+  },
+  devBtnTextActive: {
+    color: '#00FF88',
+  },
+  nextActionBtn: {
+    height: BTN_H,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: '#00FF88',
+    backgroundColor: '#003322',
+  },
+  prevActionBtn: {
+    height: BTN_H,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: '#00BB66',
+    backgroundColor: '#002211',
+  },
+  nextActionBtnText: {
+    fontSize: 11,
+    fontFamily: 'Cinzel_700Bold',
+    color: '#00FF88',
+    letterSpacing: 0.5,
+  },
   gameResultOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.80)',
@@ -2247,5 +2527,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Cinzel_700Bold',
     color: '#F0D080',
     letterSpacing: 0.5,
+  },
+  gameResultMenuBtn: {
+    backgroundColor: '#2A1E08',
+    borderColor: '#6A5020',
+  },
+  gameResultMenuBtnText: {
+    color: '#C8A24A',
+    fontSize: 12,
   },
 });
