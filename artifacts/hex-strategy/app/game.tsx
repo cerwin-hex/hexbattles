@@ -222,25 +222,37 @@ export default function GameScreen() {
 
     for (const { tile, cx, cy } of tileData) {
       const liveOwner = ownerOf(tile.key, tile);
-      if (tile.terrain === 'mountain' || tile.terrain === 'lake' || liveOwner === 'neutral') continue;
+      const isImpassable = tile.terrain === 'mountain' || tile.terrain === 'lake';
+      if (!isImpassable && liveOwner === 'neutral') continue;
+
       for (const { dir: [dq, dr], verts: [va, vb] } of ORDERED_EDGES) {
         const nk = tileKey(tile.q + dq, tile.r + dr);
         const neighborBase = tileMap.get(nk);
+
         if (!neighborBase) {
           const ptA = hexCornerPoint(cx, cy, HEX_SIZE, va);
           const ptB = hexCornerPoint(cx, cy, HEX_SIZE, vb);
           edges.push({ x1: ptA.x, y1: ptA.y, x2: ptB.x, y2: ptB.y, color: '#000000', width: 2 });
           continue;
         }
-        const neighborLiveOwner = ownerOf(nk, neighborBase);
-        if (neighborBase.terrain === 'mountain' || neighborBase.terrain === 'lake') continue;
-        const needsBorder =
-          neighborLiveOwner === 'neutral' ||
-          neighborLiveOwner !== liveOwner;
-        if (!needsBorder) continue;
-        const ptA = hexCornerPoint(cx, cy, HEX_SIZE, va);
-        const ptB = hexCornerPoint(cx, cy, HEX_SIZE, vb);
-        edges.push({ x1: ptA.x, y1: ptA.y, x2: ptB.x, y2: ptB.y, color: '#000000', width: 2 });
+
+        if (isImpassable) {
+          if (neighborBase.terrain === tile.terrain) continue;
+          const ptA = hexCornerPoint(cx, cy, HEX_SIZE, va);
+          const ptB = hexCornerPoint(cx, cy, HEX_SIZE, vb);
+          edges.push({ x1: ptA.x, y1: ptA.y, x2: ptB.x, y2: ptB.y, color: '#000000', width: 2 });
+        } else {
+          const neighborLiveOwner = ownerOf(nk, neighborBase);
+          const needsBorder =
+            neighborBase.terrain === 'mountain' ||
+            neighborBase.terrain === 'lake' ||
+            neighborLiveOwner === 'neutral' ||
+            neighborLiveOwner !== liveOwner;
+          if (!needsBorder) continue;
+          const ptA = hexCornerPoint(cx, cy, HEX_SIZE, va);
+          const ptB = hexCornerPoint(cx, cy, HEX_SIZE, vb);
+          edges.push({ x1: ptA.x, y1: ptA.y, x2: ptB.x, y2: ptB.y, color: '#000000', width: 2 });
+        }
       }
     }
     return edges;
