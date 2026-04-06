@@ -1201,6 +1201,10 @@ export default function GameScreen() {
         const fund = newLakeFunds.get(selectedEntityKey) ?? 0;
         newLakeFunds.delete(selectedEntityKey);
         newLakeFunds.set(key, fund);
+        if (fromTile) {
+          newTileMap.set(selectedEntityKey, { ...fromTile, owner: 'neutral' });
+          newLiveOwnerMap.delete(selectedEntityKey);
+        }
       } else if (fromLake && !movingToLake) {
         const fund = newLakeFunds.get(selectedEntityKey) ?? 0;
         newLakeFunds.delete(selectedEntityKey);
@@ -1653,9 +1657,6 @@ export default function GameScreen() {
   }, [selectedTileKey, activeTileMap, lakeUnitFunds]);
   const showCredits = hasSelection || selectedLakeFund !== null;
   const creditsDisplayValue = selectedLakeFund !== null ? selectedLakeFund : selectedTerritoryBalance;
-  const selectedLakeEntity = selectedTileKey ? entities.get(selectedTileKey) : undefined;
-  const lakeUpkeepPerTurn = (selectedLakeFund !== null && selectedLakeEntity && ENTITY_META[selectedLakeEntity].isUnit)
-    ? ENTITY_META[selectedLakeEntity].upkeep : null;
 
   return (
     <View style={styles.root}>
@@ -2124,20 +2125,16 @@ export default function GameScreen() {
           {showCredits && (
             <TouchableOpacity
               style={styles.creditsDisplay}
-              onPress={() => { if (selectedLakeFund === null) setShowEconModal(true); }}
-              activeOpacity={selectedLakeFund !== null ? 1 : 0.75}
+              onPress={() => { if (hasSelection) setShowEconModal(true); }}
+              activeOpacity={hasSelection ? 0.75 : 1}
             >
-              <Text style={styles.creditsIcon}>{selectedLakeFund !== null ? '⚓' : '⚜️'}</Text>
+              <Text style={styles.creditsIcon}>⚜️</Text>
               <Text style={styles.creditsAmount}>{creditsDisplayValue}</Text>
-              {selectedLakeFund !== null && lakeUpkeepPerTurn !== null ? (
-                <Text style={[styles.creditsNet, styles.creditsNetNeg]}>
-                  -{lakeUpkeepPerTurn}/turn
-                </Text>
-              ) : selectedLakeFund === null && econBreakdown !== null ? (
+              {hasSelection && econBreakdown !== null && (
                 <Text style={[styles.creditsNet, econBreakdown.net >= 0 ? styles.creditsNetPos : styles.creditsNetNeg]}>
                   {econBreakdown.net >= 0 ? `+${econBreakdown.net}` : `${econBreakdown.net}`}/turn
                 </Text>
-              ) : null}
+              )}
             </TouchableOpacity>
           )}
 
@@ -2283,7 +2280,9 @@ export default function GameScreen() {
                     style={[
                       styles.lakeThumb,
                       {
-                        left: `${pendingLakeMove.maxAmount <= 6 ? 100 : Math.round(((lakeTransferAmount - 6) / (pendingLakeMove.maxAmount - 6)) * 100)}%` as any,
+                        left: pendingLakeMove.maxAmount <= 6
+                          ? sliderTrackWidth - 12
+                          : Math.round(((lakeTransferAmount - 6) / (pendingLakeMove.maxAmount - 6)) * (sliderTrackWidth - 12)),
                       },
                     ]}
                   />
