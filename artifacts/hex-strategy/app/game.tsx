@@ -306,6 +306,7 @@ export default function GameScreen() {
     liveOwnerMap: Map<string, TerritoryOwner>;
     partialMoves: Map<string, number>;
     freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
+    selectedTileKey: string | null;
   }>>([]);
   const [isAiTurn, setIsAiTurn] = useState(false);
   const [gameResult, setGameResult] = useState<'victory' | 'defeat' | null>(null);
@@ -1017,9 +1018,10 @@ export default function GameScreen() {
         liveOwnerMap: new Map(liveOwnerMap),
         partialMoves: new Map(partialMoves),
         freeTowerUsedTiles: new Map([...freeTowerUsedTiles.entries()].map(([k, v]) => [k, new Set(v)])),
+        selectedTileKey,
       },
     ]);
-  }, [entities, mutableTileMap, territoryBalances, spentUnits, liveOwnerMap, partialMoves, freeTowerUsedTiles]);
+  }, [entities, mutableTileMap, territoryBalances, spentUnits, liveOwnerMap, partialMoves, freeTowerUsedTiles, selectedTileKey]);
 
   const handleDeselect = useCallback(() => {
     if (Date.now() - lastTileTapMs.current < 150) return;
@@ -1249,6 +1251,7 @@ export default function GameScreen() {
       setLiveOwnerMap(snapshot.liveOwnerMap);
       setPartialMoves(snapshot.partialMoves);
       setFreeTowerUsedTiles(snapshot.freeTowerUsedTiles);
+      setSelectedTileKey(snapshot.selectedTileKey);
       setSelectedEntityKey(null);
       setArmedEntityId(null);
       if (ribbonOpen) closeRibbon();
