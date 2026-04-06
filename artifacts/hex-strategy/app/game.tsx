@@ -319,6 +319,7 @@ export default function GameScreen() {
     liveOwnerMap: Map<string, TerritoryOwner>;
     partialMoves: Map<string, number>;
     freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
+    lakeUnitFunds: Map<string, number>;
     selectedTileKey: string | null;
   }>>([]);
   const [isAiTurn, setIsAiTurn] = useState(false);
@@ -332,6 +333,15 @@ export default function GameScreen() {
   const isDeveloperModeRef = useRef(false);
   const [freeTowerUsedTiles, setFreeTowerUsedTiles] = useState<Map<TerritoryOwner, Set<string>>>(new Map());
   const freeTowerUsedTilesRef = useRef<Map<TerritoryOwner, Set<string>>>(new Map());
+  const [lakeUnitFunds, setLakeUnitFunds] = useState<Map<string, number>>(new Map());
+  const [pendingLakeMove, setPendingLakeMove] = useState<{
+    fromKey: string;
+    toKey: string;
+    sourceTerrId: string;
+    maxAmount: number;
+  } | null>(null);
+  const [lakeTransferAmount, setLakeTransferAmount] = useState(6);
+  const [sliderTrackWidth, setSliderTrackWidth] = useState(220);
 
   useEffect(() => { freeTowerUsedTilesRef.current = freeTowerUsedTiles; }, [freeTowerUsedTiles]);
 
@@ -1046,10 +1056,11 @@ export default function GameScreen() {
         liveOwnerMap: new Map(liveOwnerMap),
         partialMoves: new Map(partialMoves),
         freeTowerUsedTiles: new Map([...freeTowerUsedTiles.entries()].map(([k, v]) => [k, new Set(v)])),
+        lakeUnitFunds: new Map(lakeUnitFunds),
         selectedTileKey,
       },
     ]);
-  }, [entities, mutableTileMap, territoryBalances, spentUnits, liveOwnerMap, partialMoves, freeTowerUsedTiles, selectedTileKey]);
+  }, [entities, mutableTileMap, territoryBalances, spentUnits, liveOwnerMap, partialMoves, freeTowerUsedTiles, lakeUnitFunds, selectedTileKey]);
 
   const handleDeselect = useCallback(() => {
     if (Date.now() - lastTileTapMs.current < 150) return;
@@ -1059,18 +1070,84 @@ export default function GameScreen() {
     if (ribbonOpen) closeRibbon();
   }, [ribbonOpen]);
 
+  const commitPendingLakeMove = useCallback((transferAmount: number) => {
+    if (!pendingLakeMove) return;
+    const { fromKey, toKey, sourceTerrId, maxAmount } = pendingLakeMove;
+    const amount = Math.min(maxAmount, Math.max(6, transferAmount));
+    setPendingLakeMove(null);
+
+    pushHistory();
+    const destTile = activeTileMap.get(toKey);
+    const previousOwner = destTile?.owner ?? 'neutral';
+    const newTileMap = new Map(activeTileMap);
+    if (destTile) newTileMap.set(toKey, { ...destTile, owner: 'player' });
+
+    const newEntities = new Map(entities);
+    const movingUnit = newEntities.get(fromKey)!;
+    newEntities.delete(fromKey);
+    newEntities.set(toKey, movingUnit);
+
+    const newSpentUnits = new Set(spentUnits);
+    const newPartialMoves = new Map(partialMoves);
+    newPartialMoves.delete(fromKey);
+    newSpentUnits.add(toKey);
+    newPartialMoves.delete(toKey);
+
+    const { balances: newBalances } = recalculateTerritories(
+      toKey,
+      previousOwner as TerritoryOwner,
+      activeTileMap,
+      newTileMap,
+      territoryBalances,
+    );
+    newBalances.set(sourceTerrId, (newBalances.get(sourceTerrId) ?? 0) - amount);
+
+    const newLiveOwnerMap = new Map(liveOwnerMap);
+    newLiveOwnerMap.set(toKey, 'player');
+
+    const newLakeFunds = new Map(lakeUnitFunds);
+    newLakeFunds.set(toKey, amount);
+
+    setMutableTileMap(newTileMap);
+    setLiveOwnerMap(newLiveOwnerMap);
+    setEntities(newEntities);
+    setSpentUnits(newSpentUnits);
+    setPartialMoves(newPartialMoves);
+    setTerritoryBalances(newBalances);
+    setLakeUnitFunds(newLakeFunds);
+    setSelectedEntityKey(null);
+    setSelectedTileKey(toKey);
+    setGraveyard(prev => { const next = new Set(prev); next.delete(toKey); return next; });
+    if (ribbonOpen) closeRibbon();
+  }, [pendingLakeMove, activeTileMap, entities, spentUnits, partialMoves, territoryBalances, liveOwnerMap, lakeUnitFunds, pushHistory, ribbonOpen]);
+
   const handleTileTap = useCallback((key: string) => {
     lastTileTapMs.current = Date.now();
     if (isAiTurn || gameResult !== null) return;
     const tile = activeTileMap.get(key);
 
     if (selectedEntityKey && validMoveTiles.has(key)) {
+      const targetTile = activeTileMap.get(key);
+      const movingToLake = targetTile?.terrain === 'lake';
+      const fromTile = activeTileMap.get(selectedEntityKey);
+      const fromLake = fromTile?.terrain === 'lake';
+
+      if (movingToLake && !fromLake) {
+        const sourceTerritory = getContiguousTerritory(activeTileMap, selectedEntityKey, 'player');
+        const sourceTerrId = getTerritoryId(sourceTerritory);
+        if (!sourceTerrId) return;
+        const sourceBalance = territoryBalances.get(sourceTerrId) ?? 0;
+        if (sourceBalance < 6) return;
+        const defaultAmount = Math.min(sourceBalance, Math.max(6, Math.ceil(sourceBalance * 0.5)));
+        setLakeTransferAmount(defaultAmount);
+        setPendingLakeMove({ fromKey: selectedEntityKey, toKey: key, sourceTerrId, maxAmount: sourceBalance });
+        return;
+      }
+
       pushHistory();
       const prevTile = activeTileMap.get(key);
       const previousOwner = prevTile?.owner ?? 'neutral';
       const newTileMap = new Map(activeTileMap);
-      const targetTile = newTileMap.get(key);
-      const movingToLake = targetTile?.terrain === 'lake';
       if (targetTile) {
         newTileMap.set(key, { ...targetTile, owner: 'player' });
       }
@@ -1119,12 +1196,32 @@ export default function GameScreen() {
       const newLiveOwnerMap = new Map(liveOwnerMap);
       newLiveOwnerMap.set(key, 'player');
 
+      const newLakeFunds = new Map(lakeUnitFunds);
+      if (fromLake && movingToLake) {
+        const fund = newLakeFunds.get(selectedEntityKey) ?? 0;
+        newLakeFunds.delete(selectedEntityKey);
+        newLakeFunds.set(key, fund);
+      } else if (fromLake && !movingToLake) {
+        const fund = newLakeFunds.get(selectedEntityKey) ?? 0;
+        newLakeFunds.delete(selectedEntityKey);
+        const newTerritory = getContiguousTerritory(newTileMap, key, 'player');
+        const newTerrId = getTerritoryId(newTerritory);
+        if (newTerrId && fund > 0) {
+          newBalances.set(newTerrId, (newBalances.get(newTerrId) ?? 0) + fund);
+        }
+        if (fromTile) {
+          newTileMap.set(selectedEntityKey, { ...fromTile, owner: 'neutral' });
+          newLiveOwnerMap.delete(selectedEntityKey);
+        }
+      }
+
       setMutableTileMap(newTileMap);
       setLiveOwnerMap(newLiveOwnerMap);
       setEntities(newEntities);
       setSpentUnits(newSpentUnits);
       setPartialMoves(newPartialMoves);
       setTerritoryBalances(newBalances);
+      setLakeUnitFunds(newLakeFunds);
       setSelectedEntityKey(null);
       setSelectedTileKey(key);
       setGraveyard(prev => { const next = new Set(prev); next.delete(key); return next; });
@@ -1266,7 +1363,7 @@ export default function GameScreen() {
     setSelectedEntityKey(null);
     setArmedEntityId(null);
     if (ribbonOpen) closeRibbon();
-  }, [activeTileMap, selectedTileKeys, armedEntityId, entities, selectedTerritoryId, territoryBalances, ribbonOpen, selectedEntityKey, validMoveTiles, validPlacementAttackTiles, spentUnits, liveOwnerMap, isAiTurn, gameResult, checkWinLoss, pushHistory]);
+  }, [activeTileMap, selectedTileKeys, armedEntityId, entities, selectedTerritoryId, territoryBalances, ribbonOpen, selectedEntityKey, validMoveTiles, validPlacementAttackTiles, spentUnits, liveOwnerMap, lakeUnitFunds, isAiTurn, gameResult, checkWinLoss, pushHistory]);
 
   const handleUndo = useCallback(() => {
     if (isAiTurn || gameResult !== null) return;
@@ -1280,6 +1377,7 @@ export default function GameScreen() {
       setLiveOwnerMap(snapshot.liveOwnerMap);
       setPartialMoves(snapshot.partialMoves);
       setFreeTowerUsedTiles(snapshot.freeTowerUsedTiles);
+      setLakeUnitFunds(snapshot.lakeUnitFunds);
       setSelectedTileKey(snapshot.selectedTileKey);
       setSelectedEntityKey(null);
       setArmedEntityId(null);
@@ -1389,9 +1487,39 @@ export default function GameScreen() {
     }
     nextEntities = rebelSpawns;
 
+    const nextMutableTileMap = new Map(mutableTileMap);
+    const nextLiveOwnerMap = new Map(liveOwnerMap);
+    const nextLakeFunds = new Map(lakeUnitFunds);
+    for (const [lakeKey, fund] of lakeUnitFunds) {
+      const entity = nextEntities.get(lakeKey);
+      if (!entity || !ENTITY_META[entity].isUnit) {
+        nextLakeFunds.delete(lakeKey);
+        const t = nextMutableTileMap.get(lakeKey);
+        if (t) nextMutableTileMap.set(lakeKey, { ...t, owner: 'neutral' });
+        nextLiveOwnerMap.delete(lakeKey);
+        continue;
+      }
+      const upkeep = ENTITY_META[entity].upkeep;
+      const newFund = fund - upkeep;
+      if (newFund < 0) {
+        nextEntities = new Map(nextEntities);
+        nextEntities.delete(lakeKey);
+        nextGraveyard.add(lakeKey);
+        nextLakeFunds.delete(lakeKey);
+        const t = nextMutableTileMap.get(lakeKey);
+        if (t) nextMutableTileMap.set(lakeKey, { ...t, owner: 'neutral' });
+        nextLiveOwnerMap.delete(lakeKey);
+      } else {
+        nextLakeFunds.set(lakeKey, newFund);
+      }
+    }
+
     setTerritoryBalances(nextBalances);
     setEntities(nextEntities);
     setGraveyard(nextGraveyard);
+    setLakeUnitFunds(nextLakeFunds);
+    setMutableTileMap(nextMutableTileMap);
+    setLiveOwnerMap(nextLiveOwnerMap);
     setTurn(t => t + 1);
     setSelectedTileKey(null);
     setArmedEntityId(null);
@@ -1405,7 +1533,7 @@ export default function GameScreen() {
       aiTurnRef.current = true;
       runAiTurn(new Map(activeTileMap), nextEntities, nextBalances);
     }
-  }, [activeTileMap, entities, territoryBalances, isAiTurn, gameResult, aiOwners, checkWinLoss, runAiTurn]);
+  }, [activeTileMap, entities, territoryBalances, lakeUnitFunds, mutableTileMap, liveOwnerMap, isAiTurn, gameResult, aiOwners, checkWinLoss, runAiTurn]);
 
   // React Native scales around the element's centre, so the board's screen edges are:
   //   left  = tx + boardW/2 - scaledW/2
@@ -1517,6 +1645,17 @@ export default function GameScreen() {
   }));
 
   const hasSelection = selectedTerritory.length > 0;
+  const selectedLakeFund: number | null = useMemo(() => {
+    if (!selectedTileKey) return null;
+    const t = activeTileMap.get(selectedTileKey);
+    if (t?.terrain !== 'lake') return null;
+    return lakeUnitFunds.has(selectedTileKey) ? (lakeUnitFunds.get(selectedTileKey) ?? null) : null;
+  }, [selectedTileKey, activeTileMap, lakeUnitFunds]);
+  const showCredits = hasSelection || selectedLakeFund !== null;
+  const creditsDisplayValue = selectedLakeFund !== null ? selectedLakeFund : selectedTerritoryBalance;
+  const selectedLakeEntity = selectedTileKey ? entities.get(selectedTileKey) : undefined;
+  const lakeUpkeepPerTurn = (selectedLakeFund !== null && selectedLakeEntity && ENTITY_META[selectedLakeEntity].isUnit)
+    ? ENTITY_META[selectedLakeEntity].upkeep : null;
 
   return (
     <View style={styles.root}>
@@ -1982,15 +2121,23 @@ export default function GameScreen() {
             />
           </TouchableOpacity>
 
-          {hasSelection && (
-            <TouchableOpacity style={styles.creditsDisplay} onPress={() => setShowEconModal(true)} activeOpacity={0.75}>
-              <Text style={styles.creditsIcon}>⚜️</Text>
-              <Text style={styles.creditsAmount}>{selectedTerritoryBalance}</Text>
-              {econBreakdown !== null && (
+          {showCredits && (
+            <TouchableOpacity
+              style={styles.creditsDisplay}
+              onPress={() => { if (selectedLakeFund === null) setShowEconModal(true); }}
+              activeOpacity={selectedLakeFund !== null ? 1 : 0.75}
+            >
+              <Text style={styles.creditsIcon}>{selectedLakeFund !== null ? '⚓' : '⚜️'}</Text>
+              <Text style={styles.creditsAmount}>{creditsDisplayValue}</Text>
+              {selectedLakeFund !== null && lakeUpkeepPerTurn !== null ? (
+                <Text style={[styles.creditsNet, styles.creditsNetNeg]}>
+                  -{lakeUpkeepPerTurn}/turn
+                </Text>
+              ) : selectedLakeFund === null && econBreakdown !== null ? (
                 <Text style={[styles.creditsNet, econBreakdown.net >= 0 ? styles.creditsNetPos : styles.creditsNetNeg]}>
                   {econBreakdown.net >= 0 ? `+${econBreakdown.net}` : `${econBreakdown.net}`}/turn
                 </Text>
-              )}
+              ) : null}
             </TouchableOpacity>
           )}
 
@@ -2085,6 +2232,98 @@ export default function GameScreen() {
           </View>
         </View>
       </Modal>
+
+      {pendingLakeMove && (
+        <Modal visible={true} transparent animationType="fade" onRequestClose={() => setPendingLakeMove(null)}>
+          <View style={styles.lakeModalOverlay}>
+            <View style={styles.lakeModalBox}>
+              <Text style={styles.lakeModalTitle}>⚓ Naval Supply</Text>
+              <Text style={styles.lakeModalSubtitle}>
+                How many credits to provision this unit?{'\n'}
+                (minimum 6, max {pendingLakeMove.maxAmount})
+              </Text>
+
+              <Text style={styles.lakeModalAmount}>{lakeTransferAmount}</Text>
+
+              <View style={styles.lakeSliderRow}>
+                <TouchableOpacity
+                  style={styles.lakeStepBtn}
+                  onPress={() => setLakeTransferAmount(prev => Math.max(6, prev - 1))}
+                >
+                  <Text style={styles.lakeStepText}>−</Text>
+                </TouchableOpacity>
+
+                <View
+                  style={styles.lakeTrack}
+                  onLayout={e => setSliderTrackWidth(e.nativeEvent.layout.width)}
+                  onStartShouldSetResponder={() => true}
+                  onMoveShouldSetResponder={() => true}
+                  onResponderGrant={e => {
+                    const x = e.nativeEvent.locationX;
+                    const pct = Math.max(0, Math.min(1, x / sliderTrackWidth));
+                    const range = pendingLakeMove.maxAmount - 6;
+                    setLakeTransferAmount(6 + Math.round(pct * range));
+                  }}
+                  onResponderMove={e => {
+                    const x = e.nativeEvent.locationX;
+                    const pct = Math.max(0, Math.min(1, x / sliderTrackWidth));
+                    const range = pendingLakeMove.maxAmount - 6;
+                    setLakeTransferAmount(6 + Math.round(pct * range));
+                  }}
+                >
+                  <View
+                    style={[
+                      styles.lakeTrackFill,
+                      {
+                        width: `${pendingLakeMove.maxAmount <= 6 ? 100 : Math.round(((lakeTransferAmount - 6) / (pendingLakeMove.maxAmount - 6)) * 100)}%`,
+                      },
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.lakeThumb,
+                      {
+                        left: `${pendingLakeMove.maxAmount <= 6 ? 100 : Math.round(((lakeTransferAmount - 6) / (pendingLakeMove.maxAmount - 6)) * 100)}%` as any,
+                      },
+                    ]}
+                  />
+                </View>
+
+                <TouchableOpacity
+                  style={styles.lakeStepBtn}
+                  onPress={() => setLakeTransferAmount(prev => Math.min(pendingLakeMove.maxAmount, prev + 1))}
+                >
+                  <Text style={styles.lakeStepText}>+</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.lakePresetRow}>
+                {[0.25, 0.5, 0.75, 1].map(pct => {
+                  const val = Math.max(6, Math.round(pct * pendingLakeMove.maxAmount));
+                  return (
+                    <TouchableOpacity
+                      key={pct}
+                      style={styles.lakePresetBtn}
+                      onPress={() => setLakeTransferAmount(Math.min(pendingLakeMove.maxAmount, val))}
+                    >
+                      <Text style={styles.lakePresetText}>{Math.round(pct * 100)}%</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <View style={styles.lakeModalButtons}>
+                <TouchableOpacity style={styles.lakeCancelBtn} onPress={() => setPendingLakeMove(null)}>
+                  <Text style={styles.lakeCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.lakeConfirmBtn} onPress={() => commitPendingLakeMove(lakeTransferAmount)}>
+                  <Text style={styles.lakeConfirmText}>Dispatch ⚓</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
 
       <Modal visible={showEconModal} transparent animationType="fade" onRequestClose={() => setShowEconModal(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowEconModal(false)}>
@@ -2405,6 +2644,140 @@ const styles = StyleSheet.create({
   },
   creditsNetNeg: {
     color: '#E07060',
+  },
+  lakeModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  lakeModalBox: {
+    backgroundColor: '#1E1A10',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#4A7FA5',
+    padding: 24,
+    width: 320,
+    alignItems: 'center',
+  },
+  lakeModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#7EC8E3',
+    marginBottom: 6,
+  },
+  lakeModalSubtitle: {
+    fontSize: 12,
+    color: '#8C9BAB',
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 18,
+  },
+  lakeModalAmount: {
+    fontSize: 44,
+    fontWeight: '800',
+    color: '#C8D8E8',
+    marginBottom: 12,
+  },
+  lakeSliderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 14,
+    gap: 8,
+  },
+  lakeStepBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#2A3A4A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#4A7FA5',
+  },
+  lakeStepText: {
+    fontSize: 20,
+    color: '#7EC8E3',
+    lineHeight: 24,
+  },
+  lakeTrack: {
+    flex: 1,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#2A3A4A',
+    position: 'relative',
+    overflow: 'visible',
+  },
+  lakeTrackFill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: '#4A7FA5',
+    borderRadius: 4,
+  },
+  lakeThumb: {
+    position: 'absolute',
+    top: -8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#7EC8E3',
+    marginLeft: -12,
+    borderWidth: 2,
+    borderColor: '#1E1A10',
+  },
+  lakePresetRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 20,
+  },
+  lakePresetBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: '#2A3A4A',
+    borderWidth: 1,
+    borderColor: '#4A7FA5',
+  },
+  lakePresetText: {
+    fontSize: 12,
+    color: '#7EC8E3',
+    fontWeight: '600',
+  },
+  lakeModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  lakeCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#2A2218',
+    borderWidth: 1,
+    borderColor: '#5A4A2A',
+    alignItems: 'center',
+  },
+  lakeCancelText: {
+    color: '#8A7A5A',
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  lakeConfirmBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#1A3A5A',
+    borderWidth: 1,
+    borderColor: '#4A7FA5',
+    alignItems: 'center',
+  },
+  lakeConfirmText: {
+    color: '#7EC8E3',
+    fontWeight: '700',
+    fontSize: 15,
   },
   spacer: {
     flex: 1,

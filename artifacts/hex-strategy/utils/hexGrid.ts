@@ -35,6 +35,7 @@ export const TERRAIN_INCOME: Record<TerrainType, number> = {
   grass:    1,
   desert:   0,
   mountain: 0,
+  lake:     0,
 };
 
 export const CITY_BONUS = 2;
@@ -132,7 +133,7 @@ export function getValidMoves(
       if (neighbor.terrain === 'mountain') continue;
       if (neighbor.terrain === 'lake') {
         visited.add(nk);
-        if (depth < maxRange) result.add(nk);
+        if (depth < maxRange && !entities.has(nk)) result.add(nk);
         continue;
       }
 
