@@ -180,8 +180,9 @@ export default function GameScreen() {
           continue;
         }
         const neighborLiveOwner = ownerOf(nk, neighborBase);
-        if (neighborBase.terrain === 'mountain' || neighborBase.terrain === 'lake') continue;
         const needsBorder =
+          neighborBase.terrain === 'mountain' ||
+          neighborBase.terrain === 'lake' ||
           neighborLiveOwner === 'neutral' ||
           neighborLiveOwner !== liveOwner;
         if (!needsBorder) continue;
@@ -204,7 +205,7 @@ export default function GameScreen() {
           neighborBase !== undefined &&
           neighborLiveOwner === 'neutral' &&
           (neighborBase.cityBuffer || neighborBase.isCity);
-        const needsBorder = !neighborIsNeutralCity && neighborBase?.terrain !== 'mountain' && neighborBase?.terrain !== 'lake';
+        const needsBorder = !neighborIsNeutralCity;
         if (!needsBorder) continue;
         const ptA = hexCornerPoint(cx, cy, INNER_SIZE, va);
         const ptB = hexCornerPoint(cx, cy, INNER_SIZE, vb);
@@ -338,6 +339,7 @@ export default function GameScreen() {
   const [freeTowerUsedTiles, setFreeTowerUsedTiles] = useState<Map<TerritoryOwner, Set<string>>>(new Map());
   const freeTowerUsedTilesRef = useRef<Map<TerritoryOwner, Set<string>>>(new Map());
   const [lakeUnitFunds, setLakeUnitFunds] = useState<Map<string, number>>(new Map());
+  const lakeUnitFundsRef = useRef<Map<string, number>>(new Map());
   const [pendingLakeMove, setPendingLakeMove] = useState<{
     fromKey: string;
     toKey: string;
@@ -348,6 +350,7 @@ export default function GameScreen() {
   const [sliderTrackWidth, setSliderTrackWidth] = useState(220);
 
   useEffect(() => { freeTowerUsedTilesRef.current = freeTowerUsedTiles; }, [freeTowerUsedTiles]);
+  useEffect(() => { lakeUnitFundsRef.current = lakeUnitFunds; }, [lakeUnitFunds]);
 
   type AiStepSnapshot = {
     entities: Map<string, EntityType>;
@@ -502,6 +505,7 @@ export default function GameScreen() {
     let workingGraveyard = new Set<string>();
     let workingSpentUnits = new Set<string>();
     let workingFreeTowerUsed = new Map(freeTowerUsedTilesRef.current);
+    let workingLakeFunds = new Map(lakeUnitFundsRef.current);
 
     aiStepHistoryRef.current = [];
     setAiHistoryIndex(-1);
@@ -712,11 +716,25 @@ export default function GameScreen() {
           }
         }
 
-        const destKey = moveTargets[Math.floor(Math.random() * moveTargets.length)];
+        const srcTile = workingTileMap.get(unitKey);
+        const movingFromLake = srcTile?.terrain === 'lake';
+
+        const filteredMoveTargets = moveTargets.filter(k => {
+          const t = workingTileMap.get(k);
+          if (!t || t.terrain !== 'lake') return true;
+          const srcTerritory = getContiguousTerritory(workingTileMap, unitKey, aiOwner);
+          const srcId = getTerritoryId(srcTerritory);
+          if (!srcId) return false;
+          return (workingBalances.get(srcId) ?? 0) >= 6;
+        });
+        if (filteredMoveTargets.length === 0) continue;
+
+        const destKey = filteredMoveTargets[Math.floor(Math.random() * filteredMoveTargets.length)];
         const destTile = workingTileMap.get(destKey);
         if (!destTile) continue;
+        const movingToLake = destTile.terrain === 'lake';
 
-        const previousOwner = destTile.owner;
+        const previousOwner = destTile.owner as TerritoryOwner;
         const prevTileMapSnapshot = new Map(workingTileMap);
         workingTileMap = new Map(workingTileMap);
         workingTileMap.set(destKey, { ...destTile, owner: aiOwner });
@@ -732,14 +750,50 @@ export default function GameScreen() {
           workingEntities.delete(unitKey);
           workingEntities.set(destKey, unitEntity);
         }
-        workingBalances = recalculateTerritoriesForCapture(
-          destKey,
-          aiOwner,
-          previousOwner,
-          prevTileMapSnapshot,
-          workingTileMap,
-          workingBalances,
-        );
+
+        workingLakeFunds = new Map(workingLakeFunds);
+        if (movingToLake && !movingFromLake) {
+          const srcTerritory = getContiguousTerritory(prevTileMapSnapshot, unitKey, aiOwner);
+          const srcId = getTerritoryId(srcTerritory);
+          if (srcId) {
+            const lakeAmount = Math.min(workingBalances.get(srcId) ?? 0, 15);
+            workingBalances = new Map(workingBalances);
+            workingBalances.set(srcId, (workingBalances.get(srcId) ?? 0) - lakeAmount);
+            workingLakeFunds.set(destKey, lakeAmount);
+          }
+        } else if (movingFromLake && movingToLake) {
+          const fund = workingLakeFunds.get(unitKey) ?? 0;
+          workingLakeFunds.delete(unitKey);
+          workingLakeFunds.set(destKey, fund);
+          workingTileMap.set(unitKey, { ...srcTile!, owner: 'neutral' });
+          workingLiveOwnerMap = new Map(workingLiveOwnerMap);
+          workingLiveOwnerMap.delete(unitKey);
+        } else if (movingFromLake && !movingToLake) {
+          const fund = workingLakeFunds.get(unitKey) ?? 0;
+          workingLakeFunds.delete(unitKey);
+          workingTileMap.set(unitKey, { ...srcTile!, owner: 'neutral' });
+          workingLiveOwnerMap = new Map(workingLiveOwnerMap);
+          workingLiveOwnerMap.delete(unitKey);
+          workingBalances = recalculateTerritoriesForCapture(destKey, aiOwner, previousOwner, prevTileMapSnapshot, workingTileMap, workingBalances);
+          if (fund > 0) {
+            const newTerritory = getContiguousTerritory(workingTileMap, destKey, aiOwner);
+            const newId = getTerritoryId(newTerritory);
+            if (newId) {
+              workingBalances = new Map(workingBalances);
+              workingBalances.set(newId, (workingBalances.get(newId) ?? 0) + fund);
+            }
+          }
+        } else {
+          workingBalances = recalculateTerritoriesForCapture(
+            destKey,
+            aiOwner,
+            previousOwner,
+            prevTileMapSnapshot,
+            workingTileMap,
+            workingBalances,
+          );
+        }
+
         workingLiveOwnerMap = new Map(workingLiveOwnerMap);
         workingLiveOwnerMap.set(destKey, aiOwner);
         workingGraveyard = new Set(workingGraveyard);
@@ -762,6 +816,7 @@ export default function GameScreen() {
       }
     }
 
+    setLakeUnitFunds(new Map(workingLakeFunds));
     setIsAiTurn(false);
     aiTurnRef.current = false;
     checkWinLoss(workingTileMap);
@@ -1049,8 +1104,16 @@ export default function GameScreen() {
         result.push({ cx: pos.cx, cy: pos.cy, label });
       }
     }
+    for (const [lakeKey, fund] of lakeUnitFunds) {
+      const pos = tileDataMap.get(lakeKey);
+      const entity = entities.get(lakeKey);
+      if (!pos || !entity || !ENTITY_META[entity].isUnit) continue;
+      const upkeep = ENTITY_META[entity].upkeep;
+      const label = `-${upkeep}/t ${fund}⚓`;
+      result.push({ cx: pos.cx, cy: pos.cy, label });
+    }
     return result;
-  }, [isDeveloperModeActive, aiOwners, activeTileMap, territoryBalances, entities, tileDataMap]);
+  }, [isDeveloperModeActive, aiOwners, activeTileMap, territoryBalances, entities, tileDataMap, lakeUnitFunds]);
 
   const pushHistory = useCallback(() => {
     setMoveHistory(prev => [
@@ -1664,6 +1727,9 @@ export default function GameScreen() {
   }, [selectedTileKey, activeTileMap, lakeUnitFunds]);
   const showCredits = hasSelection || selectedLakeFund !== null;
   const creditsDisplayValue = selectedLakeFund !== null ? selectedLakeFund : selectedTerritoryBalance;
+  const selectedLakeEntity = selectedTileKey ? entities.get(selectedTileKey) : undefined;
+  const lakeUpkeepPerTurn = (selectedLakeFund !== null && selectedLakeEntity && ENTITY_META[selectedLakeEntity].isUnit)
+    ? ENTITY_META[selectedLakeEntity].upkeep : null;
 
   return (
     <View style={styles.root}>
@@ -1746,7 +1812,7 @@ export default function GameScreen() {
                 />
               ))}
 
-              {hasSelection && borderEdges.map((edge, i) => (
+              {borderEdges.map((edge, i) => (
                 <Line
                   key={i}
                   x1={edge.x1}
@@ -2137,11 +2203,15 @@ export default function GameScreen() {
             >
               <Text style={styles.creditsIcon}>⚜️</Text>
               <Text style={styles.creditsAmount}>{creditsDisplayValue}</Text>
-              {hasSelection && econBreakdown !== null && (
+              {selectedLakeFund !== null && lakeUpkeepPerTurn !== null ? (
+                <Text style={[styles.creditsNet, styles.creditsNetNeg]}>
+                  -{lakeUpkeepPerTurn}/turn
+                </Text>
+              ) : hasSelection && econBreakdown !== null ? (
                 <Text style={[styles.creditsNet, econBreakdown.net >= 0 ? styles.creditsNetPos : styles.creditsNetNeg]}>
                   {econBreakdown.net >= 0 ? `+${econBreakdown.net}` : `${econBreakdown.net}`}/turn
                 </Text>
-              )}
+              ) : null}
             </TouchableOpacity>
           )}
 
