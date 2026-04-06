@@ -207,7 +207,7 @@ export function recalculateTerritories(
     while (q.length > 0) {
       const curr = q.shift()!;
       const t = tileMap.get(curr);
-      if (!t || t.owner !== owner) continue;
+      if (!t || t.owner !== owner || t.terrain === 'mountain') continue;
       cluster.push(t);
       const [cq, cr] = curr.split(',').map(Number);
       for (const { dir: [dq, dr] } of HEX_EDGES) {
@@ -215,7 +215,7 @@ export function recalculateTerritories(
         if (visited.has(nk)) continue;
         visited.add(nk);
         const nt = tileMap.get(nk);
-        if (nt && nt.owner === owner) q.push(nk);
+        if (nt && nt.owner === owner && nt.terrain !== 'mountain') q.push(nk);
       }
     }
     return cluster;
@@ -312,14 +312,14 @@ export function recalculateTerritoriesForCapture(
 
   function clusterOwner(map: Map<string, HexTile>, startKey: string, owner: TerritoryOwner): HexTile[] {
     const start = map.get(startKey);
-    if (!start || start.owner !== owner) return [];
+    if (!start || start.owner !== owner || start.terrain === 'mountain') return [];
     const cluster: HexTile[] = [];
     const visited = new Set<string>([startKey]);
     const q = [startKey];
     while (q.length > 0) {
       const curr = q.shift()!;
       const t = map.get(curr);
-      if (!t || t.owner !== owner) continue;
+      if (!t || t.owner !== owner || t.terrain === 'mountain') continue;
       cluster.push(t);
       const [cq, cr] = curr.split(',').map(Number);
       for (const { dir: [dq, dr] } of HEX_EDGES) {
@@ -327,7 +327,7 @@ export function recalculateTerritoriesForCapture(
         if (visited.has(nk)) continue;
         visited.add(nk);
         const nt = map.get(nk);
-        if (nt && nt.owner === owner) q.push(nk);
+        if (nt && nt.owner === owner && nt.terrain !== 'mountain') q.push(nk);
       }
     }
     return cluster;
@@ -415,7 +415,7 @@ export function getContiguousTerritory(
   owner: TerritoryOwner,
 ): HexTile[] {
   const start = tileMap.get(startKey);
-  if (!start || start.owner !== owner) return [];
+  if (!start || start.owner !== owner || start.terrain === 'mountain') return [];
   const visited = new Set<string>([startKey]);
   const queue: string[] = [startKey];
   const result: HexTile[] = [start];
@@ -427,7 +427,7 @@ export function getContiguousTerritory(
       if (visited.has(nk)) continue;
       visited.add(nk);
       const neighbor = tileMap.get(nk);
-      if (neighbor && neighbor.owner === owner) {
+      if (neighbor && neighbor.owner === owner && neighbor.terrain !== 'mountain') {
         result.push(neighbor);
         queue.push(nk);
       }
@@ -559,6 +559,25 @@ export function generateHexGrid(tileCount: number, playerCount: number): HexTile
     visited.add(key);
     tileMap.set(key, { q: nq, r: nr, terrain: 'grass', owner: 'neutral', key, cityBuffer: false, isCity: false });
     frontier.push([nq, nr]);
+  }
+
+  // Fill internal voids: positions not in the map but completely surrounded by map tiles
+  let voidFilled = true;
+  while (voidFilled) {
+    voidFilled = false;
+    for (const tile of Array.from(tileMap.values())) {
+      for (const [nq, nr] of getNeighborsOf(tile.q, tile.r)) {
+        const nk = tileKey(nq, nr);
+        if (tileMap.has(nk)) continue;
+        const allSixInMap = getNeighborsOf(nq, nr).every(
+          ([nnq, nnr]) => tileMap.has(tileKey(nnq, nnr)),
+        );
+        if (allSixInMap) {
+          tileMap.set(nk, { q: nq, r: nr, terrain: 'grass', owner: 'neutral', key: nk, cityBuffer: false, isCity: false });
+          voidFilled = true;
+        }
+      }
+    }
   }
 
   const tiles = Array.from(tileMap.values());

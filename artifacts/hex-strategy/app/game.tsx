@@ -471,17 +471,9 @@ export default function GameScreen() {
     let workingSpentUnits = new Set<string>();
     let workingFreeTowerUsed = new Map(freeTowerUsedTilesRef.current);
 
-    const initialSnap: AiStepSnapshot = {
-      entities: new Map(workingEntities),
-      mutableTileMap: new Map(workingTileMap),
-      territoryBalances: new Map(workingBalances),
-      liveOwnerMap: new Map(workingLiveOwnerMap),
-      graveyard: new Set(workingGraveyard),
-      freeTowerUsedTiles: new Map([...workingFreeTowerUsed.entries()].map(([k, v]) => [k, new Set(v)])),
-    };
-    aiStepHistoryRef.current = [initialSnap];
-    setAiHistoryIndex(0);
-    setAiHistoryLen(1);
+    aiStepHistoryRef.current = [];
+    setAiHistoryIndex(-1);
+    setAiHistoryLen(0);
 
     for (const aiOwner of aiOwners) {
       if (aiTurnRef.current === false) return;
@@ -1257,7 +1249,6 @@ export default function GameScreen() {
       setPartialMoves(snapshot.partialMoves);
       setFreeTowerUsedTiles(snapshot.freeTowerUsedTiles);
       setSelectedEntityKey(null);
-      setSelectedTileKey(null);
       setArmedEntityId(null);
       if (ribbonOpen) closeRibbon();
       return prev.slice(0, -1);
@@ -1837,7 +1828,7 @@ export default function GameScreen() {
             const effectiveCost = playerTowerFree ? 0 : item.cost;
             const affordable = effectiveCost <= selectedTerritoryBalance;
             const enabled = affordable && !cityLocked;
-            const costLabel = cityAlreadyBuilt ? 'Built'
+            const costLabel = cityAlreadyBuilt ? 'BUILT'
               : cityTooSmall ? '<6 tiles'
               : playerTowerFree ? 'FREE'
               : `${item.cost}g`;
@@ -1859,7 +1850,7 @@ export default function GameScreen() {
                 <Text style={[styles.ribbonName, !enabled && styles.ribbonDim, isArmed && styles.ribbonNameArmed]}>
                   {item.name}
                 </Text>
-                <Text style={[styles.ribbonCost, !enabled && styles.ribbonDim, isArmed && styles.ribbonNameArmed, playerTowerFree && styles.ribbonCostFree]}>
+                <Text style={[styles.ribbonCost, !enabled && styles.ribbonDim, isArmed && styles.ribbonNameArmed, playerTowerFree && styles.ribbonCostFree, cityAlreadyBuilt && styles.ribbonCostBuilt]}>
                   {costLabel}
                 </Text>
               </TouchableOpacity>
@@ -2269,6 +2260,10 @@ const styles = StyleSheet.create({
   },
   ribbonCostFree: {
     color: '#44DD88',
+    fontFamily: 'Cinzel_700Bold',
+  },
+  ribbonCostBuilt: {
+    color: '#E04040',
     fontFamily: 'Cinzel_700Bold',
   },
   ribbonDim: {
