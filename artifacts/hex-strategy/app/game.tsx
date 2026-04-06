@@ -427,6 +427,9 @@ export default function GameScreen() {
       setLiveOwnerMap(new Map());
       setGraveyard(new Set());
       setFreeTowerUsedTiles(new Map());
+      setLakeUnitFunds(new Map());
+      setPendingLakeMove(null);
+      setLakeTransferAmount(6);
 
       const initialEntities = new Map<string, EntityType>();
       const owners: TerritoryOwner[] = ['player', 'ai1', 'ai2', 'ai3', 'ai4', 'ai5'];
@@ -1532,10 +1535,10 @@ export default function GameScreen() {
     setPartialMoves(new Map());
     closeRibbon();
 
-    if (!checkWinLoss(activeTileMap)) {
+    if (!checkWinLoss(nextMutableTileMap)) {
       setIsAiTurn(true);
       aiTurnRef.current = true;
-      runAiTurn(new Map(activeTileMap), nextEntities, nextBalances);
+      runAiTurn(nextMutableTileMap, nextEntities, nextBalances);
     }
   }, [activeTileMap, entities, territoryBalances, lakeUnitFunds, mutableTileMap, liveOwnerMap, isAiTurn, gameResult, aiOwners, checkWinLoss, runAiTurn]);
 
