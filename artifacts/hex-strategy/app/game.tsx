@@ -497,6 +497,7 @@ export default function GameScreen() {
     currentTileMap: Map<string, HexTile>,
     currentEntities: Map<string, EntityType>,
     currentBalances: Map<string, number>,
+    initialLakeFunds?: Map<string, number>,
   ) => {
     let workingTileMap = new Map(currentTileMap);
     let workingEntities = new Map(currentEntities);
@@ -505,7 +506,7 @@ export default function GameScreen() {
     let workingGraveyard = new Set<string>();
     let workingSpentUnits = new Set<string>();
     let workingFreeTowerUsed = new Map(freeTowerUsedTilesRef.current);
-    let workingLakeFunds = new Map(lakeUnitFundsRef.current);
+    let workingLakeFunds = new Map(initialLakeFunds ?? lakeUnitFundsRef.current);
 
     aiStepHistoryRef.current = [];
     setAiHistoryIndex(-1);
@@ -725,7 +726,7 @@ export default function GameScreen() {
           const srcTerritory = getContiguousTerritory(workingTileMap, unitKey, aiOwner);
           const srcId = getTerritoryId(srcTerritory);
           if (!srcId) return false;
-          return (workingBalances.get(srcId) ?? 0) >= 6;
+          return (workingBalances.get(srcId) ?? 0) >= 4;
         });
         if (filteredMoveTargets.length === 0) continue;
 
@@ -1143,7 +1144,7 @@ export default function GameScreen() {
   const commitPendingLakeMove = useCallback((transferAmount: number) => {
     if (!pendingLakeMove) return;
     const { fromKey, toKey, sourceTerrId, maxAmount } = pendingLakeMove;
-    const amount = Math.min(maxAmount, Math.max(6, transferAmount));
+    const amount = Math.min(maxAmount, Math.max(4, transferAmount));
     setPendingLakeMove(null);
 
     pushHistory();
@@ -1207,8 +1208,8 @@ export default function GameScreen() {
         const sourceTerrId = getTerritoryId(sourceTerritory);
         if (!sourceTerrId) return;
         const sourceBalance = territoryBalances.get(sourceTerrId) ?? 0;
-        if (sourceBalance < 6) return;
-        const defaultAmount = Math.min(sourceBalance, Math.max(6, Math.ceil(sourceBalance * 0.5)));
+        if (sourceBalance < 4) return;
+        const defaultAmount = Math.min(sourceBalance, Math.max(4, Math.ceil(sourceBalance * 0.5)));
         setLakeTransferAmount(defaultAmount);
         setPendingLakeMove({ fromKey: selectedEntityKey, toKey: key, sourceTerrId, maxAmount: sourceBalance });
         return;
@@ -1605,7 +1606,7 @@ export default function GameScreen() {
     if (!checkWinLoss(nextMutableTileMap)) {
       setIsAiTurn(true);
       aiTurnRef.current = true;
-      runAiTurn(nextMutableTileMap, nextEntities, nextBalances);
+      runAiTurn(nextMutableTileMap, nextEntities, nextBalances, nextLakeFunds);
     }
   }, [activeTileMap, entities, territoryBalances, lakeUnitFunds, mutableTileMap, liveOwnerMap, isAiTurn, gameResult, aiOwners, checkWinLoss, runAiTurn]);
 
@@ -1812,7 +1813,7 @@ export default function GameScreen() {
                 />
               ))}
 
-              {borderEdges.map((edge, i) => (
+              {hasSelection && borderEdges.map((edge, i) => (
                 <Line
                   key={i}
                   x1={edge.x1}
@@ -2314,7 +2315,7 @@ export default function GameScreen() {
               <Text style={styles.lakeModalTitle}>⚓ Naval Supply</Text>
               <Text style={styles.lakeModalSubtitle}>
                 How many credits to provision this unit?{'\n'}
-                (minimum 6, max {pendingLakeMove.maxAmount})
+                (minimum 4, max {pendingLakeMove.maxAmount})
               </Text>
 
               <Text style={styles.lakeModalAmount}>{lakeTransferAmount}</Text>
@@ -2322,7 +2323,7 @@ export default function GameScreen() {
               <View style={styles.lakeSliderRow}>
                 <TouchableOpacity
                   style={styles.lakeStepBtn}
-                  onPress={() => setLakeTransferAmount(prev => Math.max(6, prev - 1))}
+                  onPress={() => setLakeTransferAmount(prev => Math.max(4, prev - 1))}
                 >
                   <Text style={styles.lakeStepText}>−</Text>
                 </TouchableOpacity>
@@ -2335,21 +2336,21 @@ export default function GameScreen() {
                   onResponderGrant={e => {
                     const x = e.nativeEvent.locationX;
                     const pct = Math.max(0, Math.min(1, x / sliderTrackWidth));
-                    const range = pendingLakeMove.maxAmount - 6;
-                    setLakeTransferAmount(6 + Math.round(pct * range));
+                    const range = pendingLakeMove.maxAmount - 4;
+                    setLakeTransferAmount(4 + Math.round(pct * range));
                   }}
                   onResponderMove={e => {
                     const x = e.nativeEvent.locationX;
                     const pct = Math.max(0, Math.min(1, x / sliderTrackWidth));
-                    const range = pendingLakeMove.maxAmount - 6;
-                    setLakeTransferAmount(6 + Math.round(pct * range));
+                    const range = pendingLakeMove.maxAmount - 4;
+                    setLakeTransferAmount(4 + Math.round(pct * range));
                   }}
                 >
                   <View
                     style={[
                       styles.lakeTrackFill,
                       {
-                        width: `${pendingLakeMove.maxAmount <= 6 ? 100 : Math.round(((lakeTransferAmount - 6) / (pendingLakeMove.maxAmount - 6)) * 100)}%`,
+                        width: `${pendingLakeMove.maxAmount <= 4 ? 100 : Math.round(((lakeTransferAmount - 4) / (pendingLakeMove.maxAmount - 4)) * 100)}%`,
                       },
                     ]}
                   />
@@ -2357,9 +2358,9 @@ export default function GameScreen() {
                     style={[
                       styles.lakeThumb,
                       {
-                        left: pendingLakeMove.maxAmount <= 6
+                        left: pendingLakeMove.maxAmount <= 4
                           ? sliderTrackWidth - 12
-                          : Math.round(((lakeTransferAmount - 6) / (pendingLakeMove.maxAmount - 6)) * (sliderTrackWidth - 12)),
+                          : Math.round(((lakeTransferAmount - 4) / (pendingLakeMove.maxAmount - 4)) * (sliderTrackWidth - 12)),
                       },
                     ]}
                   />
