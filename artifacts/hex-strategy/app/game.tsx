@@ -240,7 +240,11 @@ export default function GameScreen() {
           if (neighborBase.terrain === tile.terrain) continue;
           const ptA = hexCornerPoint(cx, cy, HEX_SIZE, va);
           const ptB = hexCornerPoint(cx, cy, HEX_SIZE, vb);
-          edges.push({ x1: ptA.x, y1: ptA.y, x2: ptB.x, y2: ptB.y, color: '#000000', width: 2 });
+          const lakeOwnerColor =
+            tile.terrain === 'lake' && liveOwner !== 'neutral'
+              ? (TERRITORY_BORDERS[liveOwner] ?? '#000000')
+              : '#000000';
+          edges.push({ x1: ptA.x, y1: ptA.y, x2: ptB.x, y2: ptB.y, color: lakeOwnerColor, width: lakeOwnerColor !== '#000000' ? 3 : 2 });
         } else {
           const neighborLiveOwner = ownerOf(nk, neighborBase);
           const needsBorder =
@@ -2300,18 +2304,18 @@ export default function GameScreen() {
               </View>
 
               <View style={styles.lakePresetRow}>
-                {[0.25, 0.5, 0.75, 1].map(pct => {
-                  const val = Math.max(6, Math.round(pct * pendingLakeMove.maxAmount));
-                  return (
-                    <TouchableOpacity
-                      key={pct}
-                      style={styles.lakePresetBtn}
-                      onPress={() => setLakeTransferAmount(Math.min(pendingLakeMove.maxAmount, val))}
-                    >
-                      <Text style={styles.lakePresetText}>{Math.round(pct * 100)}%</Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                <TouchableOpacity
+                  style={styles.lakePresetBtn}
+                  onPress={() => setLakeTransferAmount(6)}
+                >
+                  <Text style={styles.lakePresetText}>min.</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.lakePresetBtn}
+                  onPress={() => setLakeTransferAmount(pendingLakeMove.maxAmount)}
+                >
+                  <Text style={styles.lakePresetText}>max.</Text>
+                </TouchableOpacity>
               </View>
 
               <View style={styles.lakeModalButtons}>
