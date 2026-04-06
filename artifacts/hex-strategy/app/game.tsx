@@ -976,8 +976,8 @@ export default function GameScreen() {
     if (affordableTerritoryTileKeys.size > 0 && !armedEntityId && !isAiTurn && gameResult === null) {
       territoryPulseVal.value = withRepeat(
         withSequence(
-          withTiming(0.28, { duration: 1000, easing: Easing.inOut(Easing.sine) }),
-          withTiming(0, { duration: 1000, easing: Easing.inOut(Easing.sine) }),
+          withTiming(0.28, { duration: 1000, easing: Easing.inOut(Easing.sin) }),
+          withTiming(0, { duration: 1000, easing: Easing.inOut(Easing.sin) }),
         ),
         -1,
         false,
