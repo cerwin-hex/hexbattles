@@ -703,5 +703,18 @@ export function generateHexGrid(tileCount: number, playerCount: number): HexTile
     }
   }
 
+  // Final enforcement: every non-mountain tile adjacent to a city must be neutral.
+  // This catches tiles that were converted from mountains after cityBuffer was set.
+  for (const tile of tiles) {
+    if (!tile.isCity) continue;
+    for (const [nq, nr] of getNeighborsOf(tile.q, tile.r)) {
+      const neighbor = tileMap.get(tileKey(nq, nr));
+      if (neighbor && neighbor.terrain !== 'mountain') {
+        neighbor.cityBuffer = true;
+        neighbor.owner = 'neutral';
+      }
+    }
+  }
+
   return tiles;
 }
