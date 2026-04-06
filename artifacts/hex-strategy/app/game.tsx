@@ -180,9 +180,8 @@ export default function GameScreen() {
           continue;
         }
         const neighborLiveOwner = ownerOf(nk, neighborBase);
+        if (neighborBase.terrain === 'mountain' || neighborBase.terrain === 'lake') continue;
         const needsBorder =
-          neighborBase.terrain === 'mountain' ||
-          neighborBase.terrain === 'lake' ||
           neighborLiveOwner === 'neutral' ||
           neighborLiveOwner !== liveOwner;
         if (!needsBorder) continue;
@@ -234,9 +233,8 @@ export default function GameScreen() {
           continue;
         }
         const neighborLiveOwner = ownerOf(nk, neighborBase);
+        if (neighborBase.terrain === 'mountain' || neighborBase.terrain === 'lake') continue;
         const needsBorder =
-          neighborBase.terrain === 'mountain' ||
-          neighborBase.terrain === 'lake' ||
           neighborLiveOwner === 'neutral' ||
           neighborLiveOwner !== liveOwner;
         if (!needsBorder) continue;
@@ -1061,7 +1059,7 @@ export default function GameScreen() {
       const newTileMap = new Map(activeTileMap);
       const targetTile = newTileMap.get(key);
       const movingToLake = targetTile?.terrain === 'lake';
-      if (targetTile && !movingToLake) {
+      if (targetTile) {
         newTileMap.set(key, { ...targetTile, owner: 'player' });
       }
       const newEntities = new Map(entities);
@@ -1098,18 +1096,16 @@ export default function GameScreen() {
         newPartialMoves.delete(key);
       }
 
-      const { balances: newBalances } = movingToLake
-        ? { balances: territoryBalances }
-        : recalculateTerritories(
-            key,
-            previousOwner as TerritoryOwner,
-            activeTileMap,
-            newTileMap,
-            territoryBalances,
-          );
+      const { balances: newBalances } = recalculateTerritories(
+        key,
+        previousOwner as TerritoryOwner,
+        activeTileMap,
+        newTileMap,
+        territoryBalances,
+      );
 
       const newLiveOwnerMap = new Map(liveOwnerMap);
-      if (!movingToLake) newLiveOwnerMap.set(key, 'player');
+      newLiveOwnerMap.set(key, 'player');
 
       setMutableTileMap(newTileMap);
       setLiveOwnerMap(newLiveOwnerMap);
