@@ -58,7 +58,7 @@ Android-first Expo React Native turn-based hexagonal strategy game.
 - `app/index.tsx` — Main menu (Cinzel title, TextInput tile count 40–200, 1–3 opponents, difficulty, "Commence Battle" CTA)
 - `app/game.tsx` — Interactive hex board: SVG terrain tiles, inset territory borders, city neutral-zone ring, zoom/pan, bottom bar (Menu | Build | ⚜️ Credits | End Turn), slide-up purchase ribbon, End Turn pulse animation
 - `app/_layout.tsx` — Stack navigation (index → game), loads Inter + Cinzel fonts
-- `utils/hexGrid.ts` — Hex grid generation: organic BFS shape, terrain (5% Mountain, 15% Desert, 1% City, rest Grass), round-robin territory distribution excluding mountains and cities
+- `utils/hexGrid.ts` — Hex grid generation: organic BFS shape, terrain (8% Mountain, 10% Lake, 14% Desert, 2% City, rest Grass), round-robin territory distribution excluding mountains, lakes, and cities
 - `constants/colors.ts` — Medieval earth palette + TERRAIN_FILLS, TERRITORY_FILLS, TERRITORY_BORDERS, CITY_BORDER_COLOR exports
 
 **Visual style — Medieval theme:**

@@ -167,7 +167,7 @@ export default function GameScreen() {
 
     for (const { tile, cx, cy } of tileData) {
       const liveOwner = ownerOf(tile.key, tile);
-      if (tile.terrain === 'mountain' || liveOwner === 'neutral') continue;
+      if (tile.terrain === 'mountain' || tile.terrain === 'lake' || liveOwner === 'neutral') continue;
       const color = TERRITORY_BORDERS[liveOwner as TerritoryOwner]!;
       if (!color) continue;
       for (const { dir: [dq, dr], verts: [va, vb] } of ORDERED_EDGES) {
@@ -182,6 +182,7 @@ export default function GameScreen() {
         const neighborLiveOwner = ownerOf(nk, neighborBase);
         const needsBorder =
           neighborBase.terrain === 'mountain' ||
+          neighborBase.terrain === 'lake' ||
           neighborLiveOwner === 'neutral' ||
           neighborLiveOwner !== liveOwner;
         if (!needsBorder) continue;
@@ -193,7 +194,7 @@ export default function GameScreen() {
 
     for (const { tile, cx, cy } of tileData) {
       if (!tile.cityBuffer && !tile.isCity) continue;
-      if (tile.terrain === 'mountain') continue;
+      if (tile.terrain === 'mountain' || tile.terrain === 'lake') continue;
       const liveOwner = ownerOf(tile.key, tile);
       if (liveOwner !== 'neutral') continue;
       for (const { dir: [dq, dr], verts: [va, vb] } of ORDERED_EDGES) {
@@ -204,7 +205,7 @@ export default function GameScreen() {
           neighborBase !== undefined &&
           neighborLiveOwner === 'neutral' &&
           (neighborBase.cityBuffer || neighborBase.isCity);
-        const needsBorder = !neighborIsNeutralCity && neighborBase?.terrain !== 'mountain';
+        const needsBorder = !neighborIsNeutralCity && neighborBase?.terrain !== 'mountain' && neighborBase?.terrain !== 'lake';
         if (!needsBorder) continue;
         const ptA = hexCornerPoint(cx, cy, INNER_SIZE, va);
         const ptB = hexCornerPoint(cx, cy, INNER_SIZE, vb);
@@ -222,7 +223,7 @@ export default function GameScreen() {
 
     for (const { tile, cx, cy } of tileData) {
       const liveOwner = ownerOf(tile.key, tile);
-      if (tile.terrain === 'mountain' || liveOwner === 'neutral') continue;
+      if (tile.terrain === 'mountain' || tile.terrain === 'lake' || liveOwner === 'neutral') continue;
       for (const { dir: [dq, dr], verts: [va, vb] } of ORDERED_EDGES) {
         const nk = tileKey(tile.q + dq, tile.r + dr);
         const neighborBase = tileMap.get(nk);
@@ -235,6 +236,7 @@ export default function GameScreen() {
         const neighborLiveOwner = ownerOf(nk, neighborBase);
         const needsBorder =
           neighborBase.terrain === 'mountain' ||
+          neighborBase.terrain === 'lake' ||
           neighborLiveOwner === 'neutral' ||
           neighborLiveOwner !== liveOwner;
         if (!needsBorder) continue;
@@ -410,7 +412,7 @@ export default function GameScreen() {
       const owners: TerritoryOwner[] = ['player', 'ai1', 'ai2', 'ai3', 'ai4', 'ai5'];
       for (const tile of tiles) {
         if (!owners.includes(tile.owner)) continue;
-        if (tile.terrain === 'mountain') continue;
+        if (tile.terrain === 'mountain' || tile.terrain === 'lake') continue;
         if (initialEntities.has(tile.key)) continue;
         if (Math.random() < 0.10) {
           initialEntities.set(tile.key, 'rebel');
@@ -500,7 +502,7 @@ export default function GameScreen() {
             const borderTowerCands: string[] = [];
             const innerTowerCands: string[] = [];
             for (const t of territory) {
-              if (t.terrain === 'mountain' || workingEntities.has(t.key)) continue;
+              if (t.terrain === 'mountain' || t.terrain === 'lake' || workingEntities.has(t.key)) continue;
               const [tq, tr] = t.key.split(',').map(Number);
               const onBorder = HEX_EDGES.some(({ dir: [dq, dr] }) => {
                 const nk = tileKey(tq + dq, tr + dr);
@@ -539,7 +541,7 @@ export default function GameScreen() {
 
         const territoryKeys = new Set(territory.map(t => t.key));
         const vacantInside = territory.filter(
-          t => t.terrain !== 'mountain' && !workingEntities.has(t.key),
+          t => t.terrain !== 'mountain' && t.terrain !== 'lake' && !workingEntities.has(t.key),
         );
 
         // Find adjacent tiles outside the territory that can be captured,
@@ -548,14 +550,14 @@ export default function GameScreen() {
         const enemyAdjacentKeys: string[] = [];
         const neutralAdjacentKeys: string[] = [];
         for (const t of territory) {
-          if (t.terrain === 'mountain') continue;
+          if (t.terrain === 'mountain' || t.terrain === 'lake') continue;
           const [q, r] = t.key.split(',').map(Number);
           for (const { dir: [dq, dr] } of HEX_EDGES) {
             const nk = tileKey(q + dq, r + dr);
             if (territoryKeys.has(nk) || seenAdjacent.has(nk)) continue;
             seenAdjacent.add(nk);
             const neighbor = workingTileMap.get(nk);
-            if (!neighbor || neighbor.terrain === 'mountain') continue;
+            if (!neighbor || neighbor.terrain === 'mountain' || neighbor.terrain === 'lake') continue;
             const existingEntity = workingEntities.get(nk);
             if (existingEntity && existingEntity !== 'rebel') continue;
             const enemyZoC = getMaxEnemyZoC(nk, aiOwner, workingEntities, workingTileMap);
@@ -656,7 +658,7 @@ export default function GameScreen() {
           moveTargets = attackMoves;
         } else {
           const nonAiTiles = Array.from(workingTileMap.values()).filter(t => {
-            if (t.owner === aiOwner || t.terrain === 'mountain') return false;
+            if (t.owner === aiOwner || t.terrain === 'mountain' || t.terrain === 'lake') return false;
             if (t.owner === 'neutral') return true;
             return getMaxEnemyZoC(t.key, aiOwner, workingEntities, workingTileMap) < unitStrength;
           });
@@ -808,14 +810,14 @@ export default function GameScreen() {
     if (!meta.isUnit) return new Set();
     const result = new Set<string>();
     for (const tile of selectedTerritory) {
-      if (tile.terrain === 'mountain') continue;
+      if (tile.terrain === 'mountain' || tile.terrain === 'lake') continue;
       const [q, r] = tile.key.split(',').map(Number);
       for (const { dir: [dq, dr] } of HEX_EDGES) {
         const nk = tileKey(q + dq, r + dr);
         if (selectedTileKeys.has(nk)) continue;
         const neighbor = activeTileMap.get(nk);
         if (!neighbor) continue;
-        if (neighbor.terrain === 'mountain') continue;
+        if (neighbor.terrain === 'mountain' || neighbor.terrain === 'lake') continue;
         const existingEntity = entities.get(nk);
         if (existingEntity && existingEntity !== 'rebel') continue;
         const enemyZoC = getMaxEnemyZoC(nk, 'player', entities, activeTileMap);
@@ -887,6 +889,7 @@ export default function GameScreen() {
     let grassCount = 0;
     let desertCount = 0;
     let mountainCount = 0;
+    let lakeCount = 0;
     let cityCount = 0;
     const upkeepGroupMap = new Map<EntityType, number>();
     let activeGrassCount = 0;
@@ -895,6 +898,7 @@ export default function GameScreen() {
       if (t.terrain === 'grass') grassCount++;
       else if (t.terrain === 'desert') desertCount++;
       else if (t.terrain === 'mountain') mountainCount++;
+      else if (t.terrain === 'lake') lakeCount++;
       const entityId = entities.get(t.key);
       const hasRebel = entityId === 'rebel';
       if (t.isCity || entityId === 'city') cityCount++;
@@ -930,7 +934,7 @@ export default function GameScreen() {
       else if (t.terrain === 'grass') rebelTotalLoss += 1;
     }
     const net = totalIncome - totalUpkeep - rebelTotalLoss;
-    return { grassCount, desertCount, mountainCount, cityCount, grassIncome, cityIncome, upkeepGroups, totalIncome, totalUpkeep, rebelCount, rebelTotalLoss, net };
+    return { grassCount, desertCount, mountainCount, lakeCount, cityCount, grassIncome, cityIncome, upkeepGroups, totalIncome, totalUpkeep, rebelCount, rebelTotalLoss, net };
   }, [selectedTerritory, entities]);
 
   const selectionBorderEdges = useMemo<BorderEdge[]>(() => {
@@ -1056,7 +1060,8 @@ export default function GameScreen() {
       const previousOwner = prevTile?.owner ?? 'neutral';
       const newTileMap = new Map(activeTileMap);
       const targetTile = newTileMap.get(key);
-      if (targetTile) {
+      const movingToLake = targetTile?.terrain === 'lake';
+      if (targetTile && !movingToLake) {
         newTileMap.set(key, { ...targetTile, owner: 'player' });
       }
       const newEntities = new Map(entities);
@@ -1081,7 +1086,7 @@ export default function GameScreen() {
 
       const stepsUsed = getMoveCost(selectedEntityKey, key, activeTileMap);
       const prevRemaining = partialMoves.get(selectedEntityKey) ?? 3;
-      const remainingAfterMove = Math.max(0, prevRemaining - stepsUsed);
+      const remainingAfterMove = movingToLake ? 0 : Math.max(0, prevRemaining - stepsUsed);
 
       const newSpentUnits = new Set(spentUnits);
       const newPartialMoves = new Map(partialMoves);
@@ -1093,16 +1098,18 @@ export default function GameScreen() {
         newPartialMoves.delete(key);
       }
 
-      const { balances: newBalances } = recalculateTerritories(
-        key,
-        previousOwner as TerritoryOwner,
-        activeTileMap,
-        newTileMap,
-        territoryBalances,
-      );
+      const { balances: newBalances } = movingToLake
+        ? { balances: territoryBalances }
+        : recalculateTerritories(
+            key,
+            previousOwner as TerritoryOwner,
+            activeTileMap,
+            newTileMap,
+            territoryBalances,
+          );
 
       const newLiveOwnerMap = new Map(liveOwnerMap);
-      newLiveOwnerMap.set(key, 'player');
+      if (!movingToLake) newLiveOwnerMap.set(key, 'player');
 
       setMutableTileMap(newTileMap);
       setLiveOwnerMap(newLiveOwnerMap);
@@ -1360,7 +1367,7 @@ export default function GameScreen() {
     const rebelSpawns = new Map(nextEntities);
     for (const tile of Array.from(activeTileMap.values())) {
       if (!allOwners.includes(tile.owner)) continue;
-      if (tile.terrain === 'mountain') continue;
+      if (tile.terrain === 'mountain' || tile.terrain === 'lake') continue;
       if (preSpawnEntities.has(tile.key)) continue;
       const [tq, tr] = tile.key.split(',').map(Number);
       const neighborRebelCount = HEX_EDGES.filter(({ dir: [dq, dr] }) => {
@@ -1526,8 +1533,8 @@ export default function GameScreen() {
                 const isCityZone = tile.cityBuffer || tile.isCity;
                 const fill = hasSelection
                   ? (TERRAIN_FILLS[tile.terrain] ?? TERRAIN_FILLS.grass)
-                  : (tile.terrain === 'mountain'
-                      ? TERRAIN_FILLS.mountain
+                  : (tile.terrain === 'mountain' || tile.terrain === 'lake'
+                      ? TERRAIN_FILLS[tile.terrain]
                       : (isCityZone && liveTile.owner === 'neutral')
                         ? CITY_NEUTRAL_FILL
                         : (TERRITORY_FILLS[liveTile.owner] ?? TERRITORY_FILLS.neutral));
@@ -1780,7 +1787,7 @@ export default function GameScreen() {
                   const pos = tileDataMap.get(key);
                   if (!pos) return null;
                   const tile = activeTileMap.get(key);
-                  if (!tile || tile.terrain === 'mountain') return null;
+                  if (!tile || tile.terrain === 'mountain' || tile.terrain === 'lake') return null;
                   return (
                     <Polygon
                       key={`afford-${key}`}
@@ -2092,6 +2099,12 @@ export default function GameScreen() {
               {econBreakdown && econBreakdown.mountainCount > 0 && (
                 <View style={styles.econRow}>
                   <Text style={styles.econRowLabel}>⛰️ Mountain ×{econBreakdown.mountainCount} <Text style={styles.econPer}>(+0 each)</Text></Text>
+                  <Text style={[styles.econRowValue, { color: '#A09070' }]}>+0</Text>
+                </View>
+              )}
+              {econBreakdown && econBreakdown.lakeCount > 0 && (
+                <View style={styles.econRow}>
+                  <Text style={styles.econRowLabel}>🌊 Lake ×{econBreakdown.lakeCount} <Text style={styles.econPer}>(+0 each)</Text></Text>
                   <Text style={[styles.econRowValue, { color: '#A09070' }]}>+0</Text>
                 </View>
               )}

@@ -1,4 +1,4 @@
-export type TerrainType = 'grass' | 'desert' | 'mountain';
+export type TerrainType = 'grass' | 'desert' | 'mountain' | 'lake';
 export type TerritoryOwner = 'neutral' | 'player' | 'ai1' | 'ai2' | 'ai3' | 'ai4' | 'ai5';
 export type EntityType = 'simple_unit' | 'advanced_unit' | 'expert_unit' | 'tower' | 'castle' | 'city' | 'rebel';
 
@@ -130,6 +130,11 @@ export function getValidMoves(
       const neighbor = tileMap.get(nk);
       if (!neighbor) continue;
       if (neighbor.terrain === 'mountain') continue;
+      if (neighbor.terrain === 'lake') {
+        visited.add(nk);
+        if (depth < maxRange) result.add(nk);
+        continue;
+      }
 
       if (neighbor.owner === owner) {
         visited.add(nk);
@@ -207,7 +212,7 @@ export function recalculateTerritories(
     while (q.length > 0) {
       const curr = q.shift()!;
       const t = tileMap.get(curr);
-      if (!t || t.owner !== owner || t.terrain === 'mountain') continue;
+      if (!t || t.owner !== owner || t.terrain === 'mountain' || t.terrain === 'lake') continue;
       cluster.push(t);
       const [cq, cr] = curr.split(',').map(Number);
       for (const { dir: [dq, dr] } of HEX_EDGES) {
@@ -215,7 +220,7 @@ export function recalculateTerritories(
         if (visited.has(nk)) continue;
         visited.add(nk);
         const nt = tileMap.get(nk);
-        if (nt && nt.owner === owner && nt.terrain !== 'mountain') q.push(nk);
+        if (nt && nt.owner === owner && nt.terrain !== 'mountain' && nt.terrain !== 'lake') q.push(nk);
       }
     }
     return cluster;
@@ -312,14 +317,14 @@ export function recalculateTerritoriesForCapture(
 
   function clusterOwner(map: Map<string, HexTile>, startKey: string, owner: TerritoryOwner): HexTile[] {
     const start = map.get(startKey);
-    if (!start || start.owner !== owner || start.terrain === 'mountain') return [];
+    if (!start || start.owner !== owner || start.terrain === 'mountain' || start.terrain === 'lake') return [];
     const cluster: HexTile[] = [];
     const visited = new Set<string>([startKey]);
     const q = [startKey];
     while (q.length > 0) {
       const curr = q.shift()!;
       const t = map.get(curr);
-      if (!t || t.owner !== owner || t.terrain === 'mountain') continue;
+      if (!t || t.owner !== owner || t.terrain === 'mountain' || t.terrain === 'lake') continue;
       cluster.push(t);
       const [cq, cr] = curr.split(',').map(Number);
       for (const { dir: [dq, dr] } of HEX_EDGES) {
@@ -327,7 +332,7 @@ export function recalculateTerritoriesForCapture(
         if (visited.has(nk)) continue;
         visited.add(nk);
         const nt = map.get(nk);
-        if (nt && nt.owner === owner && nt.terrain !== 'mountain') q.push(nk);
+        if (nt && nt.owner === owner && nt.terrain !== 'mountain' && nt.terrain !== 'lake') q.push(nk);
       }
     }
     return cluster;
@@ -415,7 +420,7 @@ export function getContiguousTerritory(
   owner: TerritoryOwner,
 ): HexTile[] {
   const start = tileMap.get(startKey);
-  if (!start || start.owner !== owner || start.terrain === 'mountain') return [];
+  if (!start || start.owner !== owner || start.terrain === 'mountain' || start.terrain === 'lake') return [];
   const visited = new Set<string>([startKey]);
   const queue: string[] = [startKey];
   const result: HexTile[] = [start];
@@ -427,7 +432,7 @@ export function getContiguousTerritory(
       if (visited.has(nk)) continue;
       visited.add(nk);
       const neighbor = tileMap.get(nk);
-      if (neighbor && neighbor.owner === owner && neighbor.terrain !== 'mountain') {
+      if (neighbor && neighbor.owner === owner && neighbor.terrain !== 'mountain' && neighbor.terrain !== 'lake') {
         result.push(neighbor);
         queue.push(nk);
       }
@@ -587,8 +592,9 @@ export function generateHexGrid(tileCount: number, playerCount: number): HexTile
   for (const tile of tiles) {
     const rand = Math.random();
     if (rand < 0.08) tile.terrain = 'mountain';
-    else if (rand < 0.23) tile.terrain = 'desert';
-    else if (rand < 0.25) pendingCityKeys.add(tile.key);
+    else if (rand < 0.18) tile.terrain = 'lake';
+    else if (rand < 0.32) tile.terrain = 'desert';
+    else if (rand < 0.34) pendingCityKeys.add(tile.key);
     else tile.terrain = 'grass';
   }
 
@@ -608,13 +614,13 @@ export function generateHexGrid(tileCount: number, playerCount: number): HexTile
     city.terrain = Math.random() < 0.5 ? 'grass' : 'desert';
     for (const [nq, nr] of getNeighborsOf(city.q, city.r)) {
       const neighbor = tileMap.get(tileKey(nq, nr));
-      if (neighbor && !neighbor.isCity && neighbor.terrain !== 'mountain') {
+      if (neighbor && !neighbor.isCity && neighbor.terrain !== 'mountain' && neighbor.terrain !== 'lake') {
         neighbor.cityBuffer = true;
       }
     }
   }
 
-  const nonMountain = tiles.filter(t => t.terrain !== 'mountain');
+  const nonMountain = tiles.filter(t => t.terrain !== 'mountain' && t.terrain !== 'lake');
   if (nonMountain.length > 1) {
     const reachable = new Set<string>([nonMountain[0].key]);
     const queue: string[] = [nonMountain[0].key];
@@ -624,7 +630,7 @@ export function generateHexGrid(tileCount: number, playerCount: number): HexTile
       for (const [nq, nr] of getNeighborsOf(cq, cr)) {
         const nk = tileKey(nq, nr);
         const neighbor = tileMap.get(nk);
-        if (!reachable.has(nk) && neighbor && neighbor.terrain !== 'mountain') {
+        if (!reachable.has(nk) && neighbor && neighbor.terrain !== 'mountain' && neighbor.terrain !== 'lake') {
           reachable.add(nk);
           queue.push(nk);
         }
@@ -668,7 +674,7 @@ export function generateHexGrid(tileCount: number, playerCount: number): HexTile
   ).slice(0, clampedPlayers);
 
   const assignable = tiles.filter(
-    t => t.terrain !== 'mountain' && !t.isCity && !t.cityBuffer,
+    t => t.terrain !== 'mountain' && t.terrain !== 'lake' && !t.isCity && !t.cityBuffer,
   );
 
   for (let i = assignable.length - 1; i > 0; i--) {
@@ -686,7 +692,7 @@ export function generateHexGrid(tileCount: number, playerCount: number): HexTile
     if (!tile.isCity) continue;
     for (const [nq, nr] of getNeighborsOf(tile.q, tile.r)) {
       const neighbor = tileMap.get(tileKey(nq, nr));
-      if (neighbor && neighbor.terrain !== 'mountain') {
+      if (neighbor && neighbor.terrain !== 'mountain' && neighbor.terrain !== 'lake') {
         neighbor.cityBuffer = true;
         neighbor.owner = 'neutral';
       }
