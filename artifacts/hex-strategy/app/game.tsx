@@ -875,23 +875,6 @@ export default function GameScreen() {
     return () => { cancelAnimation(pulseVal); };
   }, [shouldPulseEndTurn, armedEntityId, ribbonOpen]);
 
-  useEffect(() => {
-    if (affordableTerritoryTileKeys.size > 0 && !armedEntityId && !isAiTurn && gameResult === null) {
-      territoryPulseVal.value = withRepeat(
-        withSequence(
-          withTiming(0.28, { duration: 1000, easing: Easing.inOut(Easing.sine) }),
-          withTiming(0, { duration: 1000, easing: Easing.inOut(Easing.sine) }),
-        ),
-        -1,
-        false,
-      );
-    } else {
-      cancelAnimation(territoryPulseVal);
-      territoryPulseVal.value = withTiming(0, { duration: 300 });
-    }
-    return () => { cancelAnimation(territoryPulseVal); };
-  }, [affordableTerritoryTileKeys.size, armedEntityId, isAiTurn, gameResult]);
-
   const canBuild = selectedTerritory.length > 0;
 
   const territoryHasCity = useMemo(
@@ -988,6 +971,23 @@ export default function GameScreen() {
     }
     return keys;
   }, [activeTileMap, territoryBalances, minUnitCost, freeTowerUsedTiles, isAiTurn, gameResult]);
+
+  useEffect(() => {
+    if (affordableTerritoryTileKeys.size > 0 && !armedEntityId && !isAiTurn && gameResult === null) {
+      territoryPulseVal.value = withRepeat(
+        withSequence(
+          withTiming(0.28, { duration: 1000, easing: Easing.inOut(Easing.sine) }),
+          withTiming(0, { duration: 1000, easing: Easing.inOut(Easing.sine) }),
+        ),
+        -1,
+        false,
+      );
+    } else {
+      cancelAnimation(territoryPulseVal);
+      territoryPulseVal.value = withTiming(0, { duration: 300 });
+    }
+    return () => { cancelAnimation(territoryPulseVal); };
+  }, [affordableTerritoryTileKeys.size, armedEntityId, isAiTurn, gameResult]);
 
   const devEconomicOverlays = useMemo<Array<{ cx: number; cy: number; label: string }>>(() => {
     if (!isDeveloperModeActive) return [];
