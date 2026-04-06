@@ -680,29 +680,6 @@ export function generateHexGrid(tileCount: number, playerCount: number): HexTile
     assignable[i].owner = ownerList[i % ownerList.length];
   }
 
-  for (const tile of tiles) {
-    if (tile.terrain !== 'mountain') continue;
-    const hasMountainNeighbor = getNeighborsOf(tile.q, tile.r).some(([nq, nr]) => {
-      const t = tileMap.get(tileKey(nq, nr));
-      return t && t.terrain === 'mountain';
-    });
-    if (!hasMountainNeighbor) {
-      tile.terrain = 'grass';
-      if (tile.cityBuffer || tile.isCity) continue;
-      const neighborOwners = getNeighborsOf(tile.q, tile.r)
-        .map(([nq, nr]) => tileMap.get(tileKey(nq, nr))?.owner)
-        .filter((o): o is TerritoryOwner => !!o && o !== 'neutral');
-      if (neighborOwners.length > 0) {
-        const counts = new Map<TerritoryOwner, number>();
-        for (const o of neighborOwners) counts.set(o, (counts.get(o) ?? 0) + 1);
-        const best = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
-        tile.owner = best;
-      } else {
-        tile.owner = ownerList[Math.floor(Math.random() * ownerList.length)];
-      }
-    }
-  }
-
   // Final enforcement: every non-mountain tile adjacent to a city must be neutral.
   // This catches tiles that were converted from mountains after cityBuffer was set.
   for (const tile of tiles) {
