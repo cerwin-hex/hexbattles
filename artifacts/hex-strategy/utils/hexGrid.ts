@@ -608,7 +608,7 @@ export function generateHexGrid(tileCount: number, playerCount: number): HexTile
     city.terrain = Math.random() < 0.5 ? 'grass' : 'desert';
     for (const [nq, nr] of getNeighborsOf(city.q, city.r)) {
       const neighbor = tileMap.get(tileKey(nq, nr));
-      if (neighbor && !neighbor.isCity) {
+      if (neighbor && !neighbor.isCity && neighbor.terrain !== 'mountain') {
         neighbor.cityBuffer = true;
       }
     }

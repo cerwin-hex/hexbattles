@@ -193,6 +193,7 @@ export default function GameScreen() {
 
     for (const { tile, cx, cy } of tileData) {
       if (!tile.cityBuffer && !tile.isCity) continue;
+      if (tile.terrain === 'mountain') continue;
       const liveOwner = ownerOf(tile.key, tile);
       if (liveOwner !== 'neutral') continue;
       for (const { dir: [dq, dr], verts: [va, vb] } of ORDERED_EDGES) {
