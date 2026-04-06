@@ -271,6 +271,7 @@ export default function GameScreen() {
   }, [initX, initY, fitScale]);
 
   const pulseVal = useSharedValue(1);
+  const territoryPulseVal = useSharedValue(0);
 
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [showEconModal, setShowEconModal] = useState(false);
@@ -874,6 +875,23 @@ export default function GameScreen() {
     return () => { cancelAnimation(pulseVal); };
   }, [shouldPulseEndTurn, armedEntityId, ribbonOpen]);
 
+  useEffect(() => {
+    if (affordableTerritoryTileKeys.size > 0 && !armedEntityId && !isAiTurn && gameResult === null) {
+      territoryPulseVal.value = withRepeat(
+        withSequence(
+          withTiming(0.28, { duration: 1000, easing: Easing.inOut(Easing.sine) }),
+          withTiming(0, { duration: 1000, easing: Easing.inOut(Easing.sine) }),
+        ),
+        -1,
+        false,
+      );
+    } else {
+      cancelAnimation(territoryPulseVal);
+      territoryPulseVal.value = withTiming(0, { duration: 300 });
+    }
+    return () => { cancelAnimation(territoryPulseVal); };
+  }, [affordableTerritoryTileKeys.size, armedEntityId, isAiTurn, gameResult]);
+
   const canBuild = selectedTerritory.length > 0;
 
   const territoryHasCity = useMemo(
@@ -951,9 +969,11 @@ export default function GameScreen() {
     return edges;
   }, [selectedTileKeys, tileDataMap, tileMap, INNER_SIZE]);
 
-  const flagTileKeys = useMemo<Set<string>>(() => {
+  const affordableTerritoryTileKeys = useMemo<Set<string>>(() => {
+    if (isAiTurn || gameResult !== null) return new Set();
     const keys = new Set<string>();
     const visited = new Set<string>();
+    const playerFreeTowerUsed = freeTowerUsedTiles.get('player') ?? new Set<string>();
     for (const tile of Array.from(activeTileMap.values())) {
       if (tile.owner !== 'player' || visited.has(tile.key)) continue;
       const territory = getContiguousTerritory(activeTileMap, tile.key, 'player');
@@ -961,19 +981,13 @@ export default function GameScreen() {
       const id = getTerritoryId(territory);
       if (!id) continue;
       const balance = territoryBalances.get(id) ?? 0;
-      if (balance < 10) continue;
-      const cityTile = territory.find(t => (t.isCity || entities.get(t.key) === 'city') && entities.get(t.key) !== 'rebel');
-      const centralTile = findCentralTile(territory);
-      const candidate = cityTile ?? centralTile;
-      if (!candidate) continue;
-      const target = entities.get(candidate.key) === 'rebel'
-        ? territory.find(t => !entities.has(t.key) && t.terrain !== 'mountain') ?? null
-        : candidate;
-      if (!target) continue;
-      keys.add(target.key);
+      const towerFree = territory.length >= 2 && !territory.some(t => playerFreeTowerUsed.has(t.key));
+      const canAfford = balance >= minUnitCost || towerFree;
+      if (!canAfford) continue;
+      for (const t of territory) keys.add(t.key);
     }
     return keys;
-  }, [activeTileMap, territoryBalances, entities]);
+  }, [activeTileMap, territoryBalances, minUnitCost, freeTowerUsedTiles, isAiTurn, gameResult]);
 
   const devEconomicOverlays = useMemo<Array<{ cx: number; cy: number; label: string }>>(() => {
     if (!isDeveloperModeActive) return [];
@@ -1479,6 +1493,10 @@ export default function GameScreen() {
     opacity: pulseVal.value,
   }));
 
+  const territoryPulseStyle = useAnimatedStyle(() => ({
+    opacity: territoryPulseVal.value,
+  }));
+
   const ribbonStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: ribbonAnim.value }],
   }));
@@ -1754,23 +1772,25 @@ export default function GameScreen() {
                 );
               })}
 
-              {Array.from(flagTileKeys).filter(key => !selectedTileKeys.has(key) && (!entities.has(key) || entities.get(key) === 'city')).map(key => {
-                const pos = tileDataMap.get(key);
-                if (!pos) return null;
-                const fs = HEX_SIZE * 0.58;
-                return (
-                  <SvgText
-                    key={`flag-${key}`}
-                    x={pos.cx}
-                    y={pos.cy + fs * 0.38}
-                    textAnchor="middle"
-                    fontSize={fs}
-                  >
-                    🚩
-                  </SvgText>
-                );
-              })}
             </Svg>
+
+            <Animated.View style={[StyleSheet.absoluteFillObject, territoryPulseStyle]} pointerEvents="none">
+              <Svg width={boardW} height={boardH}>
+                {Array.from(affordableTerritoryTileKeys).map(key => {
+                  const pos = tileDataMap.get(key);
+                  if (!pos) return null;
+                  const tile = activeTileMap.get(key);
+                  if (!tile || tile.terrain === 'mountain') return null;
+                  return (
+                    <Polygon
+                      key={`afford-${key}`}
+                      points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
+                      fill="white"
+                    />
+                  );
+                })}
+              </Svg>
+            </Animated.View>
 
             <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
               {Array.from(entities.entries()).map(([key, entityId]) => {
