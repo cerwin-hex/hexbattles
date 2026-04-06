@@ -314,6 +314,10 @@ export default function GameScreen() {
   const [isAiPaused, setIsAiPaused] = useState(false);
   const resumeAiRef = useRef<(() => void) | null>(null);
   const isDeveloperModeRef = useRef(false);
+  const [freeTowerUsedTiles, setFreeTowerUsedTiles] = useState<Map<TerritoryOwner, Set<string>>>(new Map());
+  const freeTowerUsedTilesRef = useRef<Map<TerritoryOwner, Set<string>>>(new Map());
+
+  useEffect(() => { freeTowerUsedTilesRef.current = freeTowerUsedTiles; }, [freeTowerUsedTiles]);
 
   useEffect(() => {
     isDeveloperModeRef.current = isDeveloperModeActive;
@@ -360,6 +364,7 @@ export default function GameScreen() {
       setMutableTileMap(new Map(tileMap));
       setLiveOwnerMap(new Map());
       setGraveyard(new Set());
+      setFreeTowerUsedTiles(new Map());
 
       const initialEntities = new Map<string, EntityType>();
       const owners: TerritoryOwner[] = ['player', 'ai1', 'ai2', 'ai3', 'ai4', 'ai5'];
@@ -422,6 +427,7 @@ export default function GameScreen() {
     let workingLiveOwnerMap = new Map<string, TerritoryOwner>();
     let workingGraveyard = new Set<string>();
     let workingSpentUnits = new Set<string>();
+    let workingFreeTowerUsed = new Map(freeTowerUsedTilesRef.current);
 
     for (const aiOwner of aiOwners) {
       if (aiTurnRef.current === false) return;
@@ -436,6 +442,42 @@ export default function GameScreen() {
         for (const t of territory) visited.add(t.key);
         const territoryId = getTerritoryId(territory);
         if (!territoryId) continue;
+
+        // Free tower: each territory with ≥2 tiles may build one free tower
+        if (territory.length >= 2) {
+          const aiUsedSet = workingFreeTowerUsed.get(aiOwner);
+          const hasUsedFreeTower = !!aiUsedSet && territory.some(t => aiUsedSet.has(t.key));
+          if (!hasUsedFreeTower) {
+            const borderTowerCands: string[] = [];
+            const innerTowerCands: string[] = [];
+            for (const t of territory) {
+              if (t.terrain === 'mountain' || workingEntities.has(t.key)) continue;
+              const [tq, tr] = t.key.split(',').map(Number);
+              const onBorder = HEX_EDGES.some(({ dir: [dq, dr] }) => {
+                const nk = tileKey(tq + dq, tr + dr);
+                const nb = workingTileMap.get(nk);
+                return !!nb && nb.owner !== aiOwner;
+              });
+              if (onBorder) borderTowerCands.push(t.key);
+              else innerTowerCands.push(t.key);
+            }
+            const towerCands = borderTowerCands.length > 0 ? borderTowerCands : innerTowerCands;
+            if (towerCands.length > 0) {
+              const towerKey = towerCands[Math.floor(Math.random() * towerCands.length)];
+              workingEntities = new Map(workingEntities);
+              workingEntities.set(towerKey, 'tower');
+              const newOwnerSet = new Set(workingFreeTowerUsed.get(aiOwner) ?? []);
+              for (const t of territory) newOwnerSet.add(t.key);
+              workingFreeTowerUsed = new Map(workingFreeTowerUsed);
+              workingFreeTowerUsed.set(aiOwner, newOwnerSet);
+              setFreeTowerUsedTiles(new Map(workingFreeTowerUsed));
+              setEntities(new Map(workingEntities));
+              await awaitStep();
+              if (!aiTurnRef.current) return;
+            }
+          }
+        }
+
         const balance = workingBalances.get(territoryId) ?? 0;
         if (balance < 10) continue;
 
@@ -1005,7 +1047,13 @@ export default function GameScreen() {
       if (!alreadyOccupied && selectedTerritoryId) {
         const meta = ENTITY_META[armedEntityId];
         const balance = territoryBalances.get(selectedTerritoryId) ?? 0;
-        if (balance >= meta.cost) {
+        const placingTower = armedEntityId === 'tower';
+        const playerUsedSet = freeTowerUsedTiles.get('player') ?? new Set<string>();
+        const towerIsFree = placingTower
+          && selectedTerritory.length >= 2
+          && !selectedTerritory.some(t => playerUsedSet.has(t.key));
+        const effectiveCost = towerIsFree ? 0 : meta.cost;
+        if (balance >= effectiveCost) {
           pushHistory();
           const newEntities = new Map(entities);
           const newSpentUnits = new Set(spentUnits);
@@ -1028,7 +1076,16 @@ export default function GameScreen() {
             }
           }
           setEntities(newEntities);
-          setTerritoryBalances(prev => { const next = new Map(prev); next.set(selectedTerritoryId, balance - meta.cost); return next; });
+          setTerritoryBalances(prev => { const next = new Map(prev); next.set(selectedTerritoryId, balance - effectiveCost); return next; });
+          if (towerIsFree) {
+            setFreeTowerUsedTiles(prev => {
+              const next = new Map(prev);
+              const ownerSet = new Set(prev.get('player') ?? []);
+              for (const t of selectedTerritory) ownerSet.add(t.key);
+              next.set('player', ownerSet);
+              return next;
+            });
+          }
           setSpentUnits(newSpentUnits);
           setPartialMoves(newPartialMoves);
           setArmedEntityId(null);
@@ -1691,13 +1748,22 @@ export default function GameScreen() {
           contentContainerStyle={styles.ribbonContent}
         >
           {(ribbonMode === 'units' ? UNIT_PURCHASABLES : BUILDING_PURCHASABLES).map(item => {
-            const affordable = item.cost <= selectedTerritoryBalance;
             const isArmed = armedEntityId === item.id;
             const cityAlreadyBuilt = item.id === 'city' && territoryHasCity;
             const cityTooSmall = item.id === 'city' && selectedTerritory.length < 6;
             const cityLocked = cityAlreadyBuilt || cityTooSmall;
+            const isTower = item.id === 'tower';
+            const playerUsedTilesSet = freeTowerUsedTiles.get('player') ?? new Set<string>();
+            const playerTowerFree = isTower
+              && selectedTerritory.length >= 2
+              && !selectedTerritory.some(t => playerUsedTilesSet.has(t.key));
+            const effectiveCost = playerTowerFree ? 0 : item.cost;
+            const affordable = effectiveCost <= selectedTerritoryBalance;
             const enabled = affordable && !cityLocked;
-            const costLabel = cityAlreadyBuilt ? 'Built' : cityTooSmall ? '<6 tiles' : `${item.cost}g`;
+            const costLabel = cityAlreadyBuilt ? 'Built'
+              : cityTooSmall ? '<6 tiles'
+              : playerTowerFree ? 'FREE'
+              : `${item.cost}g`;
             return (
               <TouchableOpacity
                 key={item.id}
@@ -1716,7 +1782,7 @@ export default function GameScreen() {
                 <Text style={[styles.ribbonName, !enabled && styles.ribbonDim, isArmed && styles.ribbonNameArmed]}>
                   {item.name}
                 </Text>
-                <Text style={[styles.ribbonCost, !enabled && styles.ribbonDim, isArmed && styles.ribbonNameArmed]}>
+                <Text style={[styles.ribbonCost, !enabled && styles.ribbonDim, isArmed && styles.ribbonNameArmed, playerTowerFree && styles.ribbonCostFree]}>
                   {costLabel}
                 </Text>
               </TouchableOpacity>
@@ -2111,6 +2177,10 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontFamily: 'Inter_500Medium',
     color: '#A08C68',
+  },
+  ribbonCostFree: {
+    color: '#44DD88',
+    fontFamily: 'Cinzel_700Bold',
   },
   ribbonDim: {
     color: '#786848',
