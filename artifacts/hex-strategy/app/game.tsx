@@ -304,6 +304,7 @@ export default function GameScreen() {
     spentUnits: Set<string>;
     liveOwnerMap: Map<string, TerritoryOwner>;
     partialMoves: Map<string, number>;
+    freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
   }>>([]);
   const [isAiTurn, setIsAiTurn] = useState(false);
   const [gameResult, setGameResult] = useState<'victory' | 'defeat' | null>(null);
@@ -319,6 +320,18 @@ export default function GameScreen() {
 
   useEffect(() => { freeTowerUsedTilesRef.current = freeTowerUsedTiles; }, [freeTowerUsedTiles]);
 
+  type AiStepSnapshot = {
+    entities: Map<string, EntityType>;
+    mutableTileMap: Map<string, HexTile>;
+    territoryBalances: Map<string, number>;
+    liveOwnerMap: Map<string, TerritoryOwner>;
+    graveyard: Set<string>;
+    freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
+  };
+  const aiStepHistoryRef = useRef<AiStepSnapshot[]>([]);
+  const [aiHistoryIndex, setAiHistoryIndex] = useState(-1);
+  const [aiHistoryLen, setAiHistoryLen] = useState(0);
+
   useEffect(() => {
     isDeveloperModeRef.current = isDeveloperModeActive;
     if (!isDeveloperModeActive && isAiPaused) {
@@ -327,9 +340,33 @@ export default function GameScreen() {
     }
   }, [isDeveloperModeActive, isAiPaused]);
 
-  const handleAiStepNext = useCallback(() => {
-    resumeAiRef.current?.();
+  const restoreAiSnapshot = useCallback((snap: AiStepSnapshot) => {
+    setEntities(snap.entities);
+    setMutableTileMap(snap.mutableTileMap);
+    setTerritoryBalances(snap.territoryBalances);
+    setLiveOwnerMap(snap.liveOwnerMap);
+    setGraveyard(snap.graveyard);
+    setFreeTowerUsedTiles(snap.freeTowerUsedTiles);
   }, []);
+
+  const handleAiStepNext = useCallback(() => {
+    const currentLen = aiStepHistoryRef.current.length;
+    const next = aiHistoryIndex + 1;
+    if (next < currentLen) {
+      restoreAiSnapshot(aiStepHistoryRef.current[next]);
+      setAiHistoryIndex(next);
+    } else {
+      resumeAiRef.current?.();
+      resumeAiRef.current = null;
+    }
+  }, [aiHistoryIndex, restoreAiSnapshot]);
+
+  const handleAiStepBack = useCallback(() => {
+    const prev = aiHistoryIndex - 1;
+    if (prev < 0) return;
+    restoreAiSnapshot(aiStepHistoryRef.current[prev]);
+    setAiHistoryIndex(prev);
+  }, [aiHistoryIndex, restoreAiSnapshot]);
 
   const idleBounceY = useSharedValue(0);
   useEffect(() => {
@@ -405,7 +442,12 @@ export default function GameScreen() {
 
   const delay = (ms: number) => new Promise<void>(res => setTimeout(res, ms));
 
-  const awaitStep = useCallback(async () => {
+  const awaitStep = useCallback(async (afterSnap: AiStepSnapshot) => {
+    const newHistory = [...aiStepHistoryRef.current, afterSnap];
+    aiStepHistoryRef.current = newHistory;
+    const newIdx = newHistory.length - 1;
+    setAiHistoryIndex(newIdx);
+    setAiHistoryLen(newHistory.length);
     if (isDeveloperModeRef.current) {
       setIsAiPaused(true);
       await new Promise<void>(resolve => { resumeAiRef.current = resolve; });
@@ -428,6 +470,18 @@ export default function GameScreen() {
     let workingGraveyard = new Set<string>();
     let workingSpentUnits = new Set<string>();
     let workingFreeTowerUsed = new Map(freeTowerUsedTilesRef.current);
+
+    const initialSnap: AiStepSnapshot = {
+      entities: new Map(workingEntities),
+      mutableTileMap: new Map(workingTileMap),
+      territoryBalances: new Map(workingBalances),
+      liveOwnerMap: new Map(workingLiveOwnerMap),
+      graveyard: new Set(workingGraveyard),
+      freeTowerUsedTiles: new Map([...workingFreeTowerUsed.entries()].map(([k, v]) => [k, new Set(v)])),
+    };
+    aiStepHistoryRef.current = [initialSnap];
+    setAiHistoryIndex(0);
+    setAiHistoryLen(1);
 
     for (const aiOwner of aiOwners) {
       if (aiTurnRef.current === false) return;
@@ -472,7 +526,14 @@ export default function GameScreen() {
               workingFreeTowerUsed.set(aiOwner, newOwnerSet);
               setFreeTowerUsedTiles(new Map(workingFreeTowerUsed));
               setEntities(new Map(workingEntities));
-              await awaitStep();
+              await awaitStep({
+                entities: new Map(workingEntities),
+                mutableTileMap: new Map(workingTileMap),
+                territoryBalances: new Map(workingBalances),
+                liveOwnerMap: new Map(workingLiveOwnerMap),
+                graveyard: new Set(workingGraveyard),
+                freeTowerUsedTiles: new Map([...workingFreeTowerUsed.entries()].map(([k, v]) => [k, new Set(v)])),
+              });
               if (!aiTurnRef.current) return;
             }
           }
@@ -554,7 +615,14 @@ export default function GameScreen() {
 
         setEntities(new Map(workingEntities));
         setTerritoryBalances(new Map(workingBalances));
-        await awaitStep();
+        await awaitStep({
+          entities: new Map(workingEntities),
+          mutableTileMap: new Map(workingTileMap),
+          territoryBalances: new Map(workingBalances),
+          liveOwnerMap: new Map(workingLiveOwnerMap),
+          graveyard: new Set(workingGraveyard),
+          freeTowerUsedTiles: new Map([...workingFreeTowerUsed.entries()].map(([k, v]) => [k, new Set(v)])),
+        });
         if (!aiTurnRef.current) return;
       }
 
@@ -658,7 +726,14 @@ export default function GameScreen() {
         setEntities(new Map(workingEntities));
         setTerritoryBalances(new Map(workingBalances));
         setGraveyard(new Set(workingGraveyard));
-        await awaitStep();
+        await awaitStep({
+          entities: new Map(workingEntities),
+          mutableTileMap: new Map(workingTileMap),
+          territoryBalances: new Map(workingBalances),
+          liveOwnerMap: new Map(workingLiveOwnerMap),
+          graveyard: new Set(workingGraveyard),
+          freeTowerUsedTiles: new Map([...workingFreeTowerUsed.entries()].map(([k, v]) => [k, new Set(v)])),
+        });
         if (!aiTurnRef.current) return;
       }
     }
@@ -948,9 +1023,10 @@ export default function GameScreen() {
         spentUnits: new Set(spentUnits),
         liveOwnerMap: new Map(liveOwnerMap),
         partialMoves: new Map(partialMoves),
+        freeTowerUsedTiles: new Map([...freeTowerUsedTiles.entries()].map(([k, v]) => [k, new Set(v)])),
       },
     ]);
-  }, [entities, mutableTileMap, territoryBalances, spentUnits, liveOwnerMap, partialMoves]);
+  }, [entities, mutableTileMap, territoryBalances, spentUnits, liveOwnerMap, partialMoves, freeTowerUsedTiles]);
 
   const handleDeselect = useCallback(() => {
     if (Date.now() - lastTileTapMs.current < 150) return;
@@ -1179,6 +1255,7 @@ export default function GameScreen() {
       setSpentUnits(snapshot.spentUnits);
       setLiveOwnerMap(snapshot.liveOwnerMap);
       setPartialMoves(snapshot.partialMoves);
+      setFreeTowerUsedTiles(snapshot.freeTowerUsedTiles);
       setSelectedEntityKey(null);
       setSelectedTileKey(null);
       setArmedEntityId(null);
@@ -1928,12 +2005,21 @@ export default function GameScreen() {
             );
           })}
 
+          {isDeveloperModeActive && isAiPaused && aiHistoryIndex > 0 && (
+            <TouchableOpacity style={styles.prevActionBtn} onPress={handleAiStepBack}>
+              <Ionicons name="arrow-back" size={13} color="#00FF88" />
+              <Text style={styles.nextActionBtnText}>Prev</Text>
+            </TouchableOpacity>
+          )}
+
           {isDeveloperModeActive && isAiPaused && (
             <TouchableOpacity
               style={styles.nextActionBtn}
               onPress={handleAiStepNext}
             >
-              <Text style={styles.nextActionBtnText}>Next</Text>
+              <Text style={styles.nextActionBtnText}>
+                {aiHistoryIndex < aiHistoryLen - 1 ? 'Next ▶' : 'Next'}
+              </Text>
               <Ionicons name="arrow-forward" size={13} color="#00FF88" />
             </TouchableOpacity>
           )}
@@ -1971,8 +2057,8 @@ export default function GameScreen() {
       </Modal>
 
       <Modal visible={showEconModal} transparent animationType="fade" onRequestClose={() => setShowEconModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.econCard}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowEconModal(false)}>
+          <View style={styles.econCard} onStartShouldSetResponder={() => true}>
             <Text style={styles.econTitle}>Economy Breakdown</Text>
             <View style={styles.econSection}>
               <Text style={styles.econSectionLabel}>INCOME / TURN</Text>
@@ -2033,7 +2119,7 @@ export default function GameScreen() {
               <Text style={styles.econCloseBtnText}>Close</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </TouchableOpacity>
       </Modal>
 
       <Modal visible={gameResult !== null} transparent animationType="fade">
@@ -2056,6 +2142,9 @@ export default function GameScreen() {
                 aiTurnRef.current = false;
                 resumeAiRef.current?.();
                 resumeAiRef.current = null;
+                aiStepHistoryRef.current = [];
+                setAiHistoryIndex(-1);
+                setAiHistoryLen(0);
                 setGameResult(null);
                 setIsAiTurn(false);
                 setIsDeveloperModeActive(false);
@@ -2486,6 +2575,17 @@ const styles = StyleSheet.create({
   },
   devBtnTextActive: {
     color: '#00FF88',
+  },
+  prevActionBtn: {
+    height: BTN_H,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: '#00BB66',
+    backgroundColor: '#002211',
   },
   nextActionBtn: {
     height: BTN_H,
