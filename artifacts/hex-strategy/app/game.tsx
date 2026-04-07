@@ -336,6 +336,7 @@ export default function GameScreen() {
   const freeTowerUsedTilesRef = useRef<Map<TerritoryOwner, Set<string>>>(new Map());
   const [lakeUnitFunds, setLakeUnitFunds] = useState<Map<string, number>>(new Map());
   const lakeUnitFundsRef = useRef<Map<string, number>>(new Map());
+  const graveyardRef = useRef<Set<string>>(new Set());
   const [pendingLakeMove, setPendingLakeMove] = useState<{
     fromKey: string;
     toKey: string;
@@ -347,6 +348,7 @@ export default function GameScreen() {
 
   useEffect(() => { freeTowerUsedTilesRef.current = freeTowerUsedTiles; }, [freeTowerUsedTiles]);
   useEffect(() => { lakeUnitFundsRef.current = lakeUnitFunds; }, [lakeUnitFunds]);
+  useEffect(() => { graveyardRef.current = graveyard; }, [graveyard]);
 
   type AiStepSnapshot = {
     entities: Map<string, EntityType>;
@@ -494,12 +496,13 @@ export default function GameScreen() {
     currentEntities: Map<string, EntityType>,
     currentBalances: Map<string, number>,
     initialLakeFunds?: Map<string, number>,
+    currentTurn?: number,
   ) => {
     let workingTileMap = new Map(currentTileMap);
     let workingEntities = new Map(currentEntities);
     let workingBalances = new Map(currentBalances);
     let workingLiveOwnerMap = new Map<string, TerritoryOwner>();
-    let workingGraveyard = new Set<string>();
+    let workingGraveyard = new Set(graveyardRef.current);
     let workingSpentUnits = new Set<string>();
     let workingFreeTowerUsed = new Map(freeTowerUsedTilesRef.current);
     let workingLakeFunds = new Map(initialLakeFunds ?? lakeUnitFundsRef.current);
@@ -522,15 +525,15 @@ export default function GameScreen() {
         const territoryId = getTerritoryId(territory);
         if (!territoryId) continue;
 
-        // Free tower: each territory with ≥2 tiles may build one free tower
-        if (territory.length >= 2) {
+        // Free tower: each territory with ≥2 tiles may build one free tower, round 1 only
+        if (territory.length >= 2 && currentTurn === 1) {
           const aiUsedSet = workingFreeTowerUsed.get(aiOwner);
           const hasUsedFreeTower = !!aiUsedSet && territory.some(t => aiUsedSet.has(t.key));
           if (!hasUsedFreeTower) {
             const borderTowerCands: string[] = [];
             const innerTowerCands: string[] = [];
             for (const t of territory) {
-              if (t.terrain === 'mountain' || t.terrain === 'lake' || workingEntities.has(t.key)) continue;
+              if (t.terrain === 'mountain' || t.terrain === 'lake' || workingEntities.has(t.key) || workingGraveyard.has(t.key)) continue;
               const [tq, tr] = t.key.split(',').map(Number);
               const onBorder = HEX_EDGES.some(({ dir: [dq, dr] }) => {
                 const nk = tileKey(tq + dq, tr + dr);
@@ -1316,10 +1319,12 @@ export default function GameScreen() {
         const placingTower = armedEntityId === 'tower';
         const playerUsedSet = freeTowerUsedTiles.get('player') ?? new Set<string>();
         const towerIsFree = placingTower
+          && turn === 1
           && selectedTerritory.length >= 2
           && !selectedTerritory.some(t => playerUsedSet.has(t.key));
+        const blockedByGraveyard = !meta.isUnit && graveyard.has(key);
         const effectiveCost = towerIsFree ? 0 : meta.cost;
-        if (balance >= effectiveCost) {
+        if (balance >= effectiveCost && !blockedByGraveyard) {
           pushHistory();
           const newEntities = new Map(entities);
           const newSpentUnits = new Set(spentUnits);
@@ -1432,7 +1437,7 @@ export default function GameScreen() {
     setSelectedEntityKey(null);
     setArmedEntityId(null);
     if (ribbonOpen) closeRibbon();
-  }, [activeTileMap, selectedTileKeys, armedEntityId, entities, selectedTerritoryId, territoryBalances, ribbonOpen, selectedEntityKey, validMoveTiles, validPlacementAttackTiles, spentUnits, liveOwnerMap, lakeUnitFunds, isAiTurn, gameResult, checkWinLoss, pushHistory]);
+  }, [activeTileMap, selectedTileKeys, armedEntityId, entities, selectedTerritoryId, territoryBalances, ribbonOpen, selectedEntityKey, validMoveTiles, validPlacementAttackTiles, spentUnits, liveOwnerMap, lakeUnitFunds, isAiTurn, gameResult, graveyard, turn, freeTowerUsedTiles, checkWinLoss, pushHistory]);
 
   const handleUndo = useCallback(() => {
     if (isAiTurn || gameResult !== null) return;
@@ -1531,6 +1536,8 @@ export default function GameScreen() {
     }
 
     for (const gravKey of Array.from(graveyard)) {
+      const gravTile = activeTileMap.get(gravKey);
+      if (gravTile?.terrain === 'lake') continue;
       if (!nextEntities.has(gravKey) && Math.random() < 0.5) {
         nextEntities = new Map(nextEntities);
         nextEntities.set(gravKey, 'rebel');
@@ -1600,9 +1607,9 @@ export default function GameScreen() {
     if (!checkWinLoss(nextMutableTileMap)) {
       setIsAiTurn(true);
       aiTurnRef.current = true;
-      runAiTurn(nextMutableTileMap, nextEntities, nextBalances, nextLakeFunds);
+      runAiTurn(nextMutableTileMap, nextEntities, nextBalances, nextLakeFunds, turn);
     }
-  }, [activeTileMap, entities, territoryBalances, lakeUnitFunds, mutableTileMap, liveOwnerMap, isAiTurn, gameResult, aiOwners, checkWinLoss, runAiTurn]);
+  }, [activeTileMap, entities, territoryBalances, lakeUnitFunds, mutableTileMap, liveOwnerMap, isAiTurn, gameResult, aiOwners, graveyard, turn, checkWinLoss, runAiTurn]);
 
   // React Native scales around the element's centre, so the board's screen edges are:
   //   left  = tx + boardW/2 - scaledW/2
@@ -1839,7 +1846,7 @@ export default function GameScreen() {
                 if (!pos) return null;
                 const meta = ENTITY_META[entityId];
                 const isRebel = entityId === 'rebel';
-                const r = HEX_SIZE * 0.38;
+                const r = HEX_SIZE * 0.44;
                 const isSelected = selectedEntityKey === key;
                 const isSpent = spentUnits.has(key);
                 const liveTile = activeTileMap.get(key);
@@ -2027,7 +2034,7 @@ export default function GameScreen() {
                 if (selectedEntityKey === key) return null;
                 const pos = tileDataMap.get(key);
                 if (!pos) return null;
-                const r = HEX_SIZE * 0.38;
+                const r = HEX_SIZE * 0.44;
                 return (
                   <Animated.View
                     key={`bounce-${key}`}
@@ -2071,6 +2078,7 @@ export default function GameScreen() {
             const isTower = item.id === 'tower';
             const playerUsedTilesSet = freeTowerUsedTiles.get('player') ?? new Set<string>();
             const playerTowerFree = isTower
+              && turn === 1
               && selectedTerritory.length >= 2
               && !selectedTerritory.some(t => playerUsedTilesSet.has(t.key));
             const effectiveCost = playerTowerFree ? 0 : item.cost;
