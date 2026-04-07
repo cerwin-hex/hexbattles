@@ -2039,8 +2039,8 @@ export default function GameScreen() {
                       height: r * 2,
                       borderRadius: r,
                       backgroundColor: 'rgba(30,50,120,0.9)',
-                      borderWidth: 1.2,
-                      borderColor: '#FFD700',
+                      borderWidth: 2.2,
+                      borderColor: TERRITORY_BORDERS['player'],
                       alignItems: 'center',
                       justifyContent: 'center',
                     }, idleBounceStyle]}
