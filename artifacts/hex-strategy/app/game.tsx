@@ -241,11 +241,7 @@ export default function GameScreen() {
           if (neighborBase.terrain === tile.terrain) continue;
           const ptA = hexCornerPoint(cx, cy, HEX_SIZE, va);
           const ptB = hexCornerPoint(cx, cy, HEX_SIZE, vb);
-          const lakeOwnerColor =
-            tile.terrain === 'lake' && liveOwner !== 'neutral'
-              ? (TERRITORY_BORDERS[liveOwner] ?? '#000000')
-              : '#000000';
-          edges.push({ x1: ptA.x, y1: ptA.y, x2: ptB.x, y2: ptB.y, color: lakeOwnerColor, width: lakeOwnerColor !== '#000000' ? 3 : 2 });
+          edges.push({ x1: ptA.x, y1: ptA.y, x2: ptB.x, y2: ptB.y, color: '#000000', width: 2 });
         } else {
           const neighborLiveOwner = ownerOf(nk, neighborBase);
           const needsBorder =
@@ -1858,14 +1854,15 @@ export default function GameScreen() {
                       : meta.isUnit
                         ? 'rgba(30,50,120,0.9)'
                         : 'rgba(80,40,10,0.9)';
+                const ownerColor = TERRITORY_BORDERS[liveTile?.owner ?? ''] ?? '#FFD700';
                 const strokeColor = isRebel
                   ? '#FF4040'
                   : isSelected
                     ? '#50FF50'
                     : isSpent && isPlayerUnit
                       ? '#888888'
-                      : '#FFD700';
-                const strokeWidth = isRebel ? 1.8 : isSelected ? 2.5 : 1.2;
+                      : ownerColor;
+                const strokeWidth = isRebel ? 2.0 : isSelected ? 3.0 : 2.2;
                 if (isIdleBouncing) return null;
                 return (
                   <React.Fragment key={`entity-${key}`}>
