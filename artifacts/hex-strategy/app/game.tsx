@@ -342,6 +342,7 @@ export default function GameScreen() {
     toKey: string;
     sourceTerrId: string;
     maxAmount: number;
+    minAmount: number;
   } | null>(null);
   const [lakeTransferAmount, setLakeTransferAmount] = useState(6);
   const [sliderTrackWidth, setSliderTrackWidth] = useState(220);
@@ -901,7 +902,10 @@ export default function GameScreen() {
         if (!neighbor) continue;
         if (neighbor.terrain === 'mountain' || neighbor.terrain === 'lake') continue;
         const existingEntity = entities.get(nk);
-        if (existingEntity && existingEntity !== 'rebel') continue;
+        if (existingEntity && existingEntity !== 'rebel') {
+          if (ENTITY_META[existingEntity].isUnit) continue;
+          if (meta.strength < ENTITY_META[existingEntity].strength) continue;
+        }
         const enemyZoC = getMaxEnemyZoC(nk, 'player', entities, activeTileMap);
         if (meta.strength > enemyZoC) result.add(nk);
       }
@@ -1205,10 +1209,12 @@ export default function GameScreen() {
         const sourceTerrId = getTerritoryId(sourceTerritory);
         if (!sourceTerrId) return;
         const sourceBalance = territoryBalances.get(sourceTerrId) ?? 0;
-        if (sourceBalance < 4) return;
-        const defaultAmount = Math.min(sourceBalance, Math.max(4, Math.ceil(sourceBalance * 0.5)));
+        const movingEntityType = entities.get(selectedEntityKey);
+        const minAmount = movingEntityType ? ENTITY_META[movingEntityType].upkeep : 2;
+        if (sourceBalance < minAmount) return;
+        const defaultAmount = Math.min(sourceBalance, Math.max(minAmount, Math.ceil(sourceBalance * 0.5)));
         setLakeTransferAmount(defaultAmount);
-        setPendingLakeMove({ fromKey: selectedEntityKey, toKey: key, sourceTerrId, maxAmount: sourceBalance });
+        setPendingLakeMove({ fromKey: selectedEntityKey, toKey: key, sourceTerrId, maxAmount: sourceBalance, minAmount });
         return;
       }
 
@@ -1312,7 +1318,10 @@ export default function GameScreen() {
         activeTileMap.get(key)?.owner === 'player';
       const canMerge = armedIsUnit && existingIsAllyUnit;
       const canOverwriteRebel = armedIsUnit && existingOnTile === 'rebel';
-      const alreadyOccupied = !!existingOnTile && !canMerge && !canOverwriteRebel;
+      const existingIsBuilding = !!existingOnTile && !ENTITY_META[existingOnTile].isUnit && existingOnTile !== 'rebel';
+      const canOverwriteBuilding = armedIsUnit && existingIsBuilding
+        && ENTITY_META[armedEntityId].strength >= ENTITY_META[existingOnTile as EntityType].strength;
+      const alreadyOccupied = !!existingOnTile && !canMerge && !canOverwriteRebel && !canOverwriteBuilding;
       if (!alreadyOccupied && selectedTerritoryId) {
         const meta = ENTITY_META[armedEntityId];
         const balance = territoryBalances.get(selectedTerritoryId) ?? 0;
@@ -2318,7 +2327,7 @@ export default function GameScreen() {
               <Text style={styles.lakeModalTitle}>⚓ Naval Supply</Text>
               <Text style={styles.lakeModalSubtitle}>
                 How many credits to provision this unit?{'\n'}
-                (minimum 4, max {pendingLakeMove.maxAmount})
+                (minimum {pendingLakeMove.minAmount}, max {pendingLakeMove.maxAmount})
               </Text>
 
               <Text style={styles.lakeModalAmount}>{lakeTransferAmount}</Text>
@@ -2326,7 +2335,7 @@ export default function GameScreen() {
               <View style={styles.lakeSliderRow}>
                 <TouchableOpacity
                   style={styles.lakeStepBtn}
-                  onPress={() => setLakeTransferAmount(prev => Math.max(4, prev - 1))}
+                  onPress={() => setLakeTransferAmount(prev => Math.max(pendingLakeMove.minAmount, prev - 1))}
                 >
                   <Text style={styles.lakeStepText}>−</Text>
                 </TouchableOpacity>
@@ -2339,21 +2348,21 @@ export default function GameScreen() {
                   onResponderGrant={e => {
                     const x = e.nativeEvent.locationX;
                     const pct = Math.max(0, Math.min(1, x / sliderTrackWidth));
-                    const range = pendingLakeMove.maxAmount - 4;
-                    setLakeTransferAmount(4 + Math.round(pct * range));
+                    const range = pendingLakeMove.maxAmount - pendingLakeMove.minAmount;
+                    setLakeTransferAmount(pendingLakeMove.minAmount + Math.round(pct * range));
                   }}
                   onResponderMove={e => {
                     const x = e.nativeEvent.locationX;
                     const pct = Math.max(0, Math.min(1, x / sliderTrackWidth));
-                    const range = pendingLakeMove.maxAmount - 4;
-                    setLakeTransferAmount(4 + Math.round(pct * range));
+                    const range = pendingLakeMove.maxAmount - pendingLakeMove.minAmount;
+                    setLakeTransferAmount(pendingLakeMove.minAmount + Math.round(pct * range));
                   }}
                 >
                   <View
                     style={[
                       styles.lakeTrackFill,
                       {
-                        width: `${pendingLakeMove.maxAmount <= 4 ? 100 : Math.round(((lakeTransferAmount - 4) / (pendingLakeMove.maxAmount - 4)) * 100)}%`,
+                        width: `${pendingLakeMove.maxAmount <= pendingLakeMove.minAmount ? 100 : Math.round(((lakeTransferAmount - pendingLakeMove.minAmount) / (pendingLakeMove.maxAmount - pendingLakeMove.minAmount)) * 100)}%`,
                       },
                     ]}
                   />
@@ -2361,9 +2370,9 @@ export default function GameScreen() {
                     style={[
                       styles.lakeThumb,
                       {
-                        left: pendingLakeMove.maxAmount <= 4
+                        left: pendingLakeMove.maxAmount <= pendingLakeMove.minAmount
                           ? sliderTrackWidth - 12
-                          : Math.round(((lakeTransferAmount - 4) / (pendingLakeMove.maxAmount - 4)) * (sliderTrackWidth - 12)),
+                          : Math.round(((lakeTransferAmount - pendingLakeMove.minAmount) / (pendingLakeMove.maxAmount - pendingLakeMove.minAmount)) * (sliderTrackWidth - 12)),
                       },
                     ]}
                   />
@@ -2380,7 +2389,7 @@ export default function GameScreen() {
               <View style={styles.lakePresetRow}>
                 <TouchableOpacity
                   style={styles.lakePresetBtn}
-                  onPress={() => setLakeTransferAmount(6)}
+                  onPress={() => setLakeTransferAmount(pendingLakeMove.minAmount)}
                 >
                   <Text style={styles.lakePresetText}>min.</Text>
                 </TouchableOpacity>
