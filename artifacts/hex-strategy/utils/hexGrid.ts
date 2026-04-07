@@ -88,7 +88,7 @@ export function getMaxEnemyZoC(
   let maxStr = 0;
   for (const ck of candidateKeys) {
     const t = tileMap.get(ck);
-    if (!t || t.owner !== defenderOwner) continue;
+    if (!t || t.owner !== defenderOwner || t.terrain === 'lake') continue;
     const e = entities.get(ck);
     if (e) {
       const str = ENTITY_META[e].strength;

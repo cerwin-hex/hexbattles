@@ -1059,22 +1059,20 @@ export default function GameScreen() {
     return keys;
   }, [activeTileMap, territoryBalances, minUnitCost, freeTowerUsedTiles, isAiTurn, gameResult]);
 
+  const hasAffordableTerritories = affordableTerritoryTileKeys.size > 0;
   useEffect(() => {
-    if (affordableTerritoryTileKeys.size > 0 && !armedEntityId && !isAiTurn && gameResult === null) {
+    if (hasAffordableTerritories && !armedEntityId && !isAiTurn && gameResult === null) {
       territoryPulseVal.value = withRepeat(
-        withSequence(
-          withTiming(0.28, { duration: 1000, easing: Easing.inOut(Easing.sin) }),
-          withTiming(0, { duration: 1000, easing: Easing.inOut(Easing.sin) }),
-        ),
+        withTiming(0.28, { duration: 1000, easing: Easing.inOut(Easing.sin) }),
         -1,
-        false,
+        true,
       );
     } else {
       cancelAnimation(territoryPulseVal);
       territoryPulseVal.value = withTiming(0, { duration: 300 });
     }
     return () => { cancelAnimation(territoryPulseVal); };
-  }, [affordableTerritoryTileKeys.size, armedEntityId, isAiTurn, gameResult]);
+  }, [hasAffordableTerritories, armedEntityId, isAiTurn, gameResult]);
 
   const devEconomicOverlays = useMemo<Array<{ cx: number; cy: number; label: string }>>(() => {
     if (!isDeveloperModeActive) return [];
