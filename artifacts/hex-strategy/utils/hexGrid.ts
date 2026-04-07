@@ -59,7 +59,7 @@ export function getZoCStrength(
   const candidateKeys = [tileKey2, ...HEX_EDGES.map(({ dir: [dq, dr] }) => tileKey(q + dq, r + dr))];
   for (const ck of candidateKeys) {
     const t = tileMap.get(ck);
-    if (!t || t.owner !== owner || t.terrain === 'lake') continue;
+    if (!t || t.owner !== owner) continue;
     const e = entities.get(ck);
     if (e) {
       const str = ENTITY_META[e].strength;
@@ -88,7 +88,7 @@ export function getMaxEnemyZoC(
   let maxStr = 0;
   for (const ck of candidateKeys) {
     const t = tileMap.get(ck);
-    if (!t || t.owner !== defenderOwner || t.terrain === 'lake') continue;
+    if (!t || t.owner !== defenderOwner) continue;
     const e = entities.get(ck);
     if (e) {
       const str = ENTITY_META[e].strength;

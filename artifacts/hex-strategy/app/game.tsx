@@ -256,8 +256,7 @@ export default function GameScreen() {
           if (!needsBorder) continue;
           const ptA = hexCornerPoint(cx, cy, HEX_SIZE, va);
           const ptB = hexCornerPoint(cx, cy, HEX_SIZE, vb);
-          const landBorderColor = TERRITORY_BORDERS[liveOwner as TerritoryOwner] ?? '#000000';
-          edges.push({ x1: ptA.x, y1: ptA.y, x2: ptB.x, y2: ptB.y, color: landBorderColor, width: 2 });
+          edges.push({ x1: ptA.x, y1: ptA.y, x2: ptB.x, y2: ptB.y, color: '#000000', width: 2 });
         }
       }
     }
@@ -1062,8 +1061,6 @@ export default function GameScreen() {
 
   useEffect(() => {
     if (affordableTerritoryTileKeys.size > 0 && !armedEntityId && !isAiTurn && gameResult === null) {
-      cancelAnimation(territoryPulseVal);
-      territoryPulseVal.value = 0;
       territoryPulseVal.value = withRepeat(
         withSequence(
           withTiming(0.28, { duration: 1000, easing: Easing.inOut(Easing.sin) }),
@@ -1074,7 +1071,7 @@ export default function GameScreen() {
       );
     } else {
       cancelAnimation(territoryPulseVal);
-      territoryPulseVal.value = 0;
+      territoryPulseVal.value = withTiming(0, { duration: 300 });
     }
     return () => { cancelAnimation(territoryPulseVal); };
   }, [affordableTerritoryTileKeys.size, armedEntityId, isAiTurn, gameResult]);
@@ -1854,19 +1851,15 @@ export default function GameScreen() {
                 const liveTile = activeTileMap.get(key);
                 const isPlayerUnit = liveTile?.owner === 'player' && meta.isUnit;
                 const isIdleBouncing = isPlayerUnit && !isSpent && !isSelected;
-                const isOnLake = liveTile?.terrain === 'lake' && meta.isUnit;
-                const lakeOwnerColor = isOnLake ? (TERRITORY_BORDERS[liveTile!.owner] ?? 'rgba(30,50,120,0.9)') : null;
                 const bgColor = isRebel
                   ? 'rgba(140,20,20,0.92)'
                   : isSpent && isPlayerUnit
                     ? 'rgba(60,60,80,0.85)'
                     : isSelected
                       ? 'rgba(20,80,20,0.95)'
-                      : isOnLake && lakeOwnerColor
-                        ? lakeOwnerColor
-                        : meta.isUnit
-                          ? 'rgba(30,50,120,0.9)'
-                          : 'rgba(80,40,10,0.9)';
+                      : meta.isUnit
+                        ? 'rgba(30,50,120,0.9)'
+                        : 'rgba(80,40,10,0.9)';
                 const strokeColor = isRebel
                   ? '#FF4040'
                   : isSelected
@@ -2040,10 +2033,6 @@ export default function GameScreen() {
                 const pos = tileDataMap.get(key);
                 if (!pos) return null;
                 const r = HEX_SIZE * 0.38;
-                const isOnLakeB = liveTile?.terrain === 'lake';
-                const bounceBg = isOnLakeB
-                  ? (TERRITORY_BORDERS[liveTile!.owner] ?? 'rgba(30,50,120,0.9)')
-                  : 'rgba(30,50,120,0.9)';
                 return (
                   <Animated.View
                     key={`bounce-${key}`}
@@ -2054,7 +2043,7 @@ export default function GameScreen() {
                       width: r * 2,
                       height: r * 2,
                       borderRadius: r,
-                      backgroundColor: bounceBg,
+                      backgroundColor: 'rgba(30,50,120,0.9)',
                       borderWidth: 1.2,
                       borderColor: '#FFD700',
                       alignItems: 'center',
