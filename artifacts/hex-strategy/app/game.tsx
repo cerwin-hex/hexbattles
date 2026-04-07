@@ -498,12 +498,13 @@ export default function GameScreen() {
     currentBalances: Map<string, number>,
     initialLakeFunds?: Map<string, number>,
     currentTurn?: number,
+    initialGraveyard?: Set<string>,
   ) => {
     let workingTileMap = new Map(currentTileMap);
     let workingEntities = new Map(currentEntities);
     let workingBalances = new Map(currentBalances);
     let workingLiveOwnerMap = new Map<string, TerritoryOwner>();
-    let workingGraveyard = new Set(graveyardRef.current);
+    let workingGraveyard = new Set(initialGraveyard ?? graveyardRef.current);
     let workingSpentUnits = new Set<string>();
     let workingFreeTowerUsed = new Map(freeTowerUsedTilesRef.current);
     let workingLakeFunds = new Map(initialLakeFunds ?? lakeUnitFundsRef.current);
@@ -1616,7 +1617,7 @@ export default function GameScreen() {
     if (!checkWinLoss(nextMutableTileMap)) {
       setIsAiTurn(true);
       aiTurnRef.current = true;
-      runAiTurn(nextMutableTileMap, nextEntities, nextBalances, nextLakeFunds, turn);
+      runAiTurn(nextMutableTileMap, nextEntities, nextBalances, nextLakeFunds, turn, nextGraveyard);
     }
   }, [activeTileMap, entities, territoryBalances, lakeUnitFunds, mutableTileMap, liveOwnerMap, isAiTurn, gameResult, aiOwners, graveyard, turn, checkWinLoss, runAiTurn]);
 
