@@ -1254,8 +1254,16 @@ export default function GameScreen() {
       const newSpentUnits = new Set(spentUnits);
       const newPartialMoves = new Map(partialMoves);
       newPartialMoves.delete(selectedEntityKey);
-      if (isMerge && remainingAfterMove > 0) {
-        newPartialMoves.set(key, remainingAfterMove);
+      if (isMerge) {
+        const destRemaining = newPartialMoves.get(key) ?? (newSpentUnits.has(key) ? 0 : 3);
+        const mergedRemaining = Math.min(remainingAfterMove, destRemaining);
+        newSpentUnits.delete(key);
+        newPartialMoves.delete(key);
+        if (mergedRemaining <= 0) {
+          newSpentUnits.add(key);
+        } else if (mergedRemaining < 3) {
+          newPartialMoves.set(key, mergedRemaining);
+        }
       } else {
         newSpentUnits.add(key);
         newPartialMoves.delete(key);
@@ -1345,6 +1353,7 @@ export default function GameScreen() {
             newEntities.set(key, merged);
             const existingRemaining = newPartialMoves.get(key) ?? (newSpentUnits.has(key) ? 0 : 3);
             const mergedRemaining = Math.min(3, existingRemaining);
+            newSpentUnits.delete(key);
             newPartialMoves.delete(key);
             if (mergedRemaining <= 0) {
               newSpentUnits.add(key);
