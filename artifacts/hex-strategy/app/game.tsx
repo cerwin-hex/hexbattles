@@ -1549,7 +1549,7 @@ export default function GameScreen() {
     for (const gravKey of Array.from(graveyard)) {
       const gravTile = activeTileMap.get(gravKey);
       if (gravTile?.terrain === 'lake') continue;
-      if (!nextEntities.has(gravKey) && Math.random() < 0.5) {
+      if (!nextEntities.has(gravKey) && Math.random() < 0.75) {
         nextEntities = new Map(nextEntities);
         nextEntities.set(gravKey, 'rebel');
       }
