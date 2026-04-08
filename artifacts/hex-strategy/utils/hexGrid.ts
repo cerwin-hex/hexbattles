@@ -26,14 +26,14 @@ export const ENTITY_META: Record<EntityType, EntityMeta> = {
   advanced_unit: { name: 'Advanced Unit', icon: '🛡️',  cost: 20, upkeep: 6,  isUnit: true,  strength: 2 },
   expert_unit:   { name: 'Expert Unit',   icon: '🗡️',  cost: 30, upkeep: 18, isUnit: true,  strength: 3 },
   tower:         { name: 'Tower',         icon: '🗼',  cost: 15, upkeep: 1,  isUnit: false, strength: 1 },
-  castle:        { name: 'Castle',        icon: '🏰',  cost: 30, upkeep: 5,  isUnit: false, strength: 3 },
+  castle:        { name: 'Castle',        icon: '🏰',  cost: 30, upkeep: 5,  isUnit: false, strength: 2 },
   city:          { name: 'City',          icon: '🏙️',  cost: 10, upkeep: 0,  isUnit: false, strength: 1 },
   rebel:         { name: 'Rebel',         icon: '✊',   cost: 0,  upkeep: 0,  isUnit: false, strength: 0 },
 };
 
 export const TERRAIN_INCOME: Record<TerrainType, number> = {
-  grass:    1,
-  desert:   0,
+  grass:    2,
+  desert:   1,
   mountain: 0,
   lake:     0,
 };
