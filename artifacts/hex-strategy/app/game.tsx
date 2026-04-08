@@ -1856,7 +1856,7 @@ export default function GameScreen() {
                 if (!pos) return null;
                 const meta = ENTITY_META[entityId];
                 const isRebel = entityId === 'rebel';
-                const r = HEX_SIZE * 0.44;
+                const r = HEX_SIZE * 0.50;
                 const isSelected = selectedEntityKey === key;
                 const isSpent = spentUnits.has(key);
                 const liveTile = activeTileMap.get(key);
@@ -1873,7 +1873,7 @@ export default function GameScreen() {
                         : 'rgba(80,40,10,0.9)';
                 const ownerColor = TERRITORY_BORDERS[liveTile?.owner ?? ''] ?? '#FFD700';
                 const strokeColor = isRebel
-                  ? '#FF4040'
+                  ? '#FFD700'
                   : isSelected
                     ? '#50FF50'
                     : isSpent && isPlayerUnit
@@ -1915,7 +1915,7 @@ export default function GameScreen() {
                 const pos = tileDataMap.get(key);
                 if (!pos) return null;
                 if (entities.has(key)) return null;
-                const fs = HEX_SIZE * 0.5;
+                const fs = HEX_SIZE * 0.7;
                 return (
                   <SvgText
                     key={`grave-${key}`}
@@ -2044,7 +2044,7 @@ export default function GameScreen() {
                 if (selectedEntityKey === key) return null;
                 const pos = tileDataMap.get(key);
                 if (!pos) return null;
-                const r = HEX_SIZE * 0.44;
+                const r = HEX_SIZE * 0.50;
                 return (
                   <Animated.View
                     key={`bounce-${key}`}
