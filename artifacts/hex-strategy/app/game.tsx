@@ -1894,20 +1894,36 @@ export default function GameScreen() {
                 );
               })}
 
-              {tileData.filter(({ tile }) => tile.isCity || entities.get(tile.key) === 'city').map(({ tile, cx, cy }) => (
-                <SvgText
-                  key={`city-${tile.key}`}
-                  x={cx}
-                  y={cy + HEX_SIZE * 0.28}
-                  textAnchor="middle"
-                  fontSize={HEX_SIZE * 0.72}
-                  fill="#fff"
-                  opacity={0.9}
-                  onPress={() => handleTileTap(tile.key)}
-                >
-                  🏙️
-                </SvgText>
-              ))}
+              {tileData.filter(({ tile }) => tile.isCity || entities.get(tile.key) === 'city').map(({ tile, cx, cy }) => {
+                const liveTile = activeTileMap.get(tile.key) ?? tile;
+                const cityBorderColor = TERRITORY_BORDERS[liveTile.owner] ?? '#888888';
+                const cr = HEX_SIZE * 0.46;
+                return (
+                  <React.Fragment key={`city-${tile.key}`}>
+                    <Rect
+                      x={cx - cr}
+                      y={cy - cr}
+                      width={cr * 2}
+                      height={cr * 2}
+                      rx={4}
+                      fill="rgba(0,0,0,0.25)"
+                      stroke={cityBorderColor}
+                      strokeWidth={3.2}
+                    />
+                    <SvgText
+                      x={cx}
+                      y={cy + HEX_SIZE * 0.28}
+                      textAnchor="middle"
+                      fontSize={HEX_SIZE * 0.72}
+                      fill="#fff"
+                      opacity={0.9}
+                      onPress={() => handleTileTap(tile.key)}
+                    >
+                      🏙️
+                    </SvgText>
+                  </React.Fragment>
+                );
+              })}
 
               {outerTerritoryEdges.map((edge, i) => (
                 <Line
@@ -1948,68 +1964,6 @@ export default function GameScreen() {
                 />
               ))}
 
-              {Array.from(entities.entries()).map(([key, entityId]) => {
-                if (entityId === 'city') return null;
-                if (animatingUnit && key === animatingUnit.fromKey) return null;
-                if (animatingUnit && animatingUnit.hideDestination && key === animatingUnit.toKey) return null;
-                const pos = tileDataMap.get(key);
-                if (!pos) return null;
-                const meta = ENTITY_META[entityId];
-                const isRebel = entityId === 'rebel';
-                const r = HEX_SIZE * 0.50;
-                const isSelected = selectedEntityKey === key;
-                const isSpent = spentUnits.has(key);
-                const liveTile = activeTileMap.get(key);
-                const isPlayerUnit = liveTile?.owner === 'player' && meta.isUnit;
-                const isIdleBouncing = isPlayerUnit && !isSpent && !isSelected;
-                const bgColor = isRebel
-                  ? 'rgba(140,20,20,0.92)'
-                  : isSpent && isPlayerUnit
-                    ? 'rgba(60,60,80,0.85)'
-                    : isSelected
-                      ? 'rgba(20,80,20,0.95)'
-                      : meta.isUnit
-                        ? 'rgba(30,50,120,0.9)'
-                        : 'rgba(80,40,10,0.9)';
-                const ownerColor = TERRITORY_BORDERS[liveTile?.owner ?? ''] ?? '#FFD700';
-                const strokeColor = isRebel
-                  ? '#FFD700'
-                  : isSelected
-                    ? '#50FF50'
-                    : isSpent && isPlayerUnit
-                      ? '#888888'
-                      : ownerColor;
-                const strokeWidth = isRebel ? 3.0 : isSelected ? 4.0 : 3.2;
-                if (isIdleBouncing) return null;
-                return (
-                  <React.Fragment key={`entity-${key}`}>
-                    <Circle
-                      cx={pos.cx}
-                      cy={pos.cy}
-                      r={r}
-                      fill={bgColor}
-                      stroke={strokeColor}
-                      strokeWidth={strokeWidth}
-                      opacity={isSpent && isPlayerUnit ? 0.6 : 1.0}
-                    />
-                    <SvgText
-                      x={pos.cx}
-                      y={pos.cy + r * 0.35}
-                      textAnchor="middle"
-                      fontSize={r * 1.2}
-                      fill="#fff"
-                      opacity={isSpent && isPlayerUnit ? 0.5 : 1.0}
-                    >
-                      {meta.icon}
-                    </SvgText>
-                    <Polygon
-                      points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
-                      fill="transparent"
-                      onPress={() => handleTileTap(key)}
-                    />
-                  </React.Fragment>
-                );
-              })}
 
               {graveyard.size > 0 && Array.from(graveyard).map(key => {
                 const pos = tileDataMap.get(key);
@@ -2059,13 +2013,15 @@ export default function GameScreen() {
               {Array.from(validMoveTiles).map(key => {
                 const pos = tileDataMap.get(key);
                 if (!pos) return null;
+                const tileOwner = activeTileMap.get(key)?.owner;
+                const isAttackMove = tileOwner !== 'player' && tileOwner !== undefined;
                 return (
                   <Circle
                     key={`move-dot-${key}`}
                     cx={pos.cx}
                     cy={pos.cy}
                     r={HEX_SIZE * 0.18}
-                    fill="rgba(255,220,0,0.85)"
+                    fill={isAttackMove ? 'rgba(220,40,40,0.85)' : 'rgba(255,220,0,0.85)'}
                   />
                 );
               })}
@@ -2155,6 +2111,84 @@ export default function GameScreen() {
                 })}
               </Svg>
             </Animated.View>
+
+            <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
+              <Svg width={boardW} height={boardH}>
+                {Array.from(entities.entries()).map(([key, entityId]) => {
+                  if (entityId === 'city') return null;
+                  if (animatingUnit && key === animatingUnit.fromKey) return null;
+                  if (animatingUnit && animatingUnit.hideDestination && key === animatingUnit.toKey) return null;
+                  const pos = tileDataMap.get(key);
+                  if (!pos) return null;
+                  const meta = ENTITY_META[entityId];
+                  const isRebel = entityId === 'rebel';
+                  const isBuilding = !meta.isUnit && !isRebel;
+                  const r = HEX_SIZE * 0.50;
+                  const isSelected = selectedEntityKey === key;
+                  const isSpent = spentUnits.has(key);
+                  const liveTile = activeTileMap.get(key);
+                  const isPlayerUnit = liveTile?.owner === 'player' && meta.isUnit;
+                  const isIdleBouncing = isPlayerUnit && !isSpent && !isSelected;
+                  if (isIdleBouncing) return null;
+                  const bgColor = isRebel
+                    ? 'rgba(140,20,20,0.92)'
+                    : isSelected
+                      ? 'rgba(20,80,20,0.95)'
+                      : meta.isUnit
+                        ? 'rgba(30,50,120,0.9)'
+                        : 'rgba(80,40,10,0.9)';
+                  const ownerColor = TERRITORY_BORDERS[liveTile?.owner ?? ''] ?? '#FFD700';
+                  const strokeColor = isRebel
+                    ? '#FFD700'
+                    : isSelected
+                      ? '#50FF50'
+                      : ownerColor;
+                  const strokeWidth = isRebel ? 3.0 : isSelected ? 4.0 : 3.2;
+                  const unitOpacity = isSpent && isPlayerUnit ? 0.6 : 1.0;
+                  return (
+                    <React.Fragment key={`entity-${key}`}>
+                      {isBuilding ? (
+                        <Rect
+                          x={pos.cx - r}
+                          y={pos.cy - r}
+                          width={r * 2}
+                          height={r * 2}
+                          rx={4}
+                          fill={bgColor}
+                          stroke={strokeColor}
+                          strokeWidth={strokeWidth}
+                        />
+                      ) : (
+                        <Circle
+                          cx={pos.cx}
+                          cy={pos.cy}
+                          r={r}
+                          fill={bgColor}
+                          stroke={strokeColor}
+                          strokeWidth={strokeWidth}
+                          opacity={unitOpacity}
+                        />
+                      )}
+                      <SvgText
+                        x={pos.cx}
+                        y={pos.cy + r * 0.35}
+                        textAnchor="middle"
+                        fontSize={r * 1.1}
+                        fill="#fff"
+                        opacity={unitOpacity}
+                      >
+                        {meta.icon}
+                      </SvgText>
+                      <Polygon
+                        points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
+                        fill="transparent"
+                        onPress={() => handleTileTap(key)}
+                      />
+                    </React.Fragment>
+                  );
+                })}
+              </Svg>
+            </View>
 
             <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
               {animatingUnit && (() => {
