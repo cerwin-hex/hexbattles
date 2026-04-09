@@ -1909,14 +1909,14 @@ export default function GameScreen() {
               })}
 
               {tileData.filter(({ tile }) => tile.terrain === 'mountain').map(({ tile, cx, cy }) => {
-                const imgW = HEX_SIZE * 2.1;
+                const imgW = HEX_SIZE * 1.55;
                 const imgH = imgW * (147 / 320);
                 return (
                   <SvgImage
                     key={`mtn-${tile.key}`}
                     href={MOUNTAIN_IMG}
                     x={cx - imgW / 2}
-                    y={cy - imgH * 0.72}
+                    y={cy - imgH * 0.5}
                     width={imgW}
                     height={imgH}
                     preserveAspectRatio="xMidYMid meet"
