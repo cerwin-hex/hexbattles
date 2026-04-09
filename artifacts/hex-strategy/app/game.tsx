@@ -2041,50 +2041,6 @@ export default function GameScreen() {
                 );
               })}
 
-              {Array.from(validMoveTiles).map(key => {
-                const pos = tileDataMap.get(key);
-                if (!pos) return null;
-                const tileOwner = activeTileMap.get(key)?.owner;
-                const isAttackMove = tileOwner !== 'player' && tileOwner !== undefined;
-                return (
-                  <Circle
-                    key={`move-dot-${key}`}
-                    cx={pos.cx}
-                    cy={pos.cy}
-                    r={HEX_SIZE * 0.18}
-                    fill={isAttackMove ? 'rgba(220,40,40,0.85)' : 'rgba(255,220,0,0.85)'}
-                  />
-                );
-              })}
-
-              {armedEntityId && Array.from(selectedTileKeys).map(key => {
-                const pos = tileDataMap.get(key);
-                if (!pos) return null;
-                return (
-                  <Circle
-                    key={`place-dot-${key}`}
-                    cx={pos.cx}
-                    cy={pos.cy}
-                    r={HEX_SIZE * 0.18}
-                    fill="rgba(255,220,0,0.85)"
-                  />
-                );
-              })}
-
-              {armedEntityId && Array.from(validPlacementAttackTiles).map(key => {
-                const pos = tileDataMap.get(key);
-                if (!pos) return null;
-                return (
-                  <Circle
-                    key={`atk-dot-${key}`}
-                    cx={pos.cx}
-                    cy={pos.cy}
-                    r={HEX_SIZE * 0.18}
-                    fill="rgba(220,40,40,0.85)"
-                  />
-                );
-              })}
-
               {errorTileKey && (() => {
                 const pos = tileDataMap.get(errorTileKey);
                 if (!pos) return null;
@@ -2096,32 +2052,6 @@ export default function GameScreen() {
                   />
                 );
               })()}
-
-              {isDeveloperModeActive && devEconomicOverlays.map(({ cx, cy, label }, i) => {
-                const fontSize = Math.max(7, Math.min(11, HEX_SIZE * 0.32));
-                return (
-                  <React.Fragment key={`dev-econ-${i}`}>
-                    <Rect
-                      x={cx - fontSize * label.length * 0.32}
-                      y={cy - fontSize * 0.85}
-                      width={fontSize * label.length * 0.64}
-                      height={fontSize * 1.4}
-                      fill="rgba(0,0,0,0.65)"
-                      rx={2}
-                    />
-                    <SvgText
-                      x={cx}
-                      y={cy + fontSize * 0.42}
-                      textAnchor="middle"
-                      fontSize={fontSize}
-                      fill="#00FF88"
-                      fontWeight="bold"
-                    >
-                      {label}
-                    </SvgText>
-                  </React.Fragment>
-                );
-              })}
 
             </Svg>
 
@@ -2293,6 +2223,83 @@ export default function GameScreen() {
                 </Svg>
               </View>
             )}
+
+            <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+              <Svg width={boardW} height={boardH}>
+
+                {Array.from(validMoveTiles).map(key => {
+                  const pos = tileDataMap.get(key);
+                  if (!pos) return null;
+                  const tileOwner = activeTileMap.get(key)?.owner;
+                  const isAttackMove = tileOwner !== 'player' && tileOwner !== undefined;
+                  return (
+                    <Circle
+                      key={`move-dot-${key}`}
+                      cx={pos.cx}
+                      cy={pos.cy}
+                      r={HEX_SIZE * 0.18}
+                      fill={isAttackMove ? 'rgba(220,40,40,0.85)' : 'rgba(255,220,0,0.85)'}
+                    />
+                  );
+                })}
+
+                {armedEntityId && Array.from(selectedTileKeys).map(key => {
+                  const pos = tileDataMap.get(key);
+                  if (!pos) return null;
+                  return (
+                    <Circle
+                      key={`place-dot-${key}`}
+                      cx={pos.cx}
+                      cy={pos.cy}
+                      r={HEX_SIZE * 0.18}
+                      fill="rgba(255,220,0,0.85)"
+                    />
+                  );
+                })}
+
+                {armedEntityId && Array.from(validPlacementAttackTiles).map(key => {
+                  const pos = tileDataMap.get(key);
+                  if (!pos) return null;
+                  return (
+                    <Circle
+                      key={`atk-dot-${key}`}
+                      cx={pos.cx}
+                      cy={pos.cy}
+                      r={HEX_SIZE * 0.18}
+                      fill="rgba(220,40,40,0.85)"
+                    />
+                  );
+                })}
+
+                {isDeveloperModeActive && devEconomicOverlays.map(({ cx, cy, label }, i) => {
+                  const fontSize = Math.max(7, Math.min(11, HEX_SIZE * 0.32));
+                  return (
+                    <React.Fragment key={`dev-econ-${i}`}>
+                      <Rect
+                        x={cx - fontSize * label.length * 0.32}
+                        y={cy - fontSize * 0.85}
+                        width={fontSize * label.length * 0.64}
+                        height={fontSize * 1.4}
+                        fill="rgba(0,0,0,0.65)"
+                        rx={2}
+                      />
+                      <SvgText
+                        x={cx}
+                        y={cy + fontSize * 0.42}
+                        textAnchor="middle"
+                        fontSize={fontSize}
+                        fill="#00FF88"
+                        fontWeight="bold"
+                      >
+                        {label}
+                      </SvgText>
+                    </React.Fragment>
+                  );
+                })}
+
+              </Svg>
+            </View>
+
           </Animated.View>
         </View>
       </GestureDetector>
