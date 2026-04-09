@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -2337,7 +2336,7 @@ export default function GameScreen() {
         style={[styles.menuBtn, { top: topInset + 4, left: 4, position: 'absolute', zIndex: 20 }]}
         onPress={() => setConfirmLeave(true)}
       >
-        <Ionicons name="arrow-back" size={14} color="#A08860" />
+        <Text style={{ fontSize: 14, color: '#A08860' }}>←</Text>
         <Text style={styles.menuBtnText}>Menu</Text>
       </TouchableOpacity>
 
@@ -2410,11 +2409,7 @@ export default function GameScreen() {
             activeOpacity={(isAiTurn || gameResult !== null || moveHistory.length === 0) ? 1 : 0.75}
             disabled={isAiTurn || gameResult !== null || moveHistory.length === 0}
           >
-            <Ionicons
-              name="arrow-back"
-              size={16}
-              color={(isAiTurn || gameResult !== null || moveHistory.length === 0) ? '#3A2E14' : '#C8A24A'}
-            />
+            <Text style={{ fontSize: 16, color: (isAiTurn || gameResult !== null || moveHistory.length === 0) ? '#3A2E14' : '#C8A24A' }}>←</Text>
           </TouchableOpacity>
 
           {showCredits && (
@@ -2462,11 +2457,9 @@ export default function GameScreen() {
                 }}
                 activeOpacity={canBuild ? 0.75 : 1}
               >
-                <Ionicons
-                  name={mode === 'units' ? 'people' : 'shield'}
-                  size={14}
-                  color={isActive ? '#0D0A06' : canBuild ? '#C8A24A' : '#3A2E14'}
-                />
+                <Text style={{ fontSize: 13, color: isActive ? '#0D0A06' : canBuild ? '#C8A24A' : '#3A2E14' }}>
+                  {mode === 'units' ? '⚔' : '🏛'}
+                </Text>
                 <Text style={[
                   styles.buildBtnText,
                   isActive && styles.buildBtnTextActive,
@@ -2480,7 +2473,7 @@ export default function GameScreen() {
 
           {isDeveloperModeActive && isAiPaused && aiHistoryIndex > 0 && (
             <TouchableOpacity style={styles.prevActionBtn} onPress={handleAiStepBack}>
-              <Ionicons name="arrow-back" size={13} color="#00FF88" />
+              <Text style={{ fontSize: 13, color: '#00FF88' }}>←</Text>
               <Text style={styles.nextActionBtnText}>Prev</Text>
             </TouchableOpacity>
           )}
@@ -2493,7 +2486,7 @@ export default function GameScreen() {
               <Text style={styles.nextActionBtnText}>
                 {aiHistoryIndex < aiHistoryLen - 1 ? 'Next ▶' : 'Next'}
               </Text>
-              <Ionicons name="arrow-forward" size={13} color="#00FF88" />
+              <Text style={{ fontSize: 13, color: '#00FF88' }}>→</Text>
             </TouchableOpacity>
           )}
 
@@ -2505,7 +2498,7 @@ export default function GameScreen() {
             <Animated.View style={endTurnStyle}>
               <TouchableOpacity style={styles.endTurnBtn} onPress={handleEndTurn} disabled={gameResult !== null}>
                 <Text style={styles.endTurnText}>End Turn</Text>
-                <Ionicons name="arrow-forward" size={13} color="#F0D080" />
+                <Text style={{ fontSize: 13, color: '#F0D080' }}>→</Text>
               </TouchableOpacity>
             </Animated.View>
           )}

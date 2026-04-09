@@ -1,7 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import {
   Platform,
@@ -151,7 +150,7 @@ export default function MainMenuScreen() {
         <TouchableOpacity style={styles.startOuter} onPress={handleStart} activeOpacity={0.85}>
           <LinearGradient colors={['#6B4A10', '#4A3008', '#3A2208']} style={styles.startInner}>
             <Text style={styles.startText}>Commence Battle</Text>
-            <Ionicons name="chevron-forward" size={18} color="#F0D080" />
+            <Text style={{ fontSize: 18, color: '#F0D080' }}>›</Text>
           </LinearGradient>
         </TouchableOpacity>
 
