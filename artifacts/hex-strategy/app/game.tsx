@@ -885,15 +885,24 @@ export default function GameScreen() {
         workingGraveyard.delete(destKey);
 
         if (!isDeveloperModeRef.current) {
-          triggerUnitAnimation(unitKey, destKey, unitEntity, aiOwner as TerritoryOwner, false);
-          await delay(280);
+          await new Promise<void>(resolve => {
+            triggerUnitAnimation(unitKey, destKey, unitEntity, aiOwner as TerritoryOwner, true, () => {
+              setMutableTileMap(new Map(workingTileMap));
+              setLiveOwnerMap(new Map(workingLiveOwnerMap));
+              setEntities(new Map(workingEntities));
+              setTerritoryBalances(new Map(workingBalances));
+              setGraveyard(new Set(workingGraveyard));
+              resolve();
+            });
+          });
+        } else {
+          setMutableTileMap(new Map(workingTileMap));
+          setLiveOwnerMap(new Map(workingLiveOwnerMap));
+          setEntities(new Map(workingEntities));
+          setTerritoryBalances(new Map(workingBalances));
+          setGraveyard(new Set(workingGraveyard));
         }
 
-        setMutableTileMap(new Map(workingTileMap));
-        setLiveOwnerMap(new Map(workingLiveOwnerMap));
-        setEntities(new Map(workingEntities));
-        setTerritoryBalances(new Map(workingBalances));
-        setGraveyard(new Set(workingGraveyard));
         await awaitStep({
           entities: new Map(workingEntities),
           mutableTileMap: new Map(workingTileMap),
