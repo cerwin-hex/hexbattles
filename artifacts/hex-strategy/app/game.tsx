@@ -22,7 +22,9 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, Defs, Line, LinearGradient, Polygon, Rect, Stop, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Defs, Image as SvgImage, Line, LinearGradient, Polygon, Rect, Stop, Text as SvgText } from 'react-native-svg';
+
+const MOUNTAIN_IMG = require('../assets/images/mountain.png');
 
 import { CITY_BUFFER_BORDER, CITY_NEUTRAL_FILL, TERRAIN_FILLS, TERRITORY_BORDERS, TERRITORY_FILLS } from '@/constants/colors';
 import {
@@ -1901,6 +1903,23 @@ export default function GameScreen() {
                     key={tile.key}
                     points={hexCornersString(cx, cy, HEX_SIZE)}
                     fill={fill}
+                    onPress={() => handleTileTap(tile.key)}
+                  />
+                );
+              })}
+
+              {tileData.filter(({ tile }) => tile.terrain === 'mountain').map(({ tile, cx, cy }) => {
+                const imgW = HEX_SIZE * 2.1;
+                const imgH = imgW * (147 / 320);
+                return (
+                  <SvgImage
+                    key={`mtn-${tile.key}`}
+                    href={MOUNTAIN_IMG}
+                    x={cx - imgW / 2}
+                    y={cy - imgH * 0.72}
+                    width={imgW}
+                    height={imgH}
+                    preserveAspectRatio="xMidYMid meet"
                     onPress={() => handleTileTap(tile.key)}
                   />
                 );
