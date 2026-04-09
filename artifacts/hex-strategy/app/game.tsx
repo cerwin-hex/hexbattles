@@ -112,6 +112,52 @@ function initTerritoryBalances(
   return balances;
 }
 
+function AnimatedMovingUnit({
+  fromPos,
+  toPos,
+  entityId,
+  owner,
+  hexSize,
+  progress,
+}: {
+  fromPos: { cx: number; cy: number };
+  toPos: { cx: number; cy: number };
+  entityId: EntityType;
+  owner: TerritoryOwner;
+  hexSize: number;
+  progress: Animated.SharedValue<number>;
+}) {
+  const meta = ENTITY_META[entityId];
+  const r = hexSize * 0.50;
+  const animStyle = useAnimatedStyle(() => {
+    const p = progress.value;
+    const left = fromPos.cx + (toPos.cx - fromPos.cx) * p - r;
+    const top = fromPos.cy + (toPos.cy - fromPos.cy) * p - r;
+    return { transform: [{ translateX: left }, { translateY: top }] };
+  });
+  const bgColor = owner === 'player' ? 'rgba(30,50,120,0.9)' : 'rgba(80,20,20,0.9)';
+  const borderColor = TERRITORY_BORDERS[owner] ?? TERRITORY_BORDERS['player'];
+  return (
+    <Animated.View
+      style={[{
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        width: r * 2,
+        height: r * 2,
+        borderRadius: r,
+        backgroundColor: bgColor,
+        borderWidth: 2.2,
+        borderColor,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }, animStyle]}
+    >
+      <Text style={{ fontSize: r * 1.1, lineHeight: r * 1.6 }}>{meta.icon}</Text>
+    </Animated.View>
+  );
+}
+
 export default function GameScreen() {
   const params = useLocalSearchParams<{ tileCount: string; opponentCount: string }>();
   const numTiles = Math.min(300, Math.max(40, Number(params.tileCount) || 100));
@@ -346,6 +392,39 @@ export default function GameScreen() {
   } | null>(null);
   const [lakeTransferAmount, setLakeTransferAmount] = useState(6);
   const [sliderTrackWidth, setSliderTrackWidth] = useState(220);
+
+  const [errorTileKey, setErrorTileKey] = useState<string | null>(null);
+  const errorTileTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const animUnitProgress = useSharedValue(0);
+  const [animatingUnit, setAnimatingUnit] = useState<{
+    fromKey: string;
+    toKey: string;
+    entityId: EntityType;
+    owner: TerritoryOwner;
+    hideDestination: boolean;
+  } | null>(null);
+  const triggerErrorFlash = useCallback((key: string) => {
+    if (errorTileTimer.current) clearTimeout(errorTileTimer.current);
+    setErrorTileKey(key);
+    errorTileTimer.current = setTimeout(() => {
+      setErrorTileKey(null);
+      errorTileTimer.current = null;
+    }, 150);
+  }, []);
+
+  const triggerUnitAnimation = useCallback((fromKey: string, toKey: string, entityId: EntityType, owner: TerritoryOwner = 'player', hideDestination = true, onDone?: () => void) => {
+    setAnimatingUnit({ fromKey, toKey, entityId, owner, hideDestination });
+    animUnitProgress.value = 0;
+    animUnitProgress.value = withTiming(1, { duration: 180, easing: Easing.inOut(Easing.ease) }, (finished) => {
+      if (finished) {
+        runOnJS(setAnimatingUnit)(null);
+        if (onDone) runOnJS(onDone)();
+      }
+    });
+  }, [animUnitProgress]);
+
+  useEffect(() => () => { if (errorTileTimer.current) clearTimeout(errorTileTimer.current); }, []);
 
   useEffect(() => { freeTowerUsedTilesRef.current = freeTowerUsedTiles; }, [freeTowerUsedTiles]);
   useEffect(() => { lakeUnitFundsRef.current = lakeUnitFunds; }, [lakeUnitFunds]);
@@ -801,6 +880,11 @@ export default function GameScreen() {
         workingGraveyard = new Set(workingGraveyard);
         workingGraveyard.delete(destKey);
 
+        if (!isDeveloperModeRef.current) {
+          triggerUnitAnimation(unitKey, destKey, unitEntity, aiOwner as TerritoryOwner, false);
+          await delay(180);
+        }
+
         setMutableTileMap(new Map(workingTileMap));
         setLiveOwnerMap(new Map(workingLiveOwnerMap));
         setEntities(new Map(workingEntities));
@@ -822,7 +906,7 @@ export default function GameScreen() {
     setIsAiTurn(false);
     aiTurnRef.current = false;
     checkWinLoss(workingTileMap);
-  }, [aiOwners, checkWinLoss, awaitStep]);
+  }, [aiOwners, checkWinLoss, awaitStep, triggerUnitAnimation]);
 
   const selectedTerritory = useMemo<HexTile[]>(() => {
     if (!selectedTileKey) return [];
@@ -1193,7 +1277,10 @@ export default function GameScreen() {
     setSelectedTileKey(toKey);
     setGraveyard(prev => { const next = new Set(prev); next.delete(toKey); return next; });
     if (ribbonOpen) closeRibbon();
-  }, [pendingLakeMove, activeTileMap, entities, spentUnits, partialMoves, territoryBalances, liveOwnerMap, lakeUnitFunds, pushHistory, ribbonOpen]);
+    if (movingUnit) {
+      triggerUnitAnimation(fromKey, toKey, movingUnit);
+    }
+  }, [pendingLakeMove, activeTileMap, entities, spentUnits, partialMoves, territoryBalances, liveOwnerMap, lakeUnitFunds, pushHistory, ribbonOpen, triggerUnitAnimation]);
 
   const handleTileTap = useCallback((key: string) => {
     lastTileTapMs.current = Date.now();
@@ -1213,12 +1300,18 @@ export default function GameScreen() {
         const sourceBalance = territoryBalances.get(sourceTerrId) ?? 0;
         const movingEntityType = entities.get(selectedEntityKey);
         const minAmount = movingEntityType ? ENTITY_META[movingEntityType].upkeep : 2;
-        if (sourceBalance < minAmount) return;
+        if (sourceBalance < minAmount) {
+          triggerErrorFlash(key);
+          return;
+        }
         const defaultAmount = Math.min(sourceBalance, Math.max(minAmount, Math.ceil(sourceBalance * 0.5)));
         setLakeTransferAmount(defaultAmount);
         setPendingLakeMove({ fromKey: selectedEntityKey, toKey: key, sourceTerrId, maxAmount: sourceBalance, minAmount });
         return;
       }
+
+      const movingEntityId = entities.get(selectedEntityKey);
+      const fromKeyForAnim = selectedEntityKey;
 
       pushHistory();
       const prevTile = activeTileMap.get(key);
@@ -1314,6 +1407,9 @@ export default function GameScreen() {
       setSelectedTileKey(key);
       setGraveyard(prev => { const next = new Set(prev); next.delete(key); return next; });
       if (ribbonOpen) closeRibbon();
+      if (movingEntityId) {
+        triggerUnitAnimation(fromKeyForAnim, key, movingEntityId);
+      }
       return;
     }
 
@@ -1383,7 +1479,11 @@ export default function GameScreen() {
           setSelectedEntityKey(null);
           closeRibbon();
           return;
+        } else {
+          triggerErrorFlash(key);
         }
+      } else if (alreadyOccupied) {
+        triggerErrorFlash(key);
       }
       return;
     }
@@ -1419,6 +1519,8 @@ export default function GameScreen() {
         closeRibbon();
         setSelectedTileKey(key);
         checkWinLoss(newTileMap);
+      } else {
+        triggerErrorFlash(key);
       }
       return;
     }
@@ -1439,10 +1541,11 @@ export default function GameScreen() {
     }
 
     if (!tile || tile.owner !== 'player') {
+      if (armedEntityId || selectedEntityKey) {
+        triggerErrorFlash(key);
+        return;
+      }
       setSelectedTileKey(null);
-      setArmedEntityId(null);
-      setSelectedEntityKey(null);
-      if (ribbonOpen) closeRibbon();
       return;
     }
 
@@ -1457,7 +1560,7 @@ export default function GameScreen() {
     setSelectedEntityKey(null);
     setArmedEntityId(null);
     if (ribbonOpen) closeRibbon();
-  }, [activeTileMap, selectedTileKeys, armedEntityId, entities, selectedTerritoryId, territoryBalances, ribbonOpen, selectedEntityKey, validMoveTiles, validPlacementAttackTiles, spentUnits, liveOwnerMap, lakeUnitFunds, isAiTurn, gameResult, graveyard, turn, freeTowerUsedTiles, checkWinLoss, pushHistory]);
+  }, [activeTileMap, selectedTileKeys, armedEntityId, entities, selectedTerritoryId, territoryBalances, ribbonOpen, selectedEntityKey, validMoveTiles, validPlacementAttackTiles, spentUnits, liveOwnerMap, lakeUnitFunds, isAiTurn, gameResult, graveyard, turn, freeTowerUsedTiles, checkWinLoss, pushHistory, triggerErrorFlash]);
 
   const handleUndo = useCallback(() => {
     if (isAiTurn || gameResult !== null) return;
@@ -1806,21 +1909,6 @@ export default function GameScreen() {
                 </SvgText>
               ))}
 
-              {fortificationDots.size > 0 && Array.from(fortificationDots).map(key => {
-                const pos = tileDataMap.get(key);
-                if (!pos) return null;
-                return (
-                  <Circle
-                    key={`fort-${key}`}
-                    cx={pos.cx}
-                    cy={pos.cy}
-                    r={HEX_SIZE * 0.15}
-                    fill="#4488FF"
-                    opacity={0.75}
-                  />
-                );
-              })}
-
               {outerTerritoryEdges.map((edge, i) => (
                 <Line
                   key={`outer-${i}`}
@@ -1862,6 +1950,8 @@ export default function GameScreen() {
 
               {Array.from(entities.entries()).map(([key, entityId]) => {
                 if (entityId === 'city') return null;
+                if (animatingUnit && key === animatingUnit.fromKey) return null;
+                if (animatingUnit && animatingUnit.hideDestination && key === animatingUnit.toKey) return null;
                 const pos = tileDataMap.get(key);
                 if (!pos) return null;
                 const meta = ENTITY_META[entityId];
@@ -1943,41 +2033,53 @@ export default function GameScreen() {
               {validMoveTiles.size > 0 && Array.from(validMoveTiles).map(key => {
                 const pos = tileDataMap.get(key);
                 if (!pos) return null;
-                const tileOwner = activeTileMap.get(key)?.owner ?? 'neutral';
-                const isAttack = tileOwner !== 'player';
-                const dotColor = isAttack ? '#FF4040' : '#FFD700';
                 return (
-                  <React.Fragment key={`move-${key}`}>
-                    <Polygon
-                      points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
-                      fill="transparent"
-                      onPress={() => handleTileTap(key)}
-                    />
-                    <Circle
-                      cx={pos.cx}
-                      cy={pos.cy}
-                      r={HEX_SIZE * 0.18}
-                      fill={dotColor}
-                      opacity={0.85}
-                      onPress={() => handleTileTap(key)}
-                    />
-                  </React.Fragment>
+                  <Polygon
+                    key={`move-tap-${key}`}
+                    points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
+                    fill="transparent"
+                    onPress={() => handleTileTap(key)}
+                  />
                 );
               })}
 
-              {armedEntityId && ENTITY_META[armedEntityId].isUnit && Array.from(selectedTileKeys).map(key => {
-                const existingDot = entities.get(key);
-                if (existingDot && existingDot !== 'rebel') return null;
+              {armedEntityId && Array.from(validPlacementAttackTiles).map(key => {
+                const pos = tileDataMap.get(key);
+                if (!pos) return null;
+                return (
+                  <Polygon
+                    key={`atk-tap-${key}`}
+                    points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
+                    fill="transparent"
+                    onPress={() => handleTileTap(key)}
+                  />
+                );
+              })}
+
+              {Array.from(validMoveTiles).map(key => {
                 const pos = tileDataMap.get(key);
                 if (!pos) return null;
                 return (
                   <Circle
-                    key={`place-${key}`}
+                    key={`move-dot-${key}`}
                     cx={pos.cx}
                     cy={pos.cy}
-                    r={HEX_SIZE * 0.15}
-                    fill="#FFD700"
-                    opacity={0.7}
+                    r={HEX_SIZE * 0.18}
+                    fill="rgba(255,220,0,0.85)"
+                  />
+                );
+              })}
+
+              {armedEntityId && Array.from(selectedTileKeys).map(key => {
+                const pos = tileDataMap.get(key);
+                if (!pos) return null;
+                return (
+                  <Circle
+                    key={`place-dot-${key}`}
+                    cx={pos.cx}
+                    cy={pos.cy}
+                    r={HEX_SIZE * 0.18}
+                    fill="rgba(255,220,0,0.85)"
                   />
                 );
               })}
@@ -1987,15 +2089,26 @@ export default function GameScreen() {
                 if (!pos) return null;
                 return (
                   <Circle
-                    key={`atk-${key}`}
+                    key={`atk-dot-${key}`}
                     cx={pos.cx}
                     cy={pos.cy}
                     r={HEX_SIZE * 0.18}
-                    fill="#FF4040"
-                    opacity={0.85}
+                    fill="rgba(220,40,40,0.85)"
                   />
                 );
               })}
+
+              {errorTileKey && (() => {
+                const pos = tileDataMap.get(errorTileKey);
+                if (!pos) return null;
+                return (
+                  <Polygon
+                    key={`err-${errorTileKey}`}
+                    points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
+                    fill="rgba(0,0,0,0.55)"
+                  />
+                );
+              })()}
 
               {isDeveloperModeActive && devEconomicOverlays.map(({ cx, cy, label }, i) => {
                 const fontSize = Math.max(7, Math.min(11, HEX_SIZE * 0.32));
@@ -2044,8 +2157,25 @@ export default function GameScreen() {
             </Animated.View>
 
             <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+              {animatingUnit && (() => {
+                const fromPos = tileDataMap.get(animatingUnit.fromKey);
+                const toPos = tileDataMap.get(animatingUnit.toKey);
+                if (!fromPos || !toPos) return null;
+                return (
+                  <AnimatedMovingUnit
+                    fromPos={fromPos}
+                    toPos={toPos}
+                    entityId={animatingUnit.entityId}
+                    owner={animatingUnit.owner}
+                    hexSize={HEX_SIZE}
+                    progress={animUnitProgress}
+                  />
+                );
+              })()}
               {Array.from(entities.entries()).map(([key, entityId]) => {
                 if (entityId === 'city' || entityId === 'rebel') return null;
+                if (animatingUnit && key === animatingUnit.fromKey) return null;
+                if (animatingUnit && animatingUnit.hideDestination && key === animatingUnit.toKey) return null;
                 const meta = ENTITY_META[entityId];
                 if (!meta.isUnit) return null;
                 const liveTile = activeTileMap.get(key);
@@ -2077,6 +2207,27 @@ export default function GameScreen() {
                 );
               })}
             </View>
+
+            {fortificationDots.size > 0 && (
+              <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+                <Svg width={boardW} height={boardH}>
+                  {Array.from(fortificationDots).map(key => {
+                    const pos = tileDataMap.get(key);
+                    if (!pos) return null;
+                    return (
+                      <Circle
+                        key={`fort-${key}`}
+                        cx={pos.cx}
+                        cy={pos.cy}
+                        r={HEX_SIZE * 0.15}
+                        fill="#4488FF"
+                        opacity={0.75}
+                      />
+                    );
+                  })}
+                </Svg>
+              </View>
+            )}
           </Animated.View>
         </View>
       </GestureDetector>
