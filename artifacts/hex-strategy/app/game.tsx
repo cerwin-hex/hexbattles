@@ -131,9 +131,12 @@ function AnimatedMovingUnit({
   const r = hexSize * 0.50;
   const animStyle = useAnimatedStyle(() => {
     const p = progress.value;
-    const left = fromPos.cx + (toPos.cx - fromPos.cx) * p - r;
-    const top = fromPos.cy + (toPos.cy - fromPos.cy) * p - r;
-    return { transform: [{ translateX: left }, { translateY: top }] };
+    return {
+      transform: [
+        { translateX: (toPos.cx - fromPos.cx) * p },
+        { translateY: (toPos.cy - fromPos.cy) * p },
+      ],
+    };
   });
   const bgColor = owner === 'player' ? 'rgba(30,50,120,0.9)' : 'rgba(80,20,20,0.9)';
   const borderColor = TERRITORY_BORDERS[owner] ?? TERRITORY_BORDERS['player'];
@@ -141,8 +144,8 @@ function AnimatedMovingUnit({
     <Animated.View
       style={[{
         position: 'absolute',
-        left: 0,
-        top: 0,
+        left: fromPos.cx - r,
+        top: fromPos.cy - r,
         width: r * 2,
         height: r * 2,
         borderRadius: r,
@@ -414,13 +417,14 @@ export default function GameScreen() {
   }, []);
 
   const triggerUnitAnimation = useCallback((fromKey: string, toKey: string, entityId: EntityType, owner: TerritoryOwner = 'player', hideDestination = true, onDone?: () => void) => {
-    setAnimatingUnit({ fromKey, toKey, entityId, owner, hideDestination });
     animUnitProgress.value = 0;
-    animUnitProgress.value = withTiming(1, { duration: 180, easing: Easing.inOut(Easing.ease) }, (finished) => {
-      if (finished) {
-        runOnJS(setAnimatingUnit)(null);
-        if (onDone) runOnJS(onDone)();
-      }
+    setAnimatingUnit({ fromKey, toKey, entityId, owner, hideDestination });
+    const handleDone = () => {
+      onDone?.();
+      setAnimatingUnit(null);
+    };
+    animUnitProgress.value = withTiming(1, { duration: 280, easing: Easing.inOut(Easing.quad) }, (finished) => {
+      if (finished) runOnJS(handleDone)();
     });
   }, [animUnitProgress]);
 
@@ -882,7 +886,7 @@ export default function GameScreen() {
 
         if (!isDeveloperModeRef.current) {
           triggerUnitAnimation(unitKey, destKey, unitEntity, aiOwner as TerritoryOwner, false);
-          await delay(180);
+          await delay(280);
         }
 
         setMutableTileMap(new Map(workingTileMap));
