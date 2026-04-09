@@ -1912,18 +1912,29 @@ export default function GameScreen() {
                 const cityBorderColor = TERRITORY_BORDERS[liveTile.owner] ?? '#888888';
                 const cr = HEX_SIZE * 0.46;
                 return (
-                  <Rect
-                    key={`city-${tile.key}`}
-                    x={cx - cr}
-                    y={cy - cr}
-                    width={cr * 2}
-                    height={cr * 2}
-                    rx={4}
-                    fill="rgba(0,0,0,0.25)"
-                    stroke={cityBorderColor}
-                    strokeWidth={3.2}
-                    onPress={() => handleTileTap(tile.key)}
-                  />
+                  <React.Fragment key={`city-${tile.key}`}>
+                    <Rect
+                      x={cx - cr}
+                      y={cy - cr}
+                      width={cr * 2}
+                      height={cr * 2}
+                      rx={4}
+                      fill="rgba(0,0,0,0.25)"
+                      stroke={cityBorderColor}
+                      strokeWidth={3.2}
+                    />
+                    <SvgText
+                      x={cx}
+                      y={cy + HEX_SIZE * 0.28}
+                      textAnchor="middle"
+                      fontSize={HEX_SIZE * 0.72}
+                      fill="#fff"
+                      opacity={0.9}
+                      onPress={() => handleTileTap(tile.key)}
+                    >
+                      🏙️
+                    </SvgText>
+                  </React.Fragment>
                 );
               })}
 
@@ -1967,6 +1978,24 @@ export default function GameScreen() {
               ))}
 
 
+              {graveyard.size > 0 && Array.from(graveyard).map(key => {
+                const pos = tileDataMap.get(key);
+                if (!pos) return null;
+                if (entities.has(key)) return null;
+                const fs = HEX_SIZE * 0.7;
+                return (
+                  <SvgText
+                    key={`grave-${key}`}
+                    x={pos.cx}
+                    y={pos.cy + fs * 0.38}
+                    textAnchor="middle"
+                    fontSize={fs}
+                    opacity={0.85}
+                  >
+                    ☠️
+                  </SvgText>
+                );
+              })}
 
               {validMoveTiles.size > 0 && Array.from(validMoveTiles).map(key => {
                 const pos = tileDataMap.get(key);
@@ -2153,6 +2182,16 @@ export default function GameScreen() {
                           opacity={unitOpacity}
                         />
                       )}
+                      <SvgText
+                        x={pos.cx}
+                        y={pos.cy + r * 0.35}
+                        textAnchor="middle"
+                        fontSize={r * 1.1}
+                        fill="#fff"
+                        opacity={unitOpacity}
+                      >
+                        {meta.icon}
+                      </SvgText>
                       <Polygon
                         points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
                         fill="transparent"
@@ -2162,85 +2201,6 @@ export default function GameScreen() {
                   );
                 })}
               </Svg>
-            </View>
-
-            <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-              {graveyard.size > 0 && Array.from(graveyard).map(key => {
-                if (entities.has(key)) return null;
-                const pos = tileDataMap.get(key);
-                if (!pos) return null;
-                const fs = HEX_SIZE * 0.7;
-                return (
-                  <Text
-                    key={`grave-icon-${key}`}
-                    style={{
-                      position: 'absolute',
-                      left: pos.cx - fs * 0.7,
-                      top: pos.cy - fs * 0.5,
-                      width: fs * 1.4,
-                      textAlign: 'center',
-                      fontSize: fs,
-                      lineHeight: fs * 1.4,
-                      opacity: 0.85,
-                    }}
-                  >
-                    ☠️
-                  </Text>
-                );
-              })}
-              {tileData.filter(({ tile }) => tile.isCity || entities.get(tile.key) === 'city').map(({ tile, cx, cy }) => {
-                const r = HEX_SIZE * 0.46;
-                return (
-                  <Text
-                    key={`city-icon-${tile.key}`}
-                    style={{
-                      position: 'absolute',
-                      left: cx - r,
-                      top: cy - r * 0.72,
-                      width: r * 2,
-                      textAlign: 'center',
-                      fontSize: HEX_SIZE * 0.72,
-                      lineHeight: HEX_SIZE * 1.0,
-                    }}
-                    pointerEvents="none"
-                  >
-                    🏙️
-                  </Text>
-                );
-              })}
-              {Array.from(entities.entries()).map(([key, entityId]) => {
-                if (entityId === 'city') return null;
-                if (animatingUnit && key === animatingUnit.fromKey) return null;
-                if (animatingUnit && animatingUnit.hideDestination && key === animatingUnit.toKey) return null;
-                const pos = tileDataMap.get(key);
-                if (!pos) return null;
-                const meta = ENTITY_META[entityId];
-                const r = HEX_SIZE * 0.50;
-                const isSelected = selectedEntityKey === key;
-                const isSpent = spentUnits.has(key);
-                const liveTile = activeTileMap.get(key);
-                const isPlayerUnit = liveTile?.owner === 'player' && meta.isUnit;
-                const isIdleBouncing = isPlayerUnit && !isSpent && !isSelected;
-                if (isIdleBouncing) return null;
-                const iconOpacity = isSpent && isPlayerUnit ? 0.5 : 1.0;
-                return (
-                  <Text
-                    key={`icon-${key}`}
-                    style={{
-                      position: 'absolute',
-                      left: pos.cx - r,
-                      top: pos.cy - r * 0.65,
-                      width: r * 2,
-                      textAlign: 'center',
-                      fontSize: r * 1.1,
-                      lineHeight: r * 1.6,
-                      opacity: iconOpacity,
-                    }}
-                  >
-                    {meta.icon}
-                  </Text>
-                );
-              })}
             </View>
 
             <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
