@@ -1032,21 +1032,23 @@ export default function GameScreen() {
       return moves.size > 0;
     });
     if (hasValidMove) return false;
-    const playerTerritoryIds = new Set<string>();
+    // Mirror the same turn-1 lock used by affordableTerritoryTileKeys:
+    // in round 1 only a free tower counts as "affordable"
+    const playerFreeTowerUsed = freeTowerUsedTiles.get('player') ?? new Set<string>();
     const visited = new Set<string>();
     for (const tile of Array.from(activeTileMap.values())) {
       if (tile.owner !== 'player' || visited.has(tile.key)) continue;
       const territory = getContiguousTerritory(activeTileMap, tile.key, 'player');
       for (const t of territory) visited.add(t.key);
       const id = getTerritoryId(territory);
-      if (id) playerTerritoryIds.add(id);
+      if (!id) continue;
+      const balance = territoryBalances.get(id) ?? 0;
+      const towerFree = territory.length >= 2 && !territory.some(t => playerFreeTowerUsed.has(t.key));
+      const canAfford = turn === 1 ? towerFree : (balance >= minUnitCost || towerFree);
+      if (canAfford) return false;
     }
-    const hasAffordableTerritory = Array.from(playerTerritoryIds).some(
-      id => (territoryBalances.get(id) ?? 0) >= minUnitCost,
-    );
-    if (hasAffordableTerritory) return false;
     return true;
-  }, [entities, activeTileMap, spentUnits, territoryBalances, minUnitCost, isAiTurn]);
+  }, [entities, activeTileMap, spentUnits, territoryBalances, minUnitCost, isAiTurn, freeTowerUsedTiles, turn]);
 
   useEffect(() => {
     const shouldPulse = shouldPulseEndTurn && !armedEntityId && !ribbonOpen;
@@ -1614,46 +1616,14 @@ export default function GameScreen() {
     const visited = new Set<string>();
     const nextGraveyard = new Set<string>();
 
-    for (const tile of Array.from(activeTileMap.values())) {
-      if (tile.owner !== 'player' || visited.has(tile.key)) continue;
-      const territory = getContiguousTerritory(activeTileMap, tile.key, 'player');
-      for (const t of territory) visited.add(t.key);
-      const territoryId = getTerritoryId(territory);
-      if (!territoryId) continue;
-      const income = territory.reduce((s, t) => {
-        if (nextEntities.get(t.key) === 'rebel') return s;
-        return s + TERRAIN_INCOME[t.terrain] + (t.isCity ? CITY_BONUS : 0) + (nextEntities.get(t.key) === 'city' ? CITY_BONUS : 0);
-      }, 0);
-      const upkeep = territory.reduce((s, t) => {
-        const e = nextEntities.get(t.key);
-        return s + (e ? ENTITY_META[e].upkeep : 0);
-      }, 0);
-      const current = nextBalances.get(territoryId) ?? 0;
-      const newBalance = current + income - upkeep;
-      if (newBalance < 0) {
-        nextBalances.set(territoryId, 0);
-        nextEntities = new Map(nextEntities);
-        for (const t of territory) {
-          const e = nextEntities.get(t.key);
-          if (e && ENTITY_META[e].isUnit) {
-            nextEntities.delete(t.key);
-            nextGraveyard.add(t.key);
-          }
-        }
-      } else {
-        nextBalances.set(territoryId, newBalance);
-      }
-    }
-
-    for (const aiOwner of aiOwners) {
-      const aiVisited = new Set<string>();
+    // Income and upkeep are suspended in round 1
+    if (turn !== 1) {
       for (const tile of Array.from(activeTileMap.values())) {
-        if (tile.owner !== aiOwner || aiVisited.has(tile.key)) continue;
-        const territory = getContiguousTerritory(activeTileMap, tile.key, aiOwner);
-        for (const t of territory) aiVisited.add(t.key);
+        if (tile.owner !== 'player' || visited.has(tile.key)) continue;
+        const territory = getContiguousTerritory(activeTileMap, tile.key, 'player');
+        for (const t of territory) visited.add(t.key);
         const territoryId = getTerritoryId(territory);
         if (!territoryId) continue;
-        if (!nextBalances.has(territoryId)) nextBalances.set(territoryId, 0);
         const income = territory.reduce((s, t) => {
           if (nextEntities.get(t.key) === 'rebel') return s;
           return s + TERRAIN_INCOME[t.terrain] + (t.isCity ? CITY_BONUS : 0) + (nextEntities.get(t.key) === 'city' ? CITY_BONUS : 0);
@@ -1676,6 +1646,41 @@ export default function GameScreen() {
           }
         } else {
           nextBalances.set(territoryId, newBalance);
+        }
+      }
+
+      for (const aiOwner of aiOwners) {
+        const aiVisited = new Set<string>();
+        for (const tile of Array.from(activeTileMap.values())) {
+          if (tile.owner !== aiOwner || aiVisited.has(tile.key)) continue;
+          const territory = getContiguousTerritory(activeTileMap, tile.key, aiOwner);
+          for (const t of territory) aiVisited.add(t.key);
+          const territoryId = getTerritoryId(territory);
+          if (!territoryId) continue;
+          if (!nextBalances.has(territoryId)) nextBalances.set(territoryId, 0);
+          const income = territory.reduce((s, t) => {
+            if (nextEntities.get(t.key) === 'rebel') return s;
+            return s + TERRAIN_INCOME[t.terrain] + (t.isCity ? CITY_BONUS : 0) + (nextEntities.get(t.key) === 'city' ? CITY_BONUS : 0);
+          }, 0);
+          const upkeep = territory.reduce((s, t) => {
+            const e = nextEntities.get(t.key);
+            return s + (e ? ENTITY_META[e].upkeep : 0);
+          }, 0);
+          const current = nextBalances.get(territoryId) ?? 0;
+          const newBalance = current + income - upkeep;
+          if (newBalance < 0) {
+            nextBalances.set(territoryId, 0);
+            nextEntities = new Map(nextEntities);
+            for (const t of territory) {
+              const e = nextEntities.get(t.key);
+              if (e && ENTITY_META[e].isUnit) {
+                nextEntities.delete(t.key);
+                nextGraveyard.add(t.key);
+              }
+            }
+          } else {
+            nextBalances.set(territoryId, newBalance);
+          }
         }
       }
     }
