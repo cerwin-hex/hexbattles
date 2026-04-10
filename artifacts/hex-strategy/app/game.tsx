@@ -76,6 +76,36 @@ const PURCHASABLES = (Object.keys(ENTITY_META) as EntityType[]).filter(id => id 
 const UNIT_PURCHASABLES = PURCHASABLES.filter(p => p.isUnit);
 const BUILDING_PURCHASABLES = PURCHASABLES.filter(p => !p.isUnit);
 
+// Wipe out single-hex territories: zero balance, kill units→graveyard, remove buildings
+function applySingleHexPenalty(
+  tileMap: Map<string, HexTile>,
+  balances: Map<string, number>,
+  entities: Map<string, EntityType>,
+  graveyard: Set<string>,
+): void {
+  const allOwners = new Set<TerritoryOwner>(['player', 'ai1', 'ai2', 'ai3', 'ai4', 'ai5']);
+  const visited = new Set<string>();
+  for (const tile of tileMap.values()) {
+    if (!allOwners.has(tile.owner as TerritoryOwner) || visited.has(tile.key)) continue;
+    if (tile.terrain === 'mountain' || tile.terrain === 'lake') continue;
+    const territory = getContiguousTerritory(tileMap, tile.key, tile.owner as TerritoryOwner);
+    for (const t of territory) visited.add(t.key);
+    if (territory.length !== 1) continue;
+    const singleKey = territory[0].key;
+    const id = getTerritoryId(territory);
+    if (id) balances.set(id, 0);
+    const entity = entities.get(singleKey);
+    if (entity) {
+      if (ENTITY_META[entity].isUnit) {
+        entities.delete(singleKey);
+        graveyard.add(singleKey);
+      } else if (entity !== 'rebel') {
+        entities.delete(singleKey);
+      }
+    }
+  }
+}
+
 const STRENGTH_TO_UNIT: Record<number, EntityType> = {
   1: 'simple_unit',
   2: 'advanced_unit',
@@ -963,6 +993,7 @@ export default function GameScreen() {
             const mergedTerritory = getContiguousTerritory(workingTileMap, target, aiOwner);
             const mergedId = getTerritoryId(mergedTerritory);
             if (mergedId) workingBalances.set(mergedId, (workingBalances.get(mergedId) ?? 0) - chosenAction.cost);
+            applySingleHexPenalty(workingTileMap, workingBalances, workingEntities, workingGraveyard);
             workingLiveOwnerMap = new Map(workingLiveOwnerMap);
             workingLiveOwnerMap.set(target, aiOwner);
             workingSpentUnits = new Set(workingSpentUnits);
@@ -1129,6 +1160,7 @@ export default function GameScreen() {
         workingLiveOwnerMap.set(destKey, aiOwner);
         workingGraveyard = new Set(workingGraveyard);
         workingGraveyard.delete(destKey);
+        applySingleHexPenalty(workingTileMap, workingBalances, workingEntities, workingGraveyard);
 
         if (!isDeveloperModeRef.current) {
           await new Promise<void>(resolve => {
@@ -1679,6 +1711,10 @@ export default function GameScreen() {
         territoryBalances,
       );
 
+      const newGraveyard = new Set(graveyard);
+      newGraveyard.delete(key);
+      applySingleHexPenalty(newTileMap, newBalances, newEntities, newGraveyard);
+
       const newLiveOwnerMap = new Map(liveOwnerMap);
       newLiveOwnerMap.set(key, 'player');
 
@@ -1714,7 +1750,7 @@ export default function GameScreen() {
       setLakeUnitFunds(newLakeFunds);
       setSelectedEntityKey(null);
       setSelectedTileKey(key);
-      setGraveyard(prev => { const next = new Set(prev); next.delete(key); return next; });
+      setGraveyard(newGraveyard);
       if (ribbonOpen) closeRibbon();
       if (movingEntityId) {
         triggerUnitAnimation(fromKeyForAnim, key, movingEntityId);
@@ -1817,12 +1853,15 @@ export default function GameScreen() {
         const mergedTerritory = getContiguousTerritory(newTileMap, key, 'player');
         const mergedId = getTerritoryId(mergedTerritory);
         if (mergedId) newBalances.set(mergedId, (newBalances.get(mergedId) ?? 0) - meta.cost);
+        const newGraveyard2 = new Set(graveyard);
+        applySingleHexPenalty(newTileMap, newBalances, newEntities, newGraveyard2);
         const newLiveOwnerMap = new Map(liveOwnerMap);
         newLiveOwnerMap.set(key, 'player');
         setMutableTileMap(newTileMap);
         setLiveOwnerMap(newLiveOwnerMap);
         setEntities(newEntities);
         setTerritoryBalances(newBalances);
+        setGraveyard(newGraveyard2);
         setSpentUnits(prev => { const next = new Set(prev); next.add(key); return next; });
         setArmedEntityId(null);
         setSelectedEntityKey(null);
