@@ -1847,7 +1847,7 @@ export default function GameScreen() {
       runOnJS(handleBoardTap)(e.x, e.y, translateX.value, translateY.value, scale.value);
     });
 
-  const gesture = Gesture.Simultaneous(panGesture, pinchGesture, tapGesture);
+  const gesture = Gesture.Race(tapGesture, Gesture.Simultaneous(panGesture, pinchGesture));
 
   const boardStyle = useAnimatedStyle(() => ({
     transform: [
@@ -1894,7 +1894,7 @@ export default function GameScreen() {
                 <Stop offset="1" stopColor="#183C58" stopOpacity="1" />
               </LinearGradient>
             </Defs>
-            <Rect x={0} y={0} width={SW} height={SH} fill="url(#seaGrad)" onPress={handleDeselect} />
+            <Rect x={0} y={0} width={SW} height={SH} fill="url(#seaGrad)" />
           </Svg>
 
           <Animated.View style={[styles.board, boardStyle, styles.boardElevated]}>
@@ -1911,7 +1911,7 @@ export default function GameScreen() {
                   </ClipPath>
                 ))}
               </Defs>
-              <Rect x={0} y={0} width={boardW} height={boardH} fill="transparent" onPress={handleDeselect} />
+              <Rect x={0} y={0} width={boardW} height={boardH} fill="transparent" />
               {tileData.map(({ tile, cx, cy }) => {
                 const liveTile = activeTileMap.get(tile.key) ?? tile;
                 const isCityZone = tile.cityBuffer || tile.isCity;
@@ -1929,7 +1929,6 @@ export default function GameScreen() {
                     key={tile.key}
                     points={hexCornersString(cx, cy, HEX_SIZE)}
                     fill={fill}
-                    onPress={() => handleTileTap(tile.key)}
                   />
                 );
               })}
@@ -1946,7 +1945,6 @@ export default function GameScreen() {
                     height={s}
                     preserveAspectRatio="xMidYMid slice"
                     clipPath={`url(#lclip-${tile.key})`}
-                    onPress={() => handleTileTap(tile.key)}
                   />
                 );
               })}
@@ -1963,7 +1961,6 @@ export default function GameScreen() {
                     height={s}
                     preserveAspectRatio="xMidYMid slice"
                     clipPath={`url(#mclip-${tile.key})`}
-                    onPress={() => handleTileTap(tile.key)}
                   />
                 );
               })}
@@ -1991,7 +1988,6 @@ export default function GameScreen() {
                       fontSize={HEX_SIZE * 0.72}
                       fill="#fff"
                       opacity={0.9}
-                      onPress={() => handleTileTap(tile.key)}
                     >
                       🏙️
                     </SvgText>
@@ -2066,7 +2062,6 @@ export default function GameScreen() {
                     key={`move-tap-${key}`}
                     points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
                     fill="transparent"
-                    onPress={() => handleTileTap(key)}
                   />
                 );
               })}
@@ -2079,7 +2074,6 @@ export default function GameScreen() {
                     key={`atk-tap-${key}`}
                     points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
                     fill="transparent"
-                    onPress={() => handleTileTap(key)}
                   />
                 );
               })}
@@ -2186,7 +2180,6 @@ export default function GameScreen() {
                       <Polygon
                         points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
                         fill="transparent"
-                        onPress={() => handleTileTap(key)}
                       />
                     </React.Fragment>
                   );
