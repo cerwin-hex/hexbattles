@@ -2249,7 +2249,8 @@ export default function GameScreen() {
                   const pos = tileDataMap.get(key);
                   if (!pos) return null;
                   const tileOwner = activeTileMap.get(key)?.owner;
-                  const isAttackMove = tileOwner !== 'player' && tileOwner !== undefined;
+                  const hasRebel = entities.get(key) === 'rebel';
+                  const isAttackMove = (tileOwner !== 'player' && tileOwner !== undefined) || hasRebel;
                   return (
                     <Circle
                       key={`move-dot-${key}`}
