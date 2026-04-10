@@ -2756,26 +2756,6 @@ export default function GameScreen() {
                 : 'Your territory has been conquered. The campaign is lost.'}
             </Text>
             <TouchableOpacity
-              style={styles.gameResultBtn}
-              onPress={() => {
-                aiTurnRef.current = false;
-                resumeAiRef.current?.();
-                resumeAiRef.current = null;
-                aiStepHistoryRef.current = [];
-                setAiHistoryIndex(-1);
-                setAiHistoryLen(0);
-                setGameResult(null);
-                setIsAiTurn(false);
-                setIsDeveloperModeActive(false);
-                setIsAiPaused(false);
-                setMoveHistory([]);
-                setTurn(1);
-                setGameKey(k => k + 1);
-              }}
-            >
-              <Text style={styles.gameResultBtnText}>Restart</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
               style={[styles.gameResultBtn, styles.gameResultMenuBtn]}
               onPress={() => {
                 setGameResult(null);
