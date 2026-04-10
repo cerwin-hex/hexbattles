@@ -1159,12 +1159,13 @@ export default function GameScreen() {
       if (!id) continue;
       const balance = territoryBalances.get(id) ?? 0;
       const towerFree = territory.length >= 2 && !territory.some(t => playerFreeTowerUsed.has(t.key));
-      const canAfford = balance >= minUnitCost || towerFree;
+      // In round 1, only the free tower can be placed — balance spending is locked
+      const canAfford = turn === 1 ? towerFree : (balance >= minUnitCost || towerFree);
       if (!canAfford) continue;
       for (const t of territory) keys.add(t.key);
     }
     return keys;
-  }, [activeTileMap, territoryBalances, minUnitCost, freeTowerUsedTiles, isAiTurn, gameResult]);
+  }, [activeTileMap, territoryBalances, minUnitCost, freeTowerUsedTiles, isAiTurn, gameResult, turn]);
 
   const hasAffordableTerritories = affordableTerritoryTileKeys.size > 0;
   useEffect(() => {
@@ -1445,7 +1446,8 @@ export default function GameScreen() {
       const canMerge = armedIsUnit && existingIsAllyUnit;
       const canOverwriteRebel = armedIsUnit && existingOnTile === 'rebel';
       const existingIsBuilding = !!existingOnTile && !ENTITY_META[existingOnTile].isUnit && existingOnTile !== 'rebel';
-      const canOverwriteBuilding = armedIsUnit && existingIsBuilding
+      const existingBuildingIsOwn = existingIsBuilding && activeTileMap.get(key)?.owner === 'player';
+      const canOverwriteBuilding = armedIsUnit && existingIsBuilding && !existingBuildingIsOwn
         && ENTITY_META[armedEntityId].strength >= ENTITY_META[existingOnTile as EntityType].strength;
       const alreadyOccupied = !!existingOnTile && !canMerge && !canOverwriteRebel && !canOverwriteBuilding;
       if (!alreadyOccupied && selectedTerritoryId) {
