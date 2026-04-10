@@ -1006,8 +1006,8 @@ export default function GameScreen() {
         if (neighbor.terrain === 'mountain' || neighbor.terrain === 'lake') continue;
         const existingEntity = entities.get(nk);
         if (existingEntity && existingEntity !== 'rebel') {
-          if (ENTITY_META[existingEntity].isUnit) continue;
-          if (meta.strength < ENTITY_META[existingEntity].strength) continue;
+          // buildings with higher strength can't be captured
+          if (!ENTITY_META[existingEntity].isUnit && meta.strength < ENTITY_META[existingEntity].strength) continue;
         }
         const enemyZoC = getMaxEnemyZoC(nk, 'player', entities, activeTileMap);
         if (meta.strength > enemyZoC) result.add(nk);
