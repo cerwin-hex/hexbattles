@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import {
   Modal,
   Platform,
@@ -209,18 +209,70 @@ export default function GameScreen() {
   const [liveOwnerMap, setLiveOwnerMap] = useState<Map<string, TerritoryOwner>>(new Map());
   const [mutableTileMap, setMutableTileMap] = useState<Map<string, HexTile>>(new Map());
 
+  const borderEdgesCache = useRef<{
+    mutableTileMap: Map<string, HexTile>;
+    tileData: Array<{ tile: HexTile; cx: number; cy: number }>;
+    INNER_SIZE: number;
+    perTileEdges: Map<string, BorderEdge[]>;
+    result: BorderEdge[];
+  } | null>(null);
+
   const borderEdges = useMemo<BorderEdge[]>(() => {
-    const edges: BorderEdge[] = [];
-    // Use mutableTileMap as the authoritative ownership source so borders
-    // stay correct across turns even as liveOwnerMap is a per-turn overlay.
     const ownerOf = (key: string, base: HexTile) =>
       mutableTileMap.get(key)?.owner ?? base.owner;
 
-    for (const { tile, cx, cy } of tileData) {
+    const prev = borderEdgesCache.current;
+    const isNewBoard = !prev || prev.tileData !== tileData || prev.INNER_SIZE !== INNER_SIZE;
+
+    const perTileEdges: Map<string, BorderEdge[]> = isNewBoard ? new Map() : new Map(prev!.perTileEdges);
+
+    const changedKeys = new Set<string>();
+    if (isNewBoard) {
+      for (const { tile } of tileData) changedKeys.add(tile.key);
+    } else {
+      for (const [key, tile] of mutableTileMap) {
+        if (prev!.mutableTileMap.get(key)?.owner !== tile.owner) {
+          changedKeys.add(key);
+          for (const { dir: [dq, dr] } of ORDERED_EDGES) {
+            const [q, r] = key.split(',').map(Number);
+            changedKeys.add(tileKey(q + dq, r + dr));
+          }
+        }
+      }
+      for (const [key] of prev!.mutableTileMap) {
+        if (!mutableTileMap.has(key)) {
+          changedKeys.add(key);
+          for (const { dir: [dq, dr] } of ORDERED_EDGES) {
+            const [q, r] = key.split(',').map(Number);
+            changedKeys.add(tileKey(q + dq, r + dr));
+          }
+        }
+      }
+    }
+
+    const computeEdgesForTile = (tile: HexTile, cx: number, cy: number): BorderEdge[] => {
+      const edges: BorderEdge[] = [];
       const liveOwner = ownerOf(tile.key, tile);
-      if (tile.terrain === 'mountain' || tile.terrain === 'lake' || liveOwner === 'neutral') continue;
+      if (tile.terrain === 'mountain' || tile.terrain === 'lake' || liveOwner === 'neutral') {
+        if ((tile.cityBuffer || tile.isCity) && liveOwner === 'neutral') {
+          for (const { dir: [dq, dr], verts: [va, vb] } of ORDERED_EDGES) {
+            const nk = tileKey(tile.q + dq, tile.r + dr);
+            const neighborBase = tileMap.get(nk);
+            const neighborLiveOwner = neighborBase ? ownerOf(nk, neighborBase) : null;
+            const neighborIsNeutralCity =
+              neighborBase !== undefined &&
+              neighborLiveOwner === 'neutral' &&
+              (neighborBase.cityBuffer || neighborBase.isCity);
+            if (neighborIsNeutralCity) continue;
+            const ptA = hexCornerPoint(cx, cy, INNER_SIZE, va);
+            const ptB = hexCornerPoint(cx, cy, INNER_SIZE, vb);
+            edges.push({ x1: ptA.x, y1: ptA.y, x2: ptB.x, y2: ptB.y, color: CITY_BUFFER_BORDER, width: BORDER_W });
+          }
+        }
+        return edges;
+      }
       const color = TERRITORY_BORDERS[liveOwner as TerritoryOwner]!;
-      if (!color) continue;
+      if (!color) return edges;
       for (const { dir: [dq, dr], verts: [va, vb] } of ORDERED_EDGES) {
         const nk = tileKey(tile.q + dq, tile.r + dr);
         const neighborBase = tileMap.get(nk);
@@ -241,41 +293,72 @@ export default function GameScreen() {
         const ptB = hexCornerPoint(cx, cy, INNER_SIZE, vb);
         edges.push({ x1: ptA.x, y1: ptA.y, x2: ptB.x, y2: ptB.y, color, width: BORDER_W });
       }
+      return edges;
+    };
+
+    for (const key of changedKeys) {
+      const baseTile = tileMap.get(key);
+      const pos = tileDataMap.get(key);
+      if (!baseTile || !pos) { perTileEdges.delete(key); continue; }
+      perTileEdges.set(key, computeEdgesForTile(baseTile, pos.cx, pos.cy));
     }
 
-    for (const { tile, cx, cy } of tileData) {
-      if (!tile.cityBuffer && !tile.isCity) continue;
-      if (tile.terrain === 'mountain' || tile.terrain === 'lake') continue;
-      const liveOwner = ownerOf(tile.key, tile);
-      if (liveOwner !== 'neutral') continue;
-      for (const { dir: [dq, dr], verts: [va, vb] } of ORDERED_EDGES) {
-        const nk = tileKey(tile.q + dq, tile.r + dr);
-        const neighborBase = tileMap.get(nk);
-        const neighborLiveOwner = neighborBase ? ownerOf(nk, neighborBase) : null;
-        const neighborIsNeutralCity =
-          neighborBase !== undefined &&
-          neighborLiveOwner === 'neutral' &&
-          (neighborBase.cityBuffer || neighborBase.isCity);
-        const needsBorder = !neighborIsNeutralCity;
-        if (!needsBorder) continue;
-        const ptA = hexCornerPoint(cx, cy, INNER_SIZE, va);
-        const ptB = hexCornerPoint(cx, cy, INNER_SIZE, vb);
-        edges.push({ x1: ptA.x, y1: ptA.y, x2: ptB.x, y2: ptB.y, color: CITY_BUFFER_BORDER, width: BORDER_W });
-      }
+    const allEdges: BorderEdge[] = [];
+    for (const { tile } of tileData) {
+      const tileEdges = perTileEdges.get(tile.key);
+      if (tileEdges) for (const e of tileEdges) allEdges.push(e);
     }
 
-    return edges;
-  }, [tileData, tileMap, mutableTileMap, INNER_SIZE]);
+    borderEdgesCache.current = { mutableTileMap, tileData, INNER_SIZE, perTileEdges, result: allEdges };
+    return allEdges;
+  }, [tileData, tileMap, tileDataMap, mutableTileMap, INNER_SIZE]);
+
+  const outerEdgesCache = useRef<{
+    mutableTileMap: Map<string, HexTile>;
+    tileData: Array<{ tile: HexTile; cx: number; cy: number }>;
+    HEX_SIZE: number;
+    perTileEdges: Map<string, BorderEdge[]>;
+    result: BorderEdge[];
+  } | null>(null);
 
   const outerTerritoryEdges = useMemo<BorderEdge[]>(() => {
-    const edges: BorderEdge[] = [];
     const ownerOf = (key: string, base: HexTile) =>
       mutableTileMap.get(key)?.owner ?? base.owner;
 
-    for (const { tile, cx, cy } of tileData) {
+    const prev = outerEdgesCache.current;
+    const isNewBoard = !prev || prev.tileData !== tileData || prev.HEX_SIZE !== HEX_SIZE;
+
+    const perTileEdges: Map<string, BorderEdge[]> = isNewBoard ? new Map() : new Map(prev!.perTileEdges);
+
+    const changedKeys = new Set<string>();
+    if (isNewBoard) {
+      for (const { tile } of tileData) changedKeys.add(tile.key);
+    } else {
+      for (const [key, tile] of mutableTileMap) {
+        if (prev!.mutableTileMap.get(key)?.owner !== tile.owner) {
+          changedKeys.add(key);
+          for (const { dir: [dq, dr] } of ORDERED_EDGES) {
+            const [q, r] = key.split(',').map(Number);
+            changedKeys.add(tileKey(q + dq, r + dr));
+          }
+        }
+      }
+      for (const [key] of prev!.mutableTileMap) {
+        if (!mutableTileMap.has(key)) {
+          changedKeys.add(key);
+          for (const { dir: [dq, dr] } of ORDERED_EDGES) {
+            const [q, r] = key.split(',').map(Number);
+            changedKeys.add(tileKey(q + dq, r + dr));
+          }
+        }
+      }
+    }
+
+    const computeOuterEdgesForTile = (tile: HexTile, cx: number, cy: number): BorderEdge[] => {
+      const edges: BorderEdge[] = [];
       const liveOwner = ownerOf(tile.key, tile);
       const isImpassable = tile.terrain === 'mountain' || tile.terrain === 'lake';
-      if (!isImpassable && liveOwner === 'neutral') continue;
+      if (!isImpassable && liveOwner === 'neutral') return edges;
 
       for (const { dir: [dq, dr], verts: [va, vb] } of ORDERED_EDGES) {
         const nk = tileKey(tile.q + dq, tile.r + dr);
@@ -306,9 +389,25 @@ export default function GameScreen() {
           edges.push({ x1: ptA.x, y1: ptA.y, x2: ptB.x, y2: ptB.y, color: '#000000', width: 2 });
         }
       }
+      return edges;
+    };
+
+    for (const key of changedKeys) {
+      const baseTile = tileMap.get(key);
+      const pos = tileDataMap.get(key);
+      if (!baseTile || !pos) { perTileEdges.delete(key); continue; }
+      perTileEdges.set(key, computeOuterEdgesForTile(baseTile, pos.cx, pos.cy));
     }
-    return edges;
-  }, [tileData, tileMap, mutableTileMap, HEX_SIZE]);
+
+    const allEdges: BorderEdge[] = [];
+    for (const { tile } of tileData) {
+      const tileEdges = perTileEdges.get(tile.key);
+      if (tileEdges) for (const e of tileEdges) allEdges.push(e);
+    }
+
+    outerEdgesCache.current = { mutableTileMap, tileData, HEX_SIZE, perTileEdges, result: allEdges };
+    return allEdges;
+  }, [tileData, tileMap, tileDataMap, mutableTileMap, HEX_SIZE]);
 
   const boardW = bounds.width;
   const boardH = bounds.height;
@@ -1020,34 +1119,58 @@ export default function GameScreen() {
     return Math.min(...(Object.values(ENTITY_META).filter(m => m.isUnit).map(m => m.cost)));
   }, []);
 
-  const shouldPulseEndTurn = useMemo(() => {
-    if (isAiTurn) return false;
-    const hasValidMove = Array.from(entities.entries()).some(([key, entityId]) => {
-      const meta = ENTITY_META[entityId];
-      if (!meta.isUnit) return false;
-      const tile = activeTileMap.get(key);
-      if (tile?.owner !== 'player') return false;
-      if (spentUnits.has(key)) return false;
-      const moves = getValidMoves(key, 'player', entities, activeTileMap, spentUnits);
-      return moves.size > 0;
+  const [, startPulseTransition] = useTransition();
+  const [shouldPulseEndTurn, setShouldPulseEndTurn] = useState(false);
+  const prevPulseInputs = useRef<{
+    entities: Map<string, EntityType>;
+    activeTileMap: Map<string, HexTile>;
+    spentUnits: Set<string>;
+    territoryBalances: Map<string, number>;
+    freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
+    isAiTurn: boolean;
+    turn: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const prev = prevPulseInputs.current;
+    if (
+      prev &&
+      prev.entities === entities &&
+      prev.activeTileMap === activeTileMap &&
+      prev.spentUnits === spentUnits &&
+      prev.territoryBalances === territoryBalances &&
+      prev.freeTowerUsedTiles === freeTowerUsedTiles &&
+      prev.isAiTurn === isAiTurn &&
+      prev.turn === turn
+    ) return;
+    prevPulseInputs.current = { entities, activeTileMap, spentUnits, territoryBalances, freeTowerUsedTiles, isAiTurn, turn };
+    startPulseTransition(() => {
+      if (isAiTurn) { setShouldPulseEndTurn(false); return; }
+      const hasValidMove = Array.from(entities.entries()).some(([key, entityId]) => {
+        const meta = ENTITY_META[entityId];
+        if (!meta.isUnit) return false;
+        const tile = activeTileMap.get(key);
+        if (tile?.owner !== 'player') return false;
+        if (spentUnits.has(key)) return false;
+        const moves = getValidMoves(key, 'player', entities, activeTileMap, spentUnits);
+        return moves.size > 0;
+      });
+      if (hasValidMove) { setShouldPulseEndTurn(false); return; }
+      const playerFreeTowerUsed = freeTowerUsedTiles.get('player') ?? new Set<string>();
+      const visited = new Set<string>();
+      for (const tile of Array.from(activeTileMap.values())) {
+        if (tile.owner !== 'player' || visited.has(tile.key)) continue;
+        const territory = getContiguousTerritory(activeTileMap, tile.key, 'player');
+        for (const t of territory) visited.add(t.key);
+        const id = getTerritoryId(territory);
+        if (!id) continue;
+        const balance = territoryBalances.get(id) ?? 0;
+        const towerFree = territory.length >= 2 && !territory.some(t => playerFreeTowerUsed.has(t.key));
+        const canAfford = turn === 1 ? towerFree : balance >= minUnitCost;
+        if (canAfford) { setShouldPulseEndTurn(false); return; }
+      }
+      setShouldPulseEndTurn(true);
     });
-    if (hasValidMove) return false;
-    // Mirror the same turn-1 lock used by affordableTerritoryTileKeys:
-    // in round 1 only a free tower counts as "affordable"
-    const playerFreeTowerUsed = freeTowerUsedTiles.get('player') ?? new Set<string>();
-    const visited = new Set<string>();
-    for (const tile of Array.from(activeTileMap.values())) {
-      if (tile.owner !== 'player' || visited.has(tile.key)) continue;
-      const territory = getContiguousTerritory(activeTileMap, tile.key, 'player');
-      for (const t of territory) visited.add(t.key);
-      const id = getTerritoryId(territory);
-      if (!id) continue;
-      const balance = territoryBalances.get(id) ?? 0;
-      const towerFree = territory.length >= 2 && !territory.some(t => playerFreeTowerUsed.has(t.key));
-      const canAfford = turn === 1 ? towerFree : balance >= minUnitCost;
-      if (canAfford) return false;
-    }
-    return true;
   }, [entities, activeTileMap, spentUnits, territoryBalances, minUnitCost, isAiTurn, freeTowerUsedTiles, turn]);
 
   useEffect(() => {
@@ -1148,8 +1271,28 @@ export default function GameScreen() {
     return edges;
   }, [selectedTileKeys, tileDataMap, tileMap, INNER_SIZE]);
 
+  const affordableTerritoryCache = useRef<{
+    activeTileMap: Map<string, HexTile>;
+    territoryBalances: Map<string, number>;
+    freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
+    isAiTurn: boolean;
+    gameResult: unknown;
+    turn: number;
+    result: Set<string>;
+  } | null>(null);
+
   const affordableTerritoryTileKeys = useMemo<Set<string>>(() => {
     if (isAiTurn || gameResult !== null) return new Set();
+    const cached = affordableTerritoryCache.current;
+    if (
+      cached &&
+      cached.activeTileMap === activeTileMap &&
+      cached.territoryBalances === territoryBalances &&
+      cached.freeTowerUsedTiles === freeTowerUsedTiles &&
+      cached.isAiTurn === isAiTurn &&
+      cached.gameResult === gameResult &&
+      cached.turn === turn
+    ) return cached.result;
     const keys = new Set<string>();
     const visited = new Set<string>();
     const playerFreeTowerUsed = freeTowerUsedTiles.get('player') ?? new Set<string>();
@@ -1166,6 +1309,7 @@ export default function GameScreen() {
       if (!canAfford) continue;
       for (const t of territory) keys.add(t.key);
     }
+    affordableTerritoryCache.current = { activeTileMap, territoryBalances, freeTowerUsedTiles, isAiTurn, gameResult, turn, result: keys };
     return keys;
   }, [activeTileMap, territoryBalances, minUnitCost, freeTowerUsedTiles, isAiTurn, gameResult, turn]);
 
@@ -1305,7 +1449,7 @@ export default function GameScreen() {
 
   const handleTileTap = useCallback((key: string) => {
     const now = Date.now();
-    if (now - lastTileTapMs.current < 200) return;
+    if (now - lastTileTapMs.current < 50) return;
     lastTileTapMs.current = now;
     if (isAiTurn || gameResult !== null) return;
     const tile = activeTileMap.get(key);
