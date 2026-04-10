@@ -756,7 +756,77 @@ export default function GameScreen() {
         // Round 1: only the free tower is allowed — no other purchases
         if (currentTurn === 1) continue;
 
-        const balance = workingBalances.get(territoryId) ?? 0;
+        // --- Rebel clearing: move an existing unit onto rebel tile, or buy a simple_unit onto it ---
+        {
+          const rebelTiles = territory.filter(t => workingEntities.get(t.key) === 'rebel');
+          for (const rebelTile of rebelTiles) {
+            if (!aiTurnRef.current) return;
+            // Try to find an unspent friendly unit that can reach the rebel tile
+            const aiUnitsNow = Array.from(workingEntities.entries()).filter(([k, e]) => {
+              const tile = workingTileMap.get(k);
+              return tile?.owner === aiOwner && ENTITY_META[e].isUnit && !workingSpentUnits.has(k);
+            });
+            let cleared = false;
+            for (const [unitKey, unitEntity] of aiUnitsNow) {
+              const validMoves = getValidMoves(unitKey, aiOwner, workingEntities, workingTileMap, workingSpentUnits);
+              if (validMoves.has(rebelTile.key)) {
+                // Move this unit to the rebel tile
+                workingEntities = new Map(workingEntities);
+                workingEntities.delete(rebelTile.key); // remove rebel
+                workingEntities.delete(unitKey);
+                workingEntities.set(rebelTile.key, unitEntity);
+                workingSpentUnits = new Set(workingSpentUnits);
+                workingSpentUnits.add(rebelTile.key);
+                workingGraveyard = new Set(workingGraveyard);
+                workingGraveyard.delete(rebelTile.key);
+                workingBalances = recalculateTerritoriesForCapture(
+                  rebelTile.key, aiOwner, aiOwner, workingTileMap, workingTileMap, workingBalances,
+                );
+                setEntities(new Map(workingEntities));
+                setTerritoryBalances(new Map(workingBalances));
+                setGraveyard(new Set(workingGraveyard));
+                await awaitStep({
+                  entities: new Map(workingEntities),
+                  mutableTileMap: new Map(workingTileMap),
+                  territoryBalances: new Map(workingBalances),
+                  liveOwnerMap: new Map(workingLiveOwnerMap),
+                  graveyard: new Set(workingGraveyard),
+                  freeTowerUsedTiles: new Map([...workingFreeTowerUsed.entries()].map(([k, v]) => [k, new Set(v)])),
+                });
+                if (!aiTurnRef.current) return;
+                cleared = true;
+                break;
+              }
+            }
+            if (!cleared) {
+              // Buy a simple_unit directly onto the rebel tile if affordable
+              const currentBalance = workingBalances.get(territoryId) ?? 0;
+              if (currentBalance >= 10) {
+                workingEntities = new Map(workingEntities);
+                workingEntities.delete(rebelTile.key); // remove rebel
+                workingEntities.set(rebelTile.key, 'simple_unit');
+                workingBalances = new Map(workingBalances);
+                workingBalances.set(territoryId, currentBalance - 10);
+                workingGraveyard = new Set(workingGraveyard);
+                workingGraveyard.delete(rebelTile.key);
+                setEntities(new Map(workingEntities));
+                setTerritoryBalances(new Map(workingBalances));
+                setGraveyard(new Set(workingGraveyard));
+                await awaitStep({
+                  entities: new Map(workingEntities),
+                  mutableTileMap: new Map(workingTileMap),
+                  territoryBalances: new Map(workingBalances),
+                  liveOwnerMap: new Map(workingLiveOwnerMap),
+                  graveyard: new Set(workingGraveyard),
+                  freeTowerUsedTiles: new Map([...workingFreeTowerUsed.entries()].map(([k, v]) => [k, new Set(v)])),
+                });
+                if (!aiTurnRef.current) return;
+              }
+            }
+          }
+        }
+
+        let balance = workingBalances.get(territoryId) ?? 0;
         if (balance < 10) continue;
 
         const territoryKeys = new Set(territory.map(t => t.key));
@@ -764,11 +834,28 @@ export default function GameScreen() {
           t => t.terrain !== 'mountain' && t.terrain !== 'lake' && !workingEntities.has(t.key),
         );
 
-        // Find adjacent tiles outside the territory that can be captured,
-        // mirroring the same rules the player uses for validPlacementAttackTiles.
+        // --- Upgrades: collect upgradable units/buildings in territory ---
+        type AiAction =
+          | { kind: 'upgrade'; key: string; from: EntityType; to: EntityType; cost: number }
+          | { kind: 'buy'; unitType: EntityType; key: string; outside: boolean; cost: number };
+
+        const upgradeActions: AiAction[] = [];
+        for (const t of territory) {
+          if (t.terrain === 'mountain' || t.terrain === 'lake') continue;
+          const existing = workingEntities.get(t.key);
+          if (!existing) continue;
+          const upgradeTo = UNIT_UPGRADE[existing];
+          if (!upgradeTo) continue;
+          const cost = 10; // flat upgrade cost, same as player UI
+          if (balance >= cost) {
+            upgradeActions.push({ kind: 'upgrade', key: t.key, from: existing, to: upgradeTo, cost });
+          }
+        }
+
+        // --- Placement attacks for each affordable unit type (ZoC-aware) ---
+        // Build a map of which outside tiles are reachable per unit strength
+        const outsideTilesByStrength = new Map<number, { enemy: string[]; neutral: string[] }>();
         const seenAdjacent = new Set<string>();
-        const enemyAdjacentKeys: string[] = [];
-        const neutralAdjacentKeys: string[] = [];
         for (const t of territory) {
           if (t.terrain === 'mountain' || t.terrain === 'lake') continue;
           const [q, r] = t.key.split(',').map(Number);
@@ -779,55 +866,110 @@ export default function GameScreen() {
             const neighbor = workingTileMap.get(nk);
             if (!neighbor || neighbor.terrain === 'mountain' || neighbor.terrain === 'lake') continue;
             const existingEntity = workingEntities.get(nk);
-            if (existingEntity && existingEntity !== 'rebel') continue;
+            if (existingEntity && existingEntity !== 'rebel') {
+              // Skip tiles in other AI-owned clusters (ally units/buildings must not be overwritten)
+              if (neighbor.owner === aiOwner) continue;
+              // Enemy or neutral tiles with entities (units, buildings, cities):
+              // allow — ZoC check below will enforce the required unit strength
+            }
             const enemyZoC = getMaxEnemyZoC(nk, aiOwner, workingEntities, workingTileMap);
-            if (1 <= enemyZoC) continue; // simple_unit strength = 1
+            // Store tile under required minimum strength (unit must be strictly stronger: strength > enemyZoC)
+            const requiredStrength = enemyZoC + 1;
+            if (!outsideTilesByStrength.has(requiredStrength)) {
+              outsideTilesByStrength.set(requiredStrength, { enemy: [], neutral: [] });
+            }
+            const bucket = outsideTilesByStrength.get(requiredStrength)!;
             if (neighbor.owner !== 'neutral' && neighbor.owner !== aiOwner) {
-              enemyAdjacentKeys.push(nk);
+              bucket.enemy.push(nk);
             } else {
-              neutralAdjacentKeys.push(nk);
+              bucket.neutral.push(nk);
             }
           }
         }
 
-        type AiPlacement = { key: string; outside: boolean };
-        let candidates: AiPlacement[];
-        if (enemyAdjacentKeys.length > 0) {
-          candidates = enemyAdjacentKeys.map(k => ({ key: k, outside: true }));
-        } else if (neutralAdjacentKeys.length > 0) {
-          candidates = neutralAdjacentKeys.map(k => ({ key: k, outside: true }));
-        } else {
-          candidates = vacantInside.map(t => ({ key: t.key, outside: false }));
-        }
-        if (candidates.length === 0) continue;
+        // Build list of purchasable unit types and their placement options
+        const purchasableUnits: Array<{ unitType: EntityType; cost: number; strength: number }> = [
+          { unitType: 'simple_unit',   cost: ENTITY_META.simple_unit.cost,   strength: ENTITY_META.simple_unit.strength },
+          { unitType: 'advanced_unit', cost: ENTITY_META.advanced_unit.cost, strength: ENTITY_META.advanced_unit.strength },
+          { unitType: 'expert_unit',   cost: ENTITY_META.expert_unit.cost,   strength: ENTITY_META.expert_unit.strength },
+        ];
 
-        const target = candidates[Math.floor(Math.random() * candidates.length)];
+        const buyActions: AiAction[] = [];
+        for (const { unitType, cost, strength } of purchasableUnits) {
+          if (balance < cost) continue;
+          // Collect outside tiles this unit can reach (strength >= enemyZoC allows attack)
+          const enemyOpts: string[] = [];
+          const neutralOpts: string[] = [];
+          for (const [reqStr, { enemy, neutral }] of outsideTilesByStrength) {
+            if (strength >= reqStr) {
+              enemyOpts.push(...enemy);
+              neutralOpts.push(...neutral);
+            }
+          }
+          const outsideOpts = enemyOpts.length > 0 ? enemyOpts : neutralOpts;
+          if (outsideOpts.length > 0) {
+            const key = outsideOpts[Math.floor(Math.random() * outsideOpts.length)];
+            buyActions.push({ kind: 'buy', unitType, key, outside: true, cost });
+          } else if (vacantInside.length > 0) {
+            const key = vacantInside[Math.floor(Math.random() * vacantInside.length)].key;
+            buyActions.push({ kind: 'buy', unitType, key, outside: false, cost });
+          }
+        }
+
+        // Purchasable buildings (tower, castle) placed on vacant inside tiles only
+        const purchasableBuildings: Array<{ unitType: EntityType; cost: number }> = [
+          { unitType: 'tower',  cost: ENTITY_META.tower.cost },
+          { unitType: 'castle', cost: ENTITY_META.castle.cost },
+        ];
+        for (const { unitType, cost } of purchasableBuildings) {
+          if (balance < cost) continue;
+          if (vacantInside.length > 0) {
+            const key = vacantInside[Math.floor(Math.random() * vacantInside.length)].key;
+            buyActions.push({ kind: 'buy', unitType, key, outside: false, cost });
+          }
+        }
+
+        // Combine all possible actions (upgrades + buys)
+        const allActions: AiAction[] = [...upgradeActions, ...buyActions];
+        if (allActions.length === 0) continue;
+
+        // Choose a random action (weight equally)
+        const chosenAction = allActions[Math.floor(Math.random() * allActions.length)];
         workingEntities = new Map(workingEntities);
         workingBalances = new Map(workingBalances);
+        balance = workingBalances.get(territoryId) ?? 0;
 
-        if (!target.outside) {
-          workingEntities.set(target.key, 'simple_unit');
-          workingBalances.set(territoryId, balance - 10);
+        if (chosenAction.kind === 'upgrade') {
+          // Upgrade existing entity in place
+          workingEntities.set(chosenAction.key, chosenAction.to);
+          workingBalances.set(territoryId, balance - chosenAction.cost);
         } else {
-          const previousOwner = (workingTileMap.get(target.key)?.owner ?? 'neutral') as TerritoryOwner;
-          const prevSnapshot = new Map(workingTileMap);
-          workingTileMap = new Map(workingTileMap);
-          const targetTile = workingTileMap.get(target.key);
-          if (targetTile) workingTileMap.set(target.key, { ...targetTile, owner: aiOwner });
-          workingEntities.delete(target.key);
-          workingEntities.set(target.key, 'simple_unit');
-          workingBalances = recalculateTerritoriesForCapture(
-            target.key, aiOwner, previousOwner, prevSnapshot, workingTileMap, workingBalances,
-          );
-          const mergedTerritory = getContiguousTerritory(workingTileMap, target.key, aiOwner);
-          const mergedId = getTerritoryId(mergedTerritory);
-          if (mergedId) workingBalances.set(mergedId, (workingBalances.get(mergedId) ?? 0) - 10);
-          workingLiveOwnerMap = new Map(workingLiveOwnerMap);
-          workingLiveOwnerMap.set(target.key, aiOwner);
-          workingSpentUnits = new Set(workingSpentUnits);
-          workingSpentUnits.add(target.key);
-          setMutableTileMap(new Map(workingTileMap));
-          setLiveOwnerMap(new Map(workingLiveOwnerMap));
+          // Buy: chosenAction.kind === 'buy'
+          const { unitType, key: target, outside } = chosenAction;
+          if (!outside) {
+            workingEntities.set(target, unitType);
+            workingBalances.set(territoryId, balance - chosenAction.cost);
+          } else {
+            const previousOwner = (workingTileMap.get(target)?.owner ?? 'neutral') as TerritoryOwner;
+            const prevSnapshot = new Map(workingTileMap);
+            workingTileMap = new Map(workingTileMap);
+            const targetTile = workingTileMap.get(target);
+            if (targetTile) workingTileMap.set(target, { ...targetTile, owner: aiOwner });
+            workingEntities.delete(target);
+            workingEntities.set(target, unitType);
+            workingBalances = recalculateTerritoriesForCapture(
+              target, aiOwner, previousOwner, prevSnapshot, workingTileMap, workingBalances,
+            );
+            const mergedTerritory = getContiguousTerritory(workingTileMap, target, aiOwner);
+            const mergedId = getTerritoryId(mergedTerritory);
+            if (mergedId) workingBalances.set(mergedId, (workingBalances.get(mergedId) ?? 0) - chosenAction.cost);
+            workingLiveOwnerMap = new Map(workingLiveOwnerMap);
+            workingLiveOwnerMap.set(target, aiOwner);
+            workingSpentUnits = new Set(workingSpentUnits);
+            workingSpentUnits.add(target);
+            setMutableTileMap(new Map(workingTileMap));
+            setLiveOwnerMap(new Map(workingLiveOwnerMap));
+          }
         }
 
         setEntities(new Map(workingEntities));
