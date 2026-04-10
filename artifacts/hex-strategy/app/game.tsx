@@ -22,9 +22,10 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, Defs, Image as SvgImage, Line, LinearGradient, Polygon, Rect, Stop, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Defs, Image as SvgImage, Line, LinearGradient, Pattern, Polygon, Rect, Stop, Text as SvgText } from 'react-native-svg';
 
-const MOUNTAIN_IMG = require('../assets/images/mountain.png');
+const MOUNTAIN_IMG = require('../assets/images/mountain.webp');
+const WATER_IMG = require('../assets/images/water.webp');
 
 import { CITY_BUFFER_BORDER, CITY_NEUTRAL_FILL, TERRAIN_FILLS, TERRITORY_BORDERS, TERRITORY_FILLS } from '@/constants/colors';
 import {
@@ -1297,7 +1298,9 @@ export default function GameScreen() {
   }, [pendingLakeMove, activeTileMap, entities, spentUnits, partialMoves, territoryBalances, liveOwnerMap, lakeUnitFunds, pushHistory, ribbonOpen, triggerUnitAnimation]);
 
   const handleTileTap = useCallback((key: string) => {
-    lastTileTapMs.current = Date.now();
+    const now = Date.now();
+    if (now - lastTileTapMs.current < 200) return;
+    lastTileTapMs.current = now;
     if (isAiTurn || gameResult !== null) return;
     const tile = activeTileMap.get(key);
 
@@ -1830,7 +1833,6 @@ export default function GameScreen() {
 
   const tapGesture = Gesture.Tap()
     .maxDistance(5)
-    .enabled(Platform.OS !== 'web')
     .onEnd(e => {
       runOnJS(handleBoardTap)(e.x, e.y, translateX.value, translateY.value, scale.value);
     });
@@ -1887,17 +1889,33 @@ export default function GameScreen() {
 
           <Animated.View style={[styles.board, boardStyle, styles.boardElevated]}>
             <Svg width={boardW} height={boardH}>
+              <Defs>
+                <Pattern
+                  id="waterPattern"
+                  x={0} y={0} width={1} height={1}
+                  patternUnits="objectBoundingBox"
+                  patternContentUnits="objectBoundingBox"
+                >
+                  <SvgImage
+                    href={WATER_IMG}
+                    x={0} y={0} width={1} height={1}
+                    preserveAspectRatio="xMidYMid slice"
+                  />
+                </Pattern>
+              </Defs>
               <Rect x={0} y={0} width={boardW} height={boardH} fill="transparent" onPress={handleDeselect} />
               {tileData.map(({ tile, cx, cy }) => {
                 const liveTile = activeTileMap.get(tile.key) ?? tile;
                 const isCityZone = tile.cityBuffer || tile.isCity;
-                const fill = hasSelection
-                  ? (TERRAIN_FILLS[tile.terrain] ?? TERRAIN_FILLS.grass)
-                  : (tile.terrain === 'mountain' || tile.terrain === 'lake'
-                      ? TERRAIN_FILLS[tile.terrain]
-                      : (isCityZone && liveTile.owner === 'neutral')
-                        ? CITY_NEUTRAL_FILL
-                        : (TERRITORY_FILLS[liveTile.owner] ?? TERRITORY_FILLS.neutral));
+                const fill = tile.terrain === 'lake'
+                  ? 'url(#waterPattern)'
+                  : hasSelection
+                    ? (TERRAIN_FILLS[tile.terrain] ?? TERRAIN_FILLS.grass)
+                    : (tile.terrain === 'mountain'
+                        ? TERRAIN_FILLS.mountain
+                        : (isCityZone && liveTile.owner === 'neutral')
+                          ? CITY_NEUTRAL_FILL
+                          : (TERRITORY_FILLS[liveTile.owner] ?? TERRITORY_FILLS.neutral));
                 return (
                   <Polygon
                     key={tile.key}
