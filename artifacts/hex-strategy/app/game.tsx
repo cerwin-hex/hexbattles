@@ -1829,33 +1829,36 @@ export default function GameScreen() {
       }
     }
 
-    for (const gravKey of Array.from(graveyard)) {
-      const gravTile = activeTileMap.get(gravKey);
-      if (gravTile?.terrain === 'lake') continue;
-      if (!nextEntities.has(gravKey) && Math.random() < 0.75) {
-        nextEntities = new Map(nextEntities);
-        nextEntities.set(gravKey, 'rebel');
+    // Rebel spawning and spreading is suspended in round 1
+    if (turn !== 1) {
+      for (const gravKey of Array.from(graveyard)) {
+        const gravTile = activeTileMap.get(gravKey);
+        if (gravTile?.terrain === 'lake') continue;
+        if (!nextEntities.has(gravKey) && Math.random() < 0.75) {
+          nextEntities = new Map(nextEntities);
+          nextEntities.set(gravKey, 'rebel');
+        }
       }
-    }
 
-    const allOwners: TerritoryOwner[] = ['player', 'ai1', 'ai2', 'ai3', 'ai4', 'ai5'];
-    const preSpawnEntities = nextEntities;
-    const rebelSpawns = new Map(nextEntities);
-    for (const tile of Array.from(activeTileMap.values())) {
-      if (!allOwners.includes(tile.owner)) continue;
-      if (tile.terrain === 'mountain' || tile.terrain === 'lake') continue;
-      if (preSpawnEntities.has(tile.key)) continue;
-      const [tq, tr] = tile.key.split(',').map(Number);
-      const neighborRebelCount = HEX_EDGES.filter(({ dir: [dq, dr] }) => {
-        const nk = tileKey(tq + dq, tr + dr);
-        return preSpawnEntities.get(nk) === 'rebel';
-      }).length;
-      const chance = neighborRebelCount >= 2 ? 0.10 : neighborRebelCount === 1 ? 0.075 : 0.02;
-      if (Math.random() < chance) {
-        rebelSpawns.set(tile.key, 'rebel');
+      const allOwners: TerritoryOwner[] = ['player', 'ai1', 'ai2', 'ai3', 'ai4', 'ai5'];
+      const preSpawnEntities = nextEntities;
+      const rebelSpawns = new Map(nextEntities);
+      for (const tile of Array.from(activeTileMap.values())) {
+        if (!allOwners.includes(tile.owner)) continue;
+        if (tile.terrain === 'mountain' || tile.terrain === 'lake') continue;
+        if (preSpawnEntities.has(tile.key)) continue;
+        const [tq, tr] = tile.key.split(',').map(Number);
+        const neighborRebelCount = HEX_EDGES.filter(({ dir: [dq, dr] }) => {
+          const nk = tileKey(tq + dq, tr + dr);
+          return preSpawnEntities.get(nk) === 'rebel';
+        }).length;
+        const chance = neighborRebelCount >= 2 ? 0.10 : neighborRebelCount === 1 ? 0.075 : 0.02;
+        if (Math.random() < chance) {
+          rebelSpawns.set(tile.key, 'rebel');
+        }
       }
+      nextEntities = rebelSpawns;
     }
-    nextEntities = rebelSpawns;
 
     const nextMutableTileMap = new Map(mutableTileMap);
     const nextLiveOwnerMap = new Map(liveOwnerMap);
@@ -2427,6 +2430,10 @@ export default function GameScreen() {
                 {armedEntityId && Array.from(selectedTileKeys).map(key => {
                   const pos = tileDataMap.get(key);
                   if (!pos) return null;
+                  // For buildings: only show dot on empty, non-graveyard tiles
+                  if (armedEntityId && !ENTITY_META[armedEntityId].isUnit) {
+                    if (entities.get(key) || graveyard.has(key)) return null;
+                  }
                   return (
                     <Circle
                       key={`place-dot-${key}`}
