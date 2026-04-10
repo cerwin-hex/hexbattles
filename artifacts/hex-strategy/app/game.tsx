@@ -1044,7 +1044,7 @@ export default function GameScreen() {
       if (!id) continue;
       const balance = territoryBalances.get(id) ?? 0;
       const towerFree = territory.length >= 2 && !territory.some(t => playerFreeTowerUsed.has(t.key));
-      const canAfford = turn === 1 ? towerFree : (balance >= minUnitCost || towerFree);
+      const canAfford = turn === 1 ? towerFree : balance >= minUnitCost;
       if (canAfford) return false;
     }
     return true;
@@ -1162,7 +1162,7 @@ export default function GameScreen() {
       const balance = territoryBalances.get(id) ?? 0;
       const towerFree = territory.length >= 2 && !territory.some(t => playerFreeTowerUsed.has(t.key));
       // In round 1, only the free tower can be placed — balance spending is locked
-      const canAfford = turn === 1 ? towerFree : (balance >= minUnitCost || towerFree);
+      const canAfford = turn === 1 ? towerFree : balance >= minUnitCost;
       if (!canAfford) continue;
       for (const t of territory) keys.add(t.key);
     }
