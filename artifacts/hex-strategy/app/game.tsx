@@ -1504,7 +1504,7 @@ export default function GameScreen() {
       const entity = entities.get(lakeKey);
       if (!pos || !entity || !ENTITY_META[entity].isUnit) continue;
       const upkeep = ENTITY_META[entity].upkeep;
-      const label = `-${upkeep}/t ${fund}⚓`;
+      const label = `⚓${fund} (-${upkeep}/t)`;
       result.push({ cx: pos.cx, cy: pos.cy, label });
     }
     return result;
@@ -2575,6 +2575,11 @@ export default function GameScreen() {
                   // For buildings: only show dot on empty, non-graveyard tiles not already showing a blue fortification dot
                   if (armedEntityId && !ENTITY_META[armedEntityId].isUnit) {
                     if (entities.get(key) || graveyard.has(key) || fortificationDots.has(key)) return null;
+                  }
+                  // For units: skip tiles occupied by own buildings (tower/castle/city) — can't place there
+                  if (armedEntityId && ENTITY_META[armedEntityId].isUnit) {
+                    const existingEntity = entities.get(key);
+                    if (existingEntity && !ENTITY_META[existingEntity].isUnit && existingEntity !== 'rebel' && activeTileMap.get(key)?.owner === 'player') return null;
                   }
                   return (
                     <Circle
