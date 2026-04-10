@@ -654,6 +654,9 @@ export default function GameScreen() {
           }
         }
 
+        // Round 1: only the free tower is allowed — no other purchases
+        if (currentTurn === 1) continue;
+
         const balance = workingBalances.get(territoryId) ?? 0;
         if (balance < 10) continue;
 
@@ -2349,10 +2352,11 @@ export default function GameScreen() {
         >
           {(ribbonMode === 'units' ? UNIT_PURCHASABLES : BUILDING_PURCHASABLES).map(item => {
             const isArmed = armedEntityId === item.id;
+            const isTower = item.id === 'tower';
+            const round1Locked = turn === 1 && !isTower;
             const cityAlreadyBuilt = item.id === 'city' && territoryHasCity;
             const cityTooSmall = item.id === 'city' && selectedTerritory.length < 6;
             const cityLocked = cityAlreadyBuilt || cityTooSmall;
-            const isTower = item.id === 'tower';
             const playerUsedTilesSet = freeTowerUsedTiles.get('player') ?? new Set<string>();
             const playerTowerFree = isTower
               && turn === 1
@@ -2360,8 +2364,9 @@ export default function GameScreen() {
               && !selectedTerritory.some(t => playerUsedTilesSet.has(t.key));
             const effectiveCost = playerTowerFree ? 0 : item.cost;
             const affordable = effectiveCost <= selectedTerritoryBalance;
-            const enabled = affordable && !cityLocked;
-            const costLabel = cityAlreadyBuilt ? 'BUILT'
+            const enabled = affordable && !cityLocked && !round1Locked;
+            const costLabel = round1Locked ? 'Round 2+'
+              : cityAlreadyBuilt ? 'BUILT'
               : cityTooSmall ? '<6 tiles'
               : playerTowerFree ? 'FREE'
               : `${item.cost}g`;
