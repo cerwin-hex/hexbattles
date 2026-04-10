@@ -22,7 +22,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, Defs, Image as SvgImage, Line, LinearGradient, Pattern, Polygon, Rect, Stop, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, ClipPath, Defs, Image as SvgImage, Line, LinearGradient, Polygon, Rect, Stop, Text as SvgText } from 'react-native-svg';
 
 const MOUNTAIN_IMG = require('../assets/images/mountain.webp');
 const WATER_IMG = require('../assets/images/water.webp');
@@ -1890,25 +1890,18 @@ export default function GameScreen() {
           <Animated.View style={[styles.board, boardStyle, styles.boardElevated]}>
             <Svg width={boardW} height={boardH}>
               <Defs>
-                <Pattern
-                  id="waterPattern"
-                  x={0} y={0} width={1} height={1}
-                  patternUnits="objectBoundingBox"
-                  patternContentUnits="objectBoundingBox"
-                >
-                  <SvgImage
-                    href={WATER_IMG}
-                    x={0} y={0} width={1} height={1}
-                    preserveAspectRatio="xMidYMid slice"
-                  />
-                </Pattern>
+                {tileData.filter(({ tile }) => tile.terrain === 'lake').map(({ tile, cx, cy }) => (
+                  <ClipPath key={`clip-def-${tile.key}`} id={`lclip-${tile.key}`}>
+                    <Polygon points={hexCornersString(cx, cy, HEX_SIZE)} />
+                  </ClipPath>
+                ))}
               </Defs>
               <Rect x={0} y={0} width={boardW} height={boardH} fill="transparent" onPress={handleDeselect} />
               {tileData.map(({ tile, cx, cy }) => {
                 const liveTile = activeTileMap.get(tile.key) ?? tile;
                 const isCityZone = tile.cityBuffer || tile.isCity;
                 const fill = tile.terrain === 'lake'
-                  ? 'url(#waterPattern)'
+                  ? '#5BAFD6'
                   : hasSelection
                     ? (TERRAIN_FILLS[tile.terrain] ?? TERRAIN_FILLS.grass)
                     : (tile.terrain === 'mountain'
@@ -1921,6 +1914,23 @@ export default function GameScreen() {
                     key={tile.key}
                     points={hexCornersString(cx, cy, HEX_SIZE)}
                     fill={fill}
+                    onPress={() => handleTileTap(tile.key)}
+                  />
+                );
+              })}
+
+              {tileData.filter(({ tile }) => tile.terrain === 'lake').map(({ tile, cx, cy }) => {
+                const s = HEX_SIZE * 2;
+                return (
+                  <SvgImage
+                    key={`lake-img-${tile.key}`}
+                    href={WATER_IMG}
+                    x={cx - HEX_SIZE}
+                    y={cy - HEX_SIZE}
+                    width={s}
+                    height={s}
+                    preserveAspectRatio="xMidYMid slice"
+                    clipPath={`url(#lclip-${tile.key})`}
                     onPress={() => handleTileTap(tile.key)}
                   />
                 );
