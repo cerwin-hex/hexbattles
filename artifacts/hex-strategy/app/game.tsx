@@ -1895,6 +1895,11 @@ export default function GameScreen() {
                     <Polygon points={hexCornersString(cx, cy, HEX_SIZE)} />
                   </ClipPath>
                 ))}
+                {tileData.filter(({ tile }) => tile.terrain === 'mountain').map(({ tile, cx, cy }) => (
+                  <ClipPath key={`mclip-def-${tile.key}`} id={`mclip-${tile.key}`}>
+                    <Polygon points={hexCornersString(cx, cy, HEX_SIZE)} />
+                  </ClipPath>
+                ))}
               </Defs>
               <Rect x={0} y={0} width={boardW} height={boardH} fill="transparent" onPress={handleDeselect} />
               {tileData.map(({ tile, cx, cy }) => {
@@ -1937,17 +1942,17 @@ export default function GameScreen() {
               })}
 
               {tileData.filter(({ tile }) => tile.terrain === 'mountain').map(({ tile, cx, cy }) => {
-                const imgW = HEX_SIZE * 1.55;
-                const imgH = imgW * (147 / 320);
+                const s = HEX_SIZE * 2;
                 return (
                   <SvgImage
                     key={`mtn-${tile.key}`}
                     href={MOUNTAIN_IMG}
-                    x={cx - imgW / 2}
-                    y={cy - imgH * 0.5}
-                    width={imgW}
-                    height={imgH}
-                    preserveAspectRatio="xMidYMid meet"
+                    x={cx - HEX_SIZE}
+                    y={cy - HEX_SIZE}
+                    width={s}
+                    height={s}
+                    preserveAspectRatio="xMidYMid slice"
+                    clipPath={`url(#mclip-${tile.key})`}
                     onPress={() => handleTileTap(tile.key)}
                   />
                 );
