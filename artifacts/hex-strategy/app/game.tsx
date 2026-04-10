@@ -846,7 +846,7 @@ export default function GameScreen() {
           if (!existing) continue;
           const upgradeTo = UNIT_UPGRADE[existing];
           if (!upgradeTo) continue;
-          const cost = 10; // flat upgrade cost, same as player UI
+          const cost = ENTITY_META[upgradeTo].cost - ENTITY_META[existing].cost;
           if (balance >= cost) {
             upgradeActions.push({ kind: 'upgrade', key: t.key, from: existing, to: upgradeTo, cost });
           }
@@ -2572,9 +2572,9 @@ export default function GameScreen() {
                 {armedEntityId && Array.from(selectedTileKeys).map(key => {
                   const pos = tileDataMap.get(key);
                   if (!pos) return null;
-                  // For buildings: only show dot on empty, non-graveyard tiles
+                  // For buildings: only show dot on empty, non-graveyard tiles not already showing a blue fortification dot
                   if (armedEntityId && !ENTITY_META[armedEntityId].isUnit) {
-                    if (entities.get(key) || graveyard.has(key)) return null;
+                    if (entities.get(key) || graveyard.has(key) || fortificationDots.has(key)) return null;
                   }
                   return (
                     <Circle
@@ -2710,6 +2710,9 @@ export default function GameScreen() {
         const isUnit = entityId ? ENTITY_META[entityId].isUnit : false;
         const upgradeTarget = entityId ? UNIT_UPGRADE[entityId] : undefined;
         const canUpgrade = !!upgradeTarget;
+        const upgradeCost = (entityId && upgradeTarget)
+          ? ENTITY_META[upgradeTarget].cost - ENTITY_META[entityId].cost
+          : 0;
         const isSpent = spentUnits.has(selectedEntityKey);
         const entityTile = activeTileMap.get(selectedEntityKey);
         const entityTerritoryId = entityTile
@@ -2717,7 +2720,7 @@ export default function GameScreen() {
           : null;
         const entityTerritoryBalance = entityTerritoryId ? (territoryBalances.get(entityTerritoryId) ?? 0) : 0;
         const removeCost = isUnit ? 0 : 10;
-        const upgradeEnabled = canUpgrade && entityTerritoryBalance >= 10 && (!isUnit || !isSpent);
+        const upgradeEnabled = canUpgrade && entityTerritoryBalance >= upgradeCost && (!isUnit || !isSpent);
         const removeEnabled = isUnit ? !isSpent : (!!entityTerritoryId && entityTerritoryBalance >= removeCost);
         return (
           <View style={[styles.entityPanel, { bottom: BOTTOM_BAR_H + botInset }]}>
@@ -2747,12 +2750,12 @@ export default function GameScreen() {
                 if (!upgradeEnabled || !entityId || !upgradeTarget || !entityTerritoryId) return;
                 pushHistory();
                 setEntities(prev => { const next = new Map(prev); next.set(selectedEntityKey, upgradeTarget); return next; });
-                setTerritoryBalances(prev => { const next = new Map(prev); next.set(entityTerritoryId, entityTerritoryBalance - 10); return next; });
+                setTerritoryBalances(prev => { const next = new Map(prev); next.set(entityTerritoryId, entityTerritoryBalance - upgradeCost); return next; });
                 setSelectedEntityKey(null);
               }}
             >
               <Text style={[styles.buildBtnText, !upgradeEnabled && styles.buildBtnTextDisabled]}>
-                ⬆ Upgrade {canUpgrade ? '(10g)' : '(Max)'}
+                ⬆ Upgrade {canUpgrade ? `(${upgradeCost}g)` : '(Max)'}
               </Text>
             </TouchableOpacity>
           </View>
