@@ -43,8 +43,9 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
       animationType="fade"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.modalBackdrop} onPress={onClose}>
-        <Pressable style={styles.modalContainer} onPress={e => e.stopPropagation()}>
+      <View style={styles.modalBackdrop}>
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
+        <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>How to Play</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
@@ -80,7 +81,7 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
                   <Text style={[styles.tableCell, styles.tableCellName, styles.tableHeaderText]}>Name</Text>
                   <Text style={[styles.tableCell, styles.tableCellNum, styles.tableHeaderText]}>Cost</Text>
                   <Text style={[styles.tableCell, styles.tableCellNum, styles.tableHeaderText]}>Upkeep</Text>
-                  <Text style={[styles.tableCell, styles.tableCellNum, styles.tableHeaderText]}>Strength</Text>
+                  <Text style={[styles.tableCell, styles.tableCellNum, styles.tableHeaderText]}>Str</Text>
                 </View>
                 {UNIT_ROWS.map((row, i) => (
                   <View key={row.name} style={[styles.tableRow, i % 2 === 1 && styles.tableRowAlt]}>
@@ -123,8 +124,8 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
             </View>
 
           </ScrollView>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
