@@ -25,6 +25,7 @@ const TILE_MAX = 300;
 const THUMB_SIZE = 26;
 
 type Difficulty = 'easy' | 'medium' | 'hard';
+type Personality = 'defensive' | 'balanced' | 'warlike';
 
 const UNIT_ROWS = [
   { icon: '⚔️', name: 'Basic Unit', cost: 10, upkeep: 3, strength: 1 },
@@ -135,6 +136,7 @@ export default function MainMenuScreen() {
   const [tileCount, setTileCount] = useState(100);
   const [opponentCount, setOpponentCount] = useState(3);
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
+  const [personality, setPersonality] = useState<Personality>('balanced');
   const [trackW, setTrackW] = useState(0);
   const [rulesVisible, setRulesVisible] = useState(false);
 
@@ -180,7 +182,7 @@ export default function MainMenuScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push({
       pathname: '/game',
-      params: { tileCount: String(tileCount), opponentCount: String(opponentCount) },
+      params: { tileCount: String(tileCount), opponentCount: String(opponentCount), personality },
     });
   }
 
@@ -228,7 +230,7 @@ export default function MainMenuScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.label}>Opponents</Text>
+            <Text style={styles.label}>AI Opponents</Text>
             <View style={styles.pills}>
               {[1, 2, 3, 4, 5].map(n => (
                 <TouchableOpacity
@@ -246,7 +248,7 @@ export default function MainMenuScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.label}>Difficulty</Text>
+            <Text style={styles.label}>AI Difficulty</Text>
             <View style={styles.pills}>
               {(['easy', 'medium', 'hard'] as Difficulty[]).map(d => (
                 <TouchableOpacity
@@ -257,6 +259,24 @@ export default function MainMenuScreen() {
                 >
                   <Text style={[styles.diffText, difficulty === d && styles.diffTextActive]}>
                     {d.charAt(0).toUpperCase() + d.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.label}>AI Personality</Text>
+            <View style={styles.pills}>
+              {(['defensive', 'balanced', 'warlike'] as Personality[]).map(p => (
+                <TouchableOpacity
+                  key={p}
+                  style={[styles.diffPill, personality === p && styles.diffPillActive]}
+                  onPress={() => { Haptics.selectionAsync(); setPersonality(p); }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.diffText, personality === p && styles.diffTextActive]}>
+                    {p.charAt(0).toUpperCase() + p.slice(1)}
                   </Text>
                 </TouchableOpacity>
               ))}
