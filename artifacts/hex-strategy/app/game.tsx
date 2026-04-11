@@ -76,13 +76,15 @@ const PURCHASABLES = (Object.keys(ENTITY_META) as EntityType[]).filter(id => id 
 const UNIT_PURCHASABLES = PURCHASABLES.filter(p => p.isUnit);
 const BUILDING_PURCHASABLES = PURCHASABLES.filter(p => !p.isUnit);
 
-// Wipe out single-hex territories: zero balance, kill units→graveyard, remove buildings
+// Wipe out single-hex territories (turn 1 only): zero balance, kill units→graveyard, remove buildings
 function applySingleHexPenalty(
   tileMap: Map<string, HexTile>,
   balances: Map<string, number>,
   entities: Map<string, EntityType>,
   graveyard: Set<string>,
+  currentTurn: number,
 ): void {
+  if (currentTurn > 1) return;
   const allOwners = new Set<TerritoryOwner>(['player', 'ai1', 'ai2', 'ai3', 'ai4', 'ai5']);
   const visited = new Set<string>();
   for (const tile of tileMap.values()) {
@@ -679,7 +681,7 @@ export default function GameScreen() {
       return true;
     }
     const allAiEliminated = aiOwners.every(ai =>
-      !Array.from(currentTileMap.values()).some(t => t.owner === ai),
+      !Array.from(currentTileMap.values()).some(t => t.owner === ai && t.terrain !== 'lake'),
     );
     if (allAiEliminated) {
       setGameResult('victory');
@@ -993,7 +995,7 @@ export default function GameScreen() {
             const mergedTerritory = getContiguousTerritory(workingTileMap, target, aiOwner);
             const mergedId = getTerritoryId(mergedTerritory);
             if (mergedId) workingBalances.set(mergedId, (workingBalances.get(mergedId) ?? 0) - chosenAction.cost);
-            applySingleHexPenalty(workingTileMap, workingBalances, workingEntities, workingGraveyard);
+            applySingleHexPenalty(workingTileMap, workingBalances, workingEntities, workingGraveyard, currentTurn ?? 1);
             workingLiveOwnerMap = new Map(workingLiveOwnerMap);
             workingLiveOwnerMap.set(target, aiOwner);
             workingSpentUnits = new Set(workingSpentUnits);
@@ -1102,7 +1104,8 @@ export default function GameScreen() {
         workingTileMap.set(destKey, { ...destTile, owner: aiOwner });
         workingEntities = new Map(workingEntities);
         const destExisting = workingEntities.get(destKey);
-        const isAllyMerge = destExisting && ENTITY_META[destExisting].isUnit && destTile.owner === aiOwner;
+        const isAllyMerge = destExisting && ENTITY_META[destExisting].isUnit && destTile.owner === aiOwner
+          && ENTITY_META[unitEntity].strength + ENTITY_META[destExisting].strength <= 3;
         if (isAllyMerge) {
           const merged = mergedUnitType(ENTITY_META[unitEntity].strength, ENTITY_META[destExisting].strength);
           workingEntities.delete(unitKey);
@@ -1160,7 +1163,7 @@ export default function GameScreen() {
         workingLiveOwnerMap.set(destKey, aiOwner);
         workingGraveyard = new Set(workingGraveyard);
         workingGraveyard.delete(destKey);
-        applySingleHexPenalty(workingTileMap, workingBalances, workingEntities, workingGraveyard);
+        applySingleHexPenalty(workingTileMap, workingBalances, workingEntities, workingGraveyard, currentTurn ?? 1);
 
         if (!isDeveloperModeRef.current) {
           await new Promise<void>(resolve => {
@@ -1233,8 +1236,18 @@ export default function GameScreen() {
     if (!tile || tile.owner !== 'player') return new Set();
     const entityId = entities.get(selectedEntityKey);
     if (!entityId || !ENTITY_META[entityId].isUnit) return new Set();
+    const movingStrength = ENTITY_META[entityId].strength;
     const remaining = partialMoves.get(selectedEntityKey) ?? 3;
-    return getValidMoves(selectedEntityKey, 'player', entities, activeTileMap, spentUnits, remaining);
+    const raw = getValidMoves(selectedEntityKey, 'player', entities, activeTileMap, spentUnits, remaining);
+    // Remove ally unit tiles where the merge would exceed max unit strength (3)
+    for (const k of raw) {
+      const destTile = activeTileMap.get(k);
+      if (destTile?.owner !== 'player') continue;
+      const destEntity = entities.get(k);
+      if (!destEntity || !ENTITY_META[destEntity].isUnit) continue;
+      if (movingStrength + ENTITY_META[destEntity].strength > 3) raw.delete(k);
+    }
+    return raw;
   }, [selectedEntityKey, entities, activeTileMap, spentUnits, partialMoves]);
 
   const fortificationDots = useMemo<Set<string>>(() => {
@@ -1669,7 +1682,8 @@ export default function GameScreen() {
         existingUnit !== 'city' &&
         existingUnit !== 'rebel' &&
         ENTITY_META[existingUnit].isUnit &&
-        activeTileMap.get(key)?.owner === 'player';
+        activeTileMap.get(key)?.owner === 'player' &&
+        ENTITY_META[movingUnit].strength + ENTITY_META[existingUnit].strength <= 3;
 
       if (isMerge) {
         const merged = mergedUnitType(ENTITY_META[movingUnit].strength, ENTITY_META[existingUnit!].strength);
@@ -1690,7 +1704,8 @@ export default function GameScreen() {
       newPartialMoves.delete(selectedEntityKey);
       if (isMerge) {
         const destRemaining = newPartialMoves.get(key) ?? (newSpentUnits.has(key) ? 0 : 3);
-        const mergedRemaining = Math.min(remainingAfterMove, destRemaining);
+        // If the destination was spent (0 remaining), the merged unit carries the mover's remaining steps
+        const mergedRemaining = destRemaining === 0 ? remainingAfterMove : Math.min(remainingAfterMove, destRemaining);
         newSpentUnits.delete(key);
         newPartialMoves.delete(key);
         if (mergedRemaining <= 0) {
@@ -1713,7 +1728,7 @@ export default function GameScreen() {
 
       const newGraveyard = new Set(graveyard);
       newGraveyard.delete(key);
-      applySingleHexPenalty(newTileMap, newBalances, newEntities, newGraveyard);
+      applySingleHexPenalty(newTileMap, newBalances, newEntities, newGraveyard, turn);
 
       const newLiveOwnerMap = new Map(liveOwnerMap);
       newLiveOwnerMap.set(key, 'player');
@@ -1767,7 +1782,8 @@ export default function GameScreen() {
         existingOnTile !== 'city' &&
         ENTITY_META[existingOnTile].isUnit &&
         activeTileMap.get(key)?.owner === 'player';
-      const canMerge = armedIsUnit && existingIsAllyUnit;
+      const canMerge = armedIsUnit && existingIsAllyUnit
+        && ENTITY_META[armedEntityId].strength + ENTITY_META[existingOnTile!].strength <= 3;
       const canOverwriteRebel = armedIsUnit && existingOnTile === 'rebel';
       const existingIsBuilding = !!existingOnTile && !ENTITY_META[existingOnTile].isUnit && existingOnTile !== 'rebel';
       const existingBuildingIsOwn = existingIsBuilding && activeTileMap.get(key)?.owner === 'player';
@@ -1854,7 +1870,7 @@ export default function GameScreen() {
         const mergedId = getTerritoryId(mergedTerritory);
         if (mergedId) newBalances.set(mergedId, (newBalances.get(mergedId) ?? 0) - meta.cost);
         const newGraveyard2 = new Set(graveyard);
-        applySingleHexPenalty(newTileMap, newBalances, newEntities, newGraveyard2);
+        applySingleHexPenalty(newTileMap, newBalances, newEntities, newGraveyard2, turn);
         const newLiveOwnerMap = new Map(liveOwnerMap);
         newLiveOwnerMap.set(key, 'player');
         setMutableTileMap(newTileMap);
@@ -2795,7 +2811,6 @@ export default function GameScreen() {
                 pushHistory();
                 setEntities(prev => { const next = new Map(prev); next.set(selectedEntityKey, upgradeTarget); return next; });
                 setTerritoryBalances(prev => { const next = new Map(prev); next.set(entityTerritoryId, entityTerritoryBalance - upgradeCost); return next; });
-                setSelectedEntityKey(null);
               }}
             >
               <Text style={[styles.buildBtnText, !upgradeEnabled && styles.buildBtnTextDisabled]}>
