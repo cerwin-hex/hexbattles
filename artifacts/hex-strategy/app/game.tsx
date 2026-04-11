@@ -1595,8 +1595,8 @@ export default function GameScreen() {
 
   const commitPendingLakeMove = useCallback((transferAmount: number) => {
     if (!pendingLakeMove) return;
-    const { fromKey, toKey, sourceTerrId, maxAmount } = pendingLakeMove;
-    const amount = Math.min(maxAmount, Math.max(4, transferAmount));
+    const { fromKey, toKey, sourceTerrId, maxAmount, minAmount } = pendingLakeMove;
+    const amount = Math.min(maxAmount, Math.max(minAmount, transferAmount));
     setPendingLakeMove(null);
 
     pushHistory();
