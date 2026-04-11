@@ -517,6 +517,7 @@ export default function GameScreen() {
   const [gameResult, setGameResult] = useState<'victory' | 'defeat' | null>(null);
   const aiTurnRef = useRef<boolean>(false);
   const [graveyard, setGraveyard] = useState<Set<string>>(new Set());
+  const [ruins, setRuins] = useState<Set<string>>(new Set());
   const [partialMoves, setPartialMoves] = useState<Map<string, number>>(new Map());
   const [isDeveloperModeActive, setIsDeveloperModeActive] = useState(false);
   const [isAiPaused, setIsAiPaused] = useState(false);
@@ -657,6 +658,7 @@ export default function GameScreen() {
       setMutableTileMap(new Map(tileMap));
       setLiveOwnerMap(new Map());
       setGraveyard(new Set());
+      setRuins(new Set());
       setFreeTowerUsedTiles(new Map());
       setLakeUnitFunds(new Map());
       setPendingLakeMove(null);
@@ -1979,6 +1981,7 @@ export default function GameScreen() {
     let nextEntities = new Map(entities);
     const visited = new Set<string>();
     const nextGraveyard = new Set<string>();
+    const nextRuins = new Set<string>();
 
     // Income and upkeep are suspended in round 1
     if (turn !== 1) {
@@ -1997,15 +2000,20 @@ export default function GameScreen() {
           return s + (e ? ENTITY_META[e].upkeep : 0);
         }, 0);
         const current = nextBalances.get(territoryId) ?? 0;
-        const newBalance = current + income - upkeep;
+        const delta = income - upkeep;
+        const newBalance = current + delta;
         if (newBalance < 0) {
           nextBalances.set(territoryId, 0);
           nextEntities = new Map(nextEntities);
           for (const t of territory) {
             const e = nextEntities.get(t.key);
-            if (e && ENTITY_META[e].isUnit) {
+            if (!e) continue;
+            if (ENTITY_META[e].isUnit) {
               nextEntities.delete(t.key);
               nextGraveyard.add(t.key);
+            } else if (current === 0 && delta < 0) {
+              nextEntities.delete(t.key);
+              nextRuins.add(t.key);
             }
           }
         } else {
@@ -2031,15 +2039,20 @@ export default function GameScreen() {
             return s + (e ? ENTITY_META[e].upkeep : 0);
           }, 0);
           const current = nextBalances.get(territoryId) ?? 0;
-          const newBalance = current + income - upkeep;
+          const delta = income - upkeep;
+          const newBalance = current + delta;
           if (newBalance < 0) {
             nextBalances.set(territoryId, 0);
             nextEntities = new Map(nextEntities);
             for (const t of territory) {
               const e = nextEntities.get(t.key);
-              if (e && ENTITY_META[e].isUnit) {
+              if (!e) continue;
+              if (ENTITY_META[e].isUnit) {
                 nextEntities.delete(t.key);
                 nextGraveyard.add(t.key);
+              } else if (current === 0 && delta < 0) {
+                nextEntities.delete(t.key);
+                nextRuins.add(t.key);
               }
             }
           } else {
@@ -2057,6 +2070,14 @@ export default function GameScreen() {
         if (!nextEntities.has(gravKey) && Math.random() < 0.75) {
           nextEntities = new Map(nextEntities);
           nextEntities.set(gravKey, 'rebel');
+        }
+      }
+      for (const ruinKey of Array.from(ruins)) {
+        const ruinTile = activeTileMap.get(ruinKey);
+        if (ruinTile?.terrain === 'lake') continue;
+        if (!nextEntities.has(ruinKey) && Math.random() < 0.75) {
+          nextEntities = new Map(nextEntities);
+          nextEntities.set(ruinKey, 'rebel');
         }
       }
 
@@ -2110,6 +2131,7 @@ export default function GameScreen() {
     setTerritoryBalances(nextBalances);
     setEntities(nextEntities);
     setGraveyard(nextGraveyard);
+    setRuins(nextRuins);
     setLakeUnitFunds(nextLakeFunds);
     setMutableTileMap(nextMutableTileMap);
     setLiveOwnerMap(nextLiveOwnerMap);
@@ -2127,7 +2149,7 @@ export default function GameScreen() {
       aiTurnRef.current = true;
       runAiTurn(nextMutableTileMap, nextEntities, nextBalances, nextLakeFunds, turn, nextGraveyard);
     }
-  }, [activeTileMap, entities, territoryBalances, lakeUnitFunds, mutableTileMap, liveOwnerMap, isAiTurn, gameResult, aiOwners, graveyard, turn, checkWinLoss, runAiTurn]);
+  }, [activeTileMap, entities, territoryBalances, lakeUnitFunds, mutableTileMap, liveOwnerMap, isAiTurn, gameResult, aiOwners, graveyard, ruins, turn, checkWinLoss, runAiTurn]);
 
   // React Native scales around the element's centre, so the board's screen edges are:
   //   left  = tx + boardW/2 - scaledW/2
@@ -2418,6 +2440,25 @@ export default function GameScreen() {
                     opacity={0.85}
                   >
                     ☠️
+                  </SvgText>
+                );
+              })}
+
+              {ruins.size > 0 && Array.from(ruins).map(key => {
+                const pos = tileDataMap.get(key);
+                if (!pos) return null;
+                if (entities.has(key)) return null;
+                const fs = HEX_SIZE * 0.7;
+                return (
+                  <SvgText
+                    key={`ruin-${key}`}
+                    x={pos.cx}
+                    y={pos.cy + fs * 0.38}
+                    textAnchor="middle"
+                    fontSize={fs}
+                    opacity={0.85}
+                  >
+                    🏚️
                   </SvgText>
                 );
               })}
@@ -2803,7 +2844,7 @@ export default function GameScreen() {
           ? getTerritoryId(getContiguousTerritory(activeTileMap, selectedEntityKey, 'player'))
           : null;
         const entityTerritoryBalance = entityTerritoryId ? (territoryBalances.get(entityTerritoryId) ?? 0) : 0;
-        const removeCost = isUnit ? 0 : 10;
+        const removeCost = isUnit ? 0 : 5;
         const upgradeEnabled = canUpgrade && entityTerritoryBalance >= upgradeCost && (!isUnit || !isSpent);
         const removeEnabled = isUnit ? !isSpent : (!!entityTerritoryId && entityTerritoryBalance >= removeCost);
         return (
