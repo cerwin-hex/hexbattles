@@ -1649,11 +1649,12 @@ export default function GameScreen() {
     setSelectedEntityKey(null);
     setSelectedTileKey(toKey);
     setGraveyard(prev => { const next = new Set(prev); next.delete(toKey); return next; });
+    checkWinLoss(newTileMap);
     if (ribbonOpen) closeRibbon();
     if (movingUnit) {
       triggerUnitAnimation(fromKey, toKey, movingUnit);
     }
-  }, [pendingLakeMove, activeTileMap, entities, spentUnits, partialMoves, territoryBalances, liveOwnerMap, lakeUnitFunds, pushHistory, ribbonOpen, triggerUnitAnimation]);
+  }, [pendingLakeMove, activeTileMap, entities, spentUnits, partialMoves, territoryBalances, liveOwnerMap, lakeUnitFunds, pushHistory, ribbonOpen, checkWinLoss, triggerUnitAnimation]);
 
   const handleTileTap = useCallback((key: string) => {
     const now = Date.now();
@@ -1797,6 +1798,7 @@ export default function GameScreen() {
       setSelectedTileKey(key);
       setGraveyard(newGraveyard);
       setRuins(newRuins);
+      checkWinLoss(newTileMap);
       if (ribbonOpen) closeRibbon();
       if (movingEntityId) {
         triggerUnitAnimation(fromKeyForAnim, key, movingEntityId);
