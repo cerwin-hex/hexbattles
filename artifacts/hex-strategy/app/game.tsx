@@ -76,15 +76,14 @@ const PURCHASABLES = (Object.keys(ENTITY_META) as EntityType[]).filter(id => id 
 const UNIT_PURCHASABLES = PURCHASABLES.filter(p => p.isUnit);
 const BUILDING_PURCHASABLES = PURCHASABLES.filter(p => !p.isUnit);
 
-// Wipe out single-hex territories (turn 1 only): zero balance, kill units→graveyard, remove buildings
+// Wipe out newly-isolated single-hex territories: zero balance, kill units→graveyard, remove buildings.
+// Called immediately after every capture so it only fires the moment a tile becomes isolated.
 function applySingleHexPenalty(
   tileMap: Map<string, HexTile>,
   balances: Map<string, number>,
   entities: Map<string, EntityType>,
   graveyard: Set<string>,
-  currentTurn: number,
 ): void {
-  if (currentTurn > 1) return;
   const allOwners = new Set<TerritoryOwner>(['player', 'ai1', 'ai2', 'ai3', 'ai4', 'ai5']);
   const visited = new Set<string>();
   for (const tile of tileMap.values()) {
@@ -995,7 +994,7 @@ export default function GameScreen() {
             const mergedTerritory = getContiguousTerritory(workingTileMap, target, aiOwner);
             const mergedId = getTerritoryId(mergedTerritory);
             if (mergedId) workingBalances.set(mergedId, (workingBalances.get(mergedId) ?? 0) - chosenAction.cost);
-            applySingleHexPenalty(workingTileMap, workingBalances, workingEntities, workingGraveyard, currentTurn ?? 1);
+            applySingleHexPenalty(workingTileMap, workingBalances, workingEntities, workingGraveyard);
             workingLiveOwnerMap = new Map(workingLiveOwnerMap);
             workingLiveOwnerMap.set(target, aiOwner);
             workingSpentUnits = new Set(workingSpentUnits);
@@ -1163,7 +1162,7 @@ export default function GameScreen() {
         workingLiveOwnerMap.set(destKey, aiOwner);
         workingGraveyard = new Set(workingGraveyard);
         workingGraveyard.delete(destKey);
-        applySingleHexPenalty(workingTileMap, workingBalances, workingEntities, workingGraveyard, currentTurn ?? 1);
+        applySingleHexPenalty(workingTileMap, workingBalances, workingEntities, workingGraveyard);
 
         if (!isDeveloperModeRef.current) {
           await new Promise<void>(resolve => {
@@ -1704,8 +1703,8 @@ export default function GameScreen() {
       newPartialMoves.delete(selectedEntityKey);
       if (isMerge) {
         const destRemaining = newPartialMoves.get(key) ?? (newSpentUnits.has(key) ? 0 : 3);
-        // If the destination was spent (0 remaining), the merged unit carries the mover's remaining steps
-        const mergedRemaining = destRemaining === 0 ? remainingAfterMove : Math.min(remainingAfterMove, destRemaining);
+        // Merged unit inherits the remaining steps of whichever unit had fewer left (the one that moved more)
+        const mergedRemaining = Math.min(remainingAfterMove, destRemaining);
         newSpentUnits.delete(key);
         newPartialMoves.delete(key);
         if (mergedRemaining <= 0) {
@@ -1728,7 +1727,7 @@ export default function GameScreen() {
 
       const newGraveyard = new Set(graveyard);
       newGraveyard.delete(key);
-      applySingleHexPenalty(newTileMap, newBalances, newEntities, newGraveyard, turn);
+      applySingleHexPenalty(newTileMap, newBalances, newEntities, newGraveyard);
 
       const newLiveOwnerMap = new Map(liveOwnerMap);
       newLiveOwnerMap.set(key, 'player');
@@ -1870,7 +1869,7 @@ export default function GameScreen() {
         const mergedId = getTerritoryId(mergedTerritory);
         if (mergedId) newBalances.set(mergedId, (newBalances.get(mergedId) ?? 0) - meta.cost);
         const newGraveyard2 = new Set(graveyard);
-        applySingleHexPenalty(newTileMap, newBalances, newEntities, newGraveyard2, turn);
+        applySingleHexPenalty(newTileMap, newBalances, newEntities, newGraveyard2);
         const newLiveOwnerMap = new Map(liveOwnerMap);
         newLiveOwnerMap.set(key, 'player');
         setMutableTileMap(newTileMap);
