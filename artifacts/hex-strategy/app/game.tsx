@@ -84,6 +84,7 @@ function applySingleHexPenalty(
   balances: Map<string, number>,
   entities: Map<string, EntityType>,
   graveyard: Set<string>,
+  ruins: Set<string>,
 ): void {
   const allOwners = new Set<TerritoryOwner>(['player', 'ai1', 'ai2', 'ai3', 'ai4', 'ai5']);
   const visited = new Set<string>();
@@ -109,6 +110,7 @@ function applySingleHexPenalty(
         graveyard.add(singleKey);
       } else if (entity !== 'rebel') {
         entities.delete(singleKey);
+        ruins.add(singleKey);
       }
     }
   }
@@ -528,6 +530,7 @@ export default function GameScreen() {
   const [lakeUnitFunds, setLakeUnitFunds] = useState<Map<string, number>>(new Map());
   const lakeUnitFundsRef = useRef<Map<string, number>>(new Map());
   const graveyardRef = useRef<Set<string>>(new Set());
+  const ruinsRef = useRef<Set<string>>(new Set());
   const [pendingLakeMove, setPendingLakeMove] = useState<{
     fromKey: string;
     toKey: string;
@@ -575,6 +578,7 @@ export default function GameScreen() {
   useEffect(() => { freeTowerUsedTilesRef.current = freeTowerUsedTiles; }, [freeTowerUsedTiles]);
   useEffect(() => { lakeUnitFundsRef.current = lakeUnitFunds; }, [lakeUnitFunds]);
   useEffect(() => { graveyardRef.current = graveyard; }, [graveyard]);
+  useEffect(() => { ruinsRef.current = ruins; }, [ruins]);
 
   type AiStepSnapshot = {
     entities: Map<string, EntityType>;
@@ -726,12 +730,14 @@ export default function GameScreen() {
     initialLakeFunds?: Map<string, number>,
     currentTurn?: number,
     initialGraveyard?: Set<string>,
+    initialRuins?: Set<string>,
   ) => {
     let workingTileMap = new Map(currentTileMap);
     let workingEntities = new Map(currentEntities);
     let workingBalances = new Map(currentBalances);
     let workingLiveOwnerMap = new Map<string, TerritoryOwner>();
     let workingGraveyard = new Set(initialGraveyard ?? graveyardRef.current);
+    let workingRuins = new Set(initialRuins ?? ruinsRef.current);
     let workingSpentUnits = new Set<string>();
     let workingFreeTowerUsed = new Map(freeTowerUsedTilesRef.current);
     let workingLakeFunds = new Map(initialLakeFunds ?? lakeUnitFundsRef.current);
@@ -1006,7 +1012,8 @@ export default function GameScreen() {
             const mergedTerritory = getContiguousTerritory(workingTileMap, target, aiOwner);
             const mergedId = getTerritoryId(mergedTerritory);
             if (mergedId) workingBalances.set(mergedId, (workingBalances.get(mergedId) ?? 0) - chosenAction.cost);
-            applySingleHexPenalty(prevSnapshot, workingTileMap, workingBalances, workingEntities, workingGraveyard);
+            applySingleHexPenalty(prevSnapshot, workingTileMap, workingBalances, workingEntities, workingGraveyard, workingRuins);
+            setRuins(new Set(workingRuins));
             workingLiveOwnerMap = new Map(workingLiveOwnerMap);
             workingLiveOwnerMap.set(target, aiOwner);
             workingSpentUnits = new Set(workingSpentUnits);
@@ -1174,7 +1181,8 @@ export default function GameScreen() {
         workingLiveOwnerMap.set(destKey, aiOwner);
         workingGraveyard = new Set(workingGraveyard);
         workingGraveyard.delete(destKey);
-        applySingleHexPenalty(prevTileMapSnapshot, workingTileMap, workingBalances, workingEntities, workingGraveyard);
+        applySingleHexPenalty(prevTileMapSnapshot, workingTileMap, workingBalances, workingEntities, workingGraveyard, workingRuins);
+        setRuins(new Set(workingRuins));
 
         if (!isDeveloperModeRef.current) {
           await new Promise<void>(resolve => {
@@ -1747,8 +1755,9 @@ export default function GameScreen() {
       );
 
       const newGraveyard = new Set(graveyard);
+      const newRuins = new Set(ruins);
       newGraveyard.delete(key);
-      applySingleHexPenalty(activeTileMap, newTileMap, newBalances, newEntities, newGraveyard);
+      applySingleHexPenalty(activeTileMap, newTileMap, newBalances, newEntities, newGraveyard, newRuins);
 
       const newLiveOwnerMap = new Map(liveOwnerMap);
       newLiveOwnerMap.set(key, 'player');
@@ -1787,6 +1796,7 @@ export default function GameScreen() {
       setSelectedEntityKey(null);
       setSelectedTileKey(key);
       setGraveyard(newGraveyard);
+      setRuins(newRuins);
       if (ribbonOpen) closeRibbon();
       if (movingEntityId) {
         triggerUnitAnimation(fromKeyForAnim, key, movingEntityId);
@@ -1891,7 +1901,8 @@ export default function GameScreen() {
         const mergedId = getTerritoryId(mergedTerritory);
         if (mergedId) newBalances.set(mergedId, (newBalances.get(mergedId) ?? 0) - meta.cost);
         const newGraveyard2 = new Set(graveyard);
-        applySingleHexPenalty(activeTileMap, newTileMap, newBalances, newEntities, newGraveyard2);
+        const newRuins2 = new Set(ruins);
+        applySingleHexPenalty(activeTileMap, newTileMap, newBalances, newEntities, newGraveyard2, newRuins2);
         const newLiveOwnerMap = new Map(liveOwnerMap);
         newLiveOwnerMap.set(key, 'player');
         // Placing a unit via attack counts as combat — it cannot be merged with this turn
@@ -1901,6 +1912,7 @@ export default function GameScreen() {
         setEntities(newEntities);
         setTerritoryBalances(newBalances);
         setGraveyard(newGraveyard2);
+        setRuins(newRuins2);
         setCombatSpentUnits(newCombatSpent2);
         setSpentUnits(prev => { const next = new Set(prev); next.add(key); return next; });
         setArmedEntityId(null);
@@ -2005,15 +2017,24 @@ export default function GameScreen() {
         if (newBalance < 0) {
           nextBalances.set(territoryId, 0);
           nextEntities = new Map(nextEntities);
+          // First pass: kill units, accumulate saved upkeep
+          let unitUpkeepSaved = 0;
           for (const t of territory) {
             const e = nextEntities.get(t.key);
-            if (!e) continue;
-            if (ENTITY_META[e].isUnit) {
+            if (e && ENTITY_META[e].isUnit) {
+              unitUpkeepSaved += ENTITY_META[e].upkeep;
               nextEntities.delete(t.key);
               nextGraveyard.add(t.key);
-            } else if (current === 0 && delta < 0) {
-              nextEntities.delete(t.key);
-              nextRuins.add(t.key);
+            }
+          }
+          // Second pass: if ongoing delta is STILL negative after units die, demolish buildings
+          if (delta + unitUpkeepSaved < 0) {
+            for (const t of territory) {
+              const e = nextEntities.get(t.key);
+              if (e && !ENTITY_META[e].isUnit && e !== 'rebel') {
+                nextEntities.delete(t.key);
+                nextRuins.add(t.key);
+              }
             }
           }
         } else {
@@ -2044,15 +2065,24 @@ export default function GameScreen() {
           if (newBalance < 0) {
             nextBalances.set(territoryId, 0);
             nextEntities = new Map(nextEntities);
+            // First pass: kill units, accumulate saved upkeep
+            let unitUpkeepSaved = 0;
             for (const t of territory) {
               const e = nextEntities.get(t.key);
-              if (!e) continue;
-              if (ENTITY_META[e].isUnit) {
+              if (e && ENTITY_META[e].isUnit) {
+                unitUpkeepSaved += ENTITY_META[e].upkeep;
                 nextEntities.delete(t.key);
                 nextGraveyard.add(t.key);
-              } else if (current === 0 && delta < 0) {
-                nextEntities.delete(t.key);
-                nextRuins.add(t.key);
+              }
+            }
+            // Second pass: if ongoing delta is STILL negative after units die, demolish buildings
+            if (delta + unitUpkeepSaved < 0) {
+              for (const t of territory) {
+                const e = nextEntities.get(t.key);
+                if (e && !ENTITY_META[e].isUnit && e !== 'rebel') {
+                  nextEntities.delete(t.key);
+                  nextRuins.add(t.key);
+                }
               }
             }
           } else {
@@ -2147,7 +2177,7 @@ export default function GameScreen() {
     if (!checkWinLoss(nextMutableTileMap)) {
       setIsAiTurn(true);
       aiTurnRef.current = true;
-      runAiTurn(nextMutableTileMap, nextEntities, nextBalances, nextLakeFunds, turn, nextGraveyard);
+      runAiTurn(nextMutableTileMap, nextEntities, nextBalances, nextLakeFunds, turn, nextGraveyard, nextRuins);
     }
   }, [activeTileMap, entities, territoryBalances, lakeUnitFunds, mutableTileMap, liveOwnerMap, isAiTurn, gameResult, aiOwners, graveyard, ruins, turn, checkWinLoss, runAiTurn]);
 
@@ -2701,13 +2731,14 @@ export default function GameScreen() {
                     const existingEntity = entities.get(key);
                     if (existingEntity && !ENTITY_META[existingEntity].isUnit && existingEntity !== 'rebel' && activeTileMap.get(key)?.owner === 'player') return null;
                   }
+                  const isRebelTarget = ENTITY_META[armedEntityId].isUnit && entities.get(key) === 'rebel';
                   return (
                     <Circle
                       key={`place-dot-${key}`}
                       cx={pos.cx}
                       cy={pos.cy}
                       r={HEX_SIZE * 0.18}
-                      fill="rgba(255,220,0,0.85)"
+                      fill={isRebelTarget ? 'rgba(220,40,40,0.85)' : 'rgba(255,220,0,0.85)'}
                     />
                   );
                 })}
