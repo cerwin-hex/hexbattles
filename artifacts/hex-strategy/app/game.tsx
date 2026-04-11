@@ -54,8 +54,8 @@ import {
   tileKey,
 } from '@/utils/hexGrid';
 
-const BTN_H = 36;
-const BOTTOM_BAR_H = BTN_H + 16;
+const BTN_H = 52;
+const BOTTOM_BAR_H = BTN_H + 20;
 const RIBBON_H = 130;
 const ENTITY_PANEL_H = 56;
 const EXTRA_PAN = 150;
@@ -2824,10 +2824,10 @@ export default function GameScreen() {
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={[styles.devBtn, isDeveloperModeActive && styles.devBtnActive, { top: topInset + 4, right: 4, position: 'absolute', zIndex: 20 }]}
+        style={[styles.devBtn, isDeveloperModeActive ? styles.devBtnActive : styles.devBtnInactive, { top: topInset + 4, right: 4, position: 'absolute', zIndex: 20 }]}
         onPress={() => setIsDeveloperModeActive(v => !v)}
       >
-        <Text style={[styles.devBtnText, isDeveloperModeActive && styles.devBtnTextActive]}>DEV</Text>
+        <Text style={[styles.devBtnText, isDeveloperModeActive ? styles.devBtnTextActive : styles.devBtnTextInactive]}>DEV</Text>
       </TouchableOpacity>
 
       {selectedEntityKey && (() => {
@@ -2888,14 +2888,20 @@ export default function GameScreen() {
 
       <View style={[styles.bottomBar, { paddingBottom: botInset }]}>
         <View style={styles.bottomBarInner}>
-          <TouchableOpacity
-            style={[styles.undoBtn, (isAiTurn || gameResult !== null || moveHistory.length === 0) && styles.undoBtnDisabled]}
-            onPress={handleUndo}
-            activeOpacity={(isAiTurn || gameResult !== null || moveHistory.length === 0) ? 1 : 0.75}
-            disabled={isAiTurn || gameResult !== null || moveHistory.length === 0}
-          >
-            <Text style={{ fontSize: 16, color: (isAiTurn || gameResult !== null || moveHistory.length === 0) ? '#3A2E14' : '#C8A24A' }}>←</Text>
-          </TouchableOpacity>
+          {(() => {
+            const undoDisabled = isAiTurn || gameResult !== null || moveHistory.length === 0;
+            return (
+              <TouchableOpacity
+                style={[styles.undoBtn, undoDisabled && styles.undoBtnDisabled]}
+                onPress={handleUndo}
+                activeOpacity={undoDisabled ? 1 : 0.75}
+                disabled={undoDisabled}
+              >
+                <Text style={[styles.undoBtnLabel, undoDisabled && styles.undoBtnLabelDisabled]}>Undo</Text>
+                <Text style={[styles.undoBtnIcon, undoDisabled && styles.undoBtnIconDisabled]}>↺</Text>
+              </TouchableOpacity>
+            );
+          })()}
 
           {showCredits && (
             <TouchableOpacity
@@ -2903,8 +2909,10 @@ export default function GameScreen() {
               onPress={() => { if (hasSelection) setShowEconModal(true); }}
               activeOpacity={hasSelection ? 0.75 : 1}
             >
-              <Text style={styles.creditsIcon}>⚜️</Text>
-              <Text style={styles.creditsAmount}>{creditsDisplayValue}</Text>
+              <View style={styles.creditsTopRow}>
+                <Text style={styles.creditsIcon}>⚜️</Text>
+                <Text style={styles.creditsAmount}>{creditsDisplayValue}</Text>
+              </View>
               {selectedLakeFund !== null && lakeUpkeepPerTurn !== null ? (
                 <Text style={[styles.creditsNet, styles.creditsNetNeg]}>
                   -{lakeUpkeepPerTurn}/turn
@@ -2913,7 +2921,9 @@ export default function GameScreen() {
                 <Text style={[styles.creditsNet, econBreakdown.net >= 0 ? styles.creditsNetPos : styles.creditsNetNeg]}>
                   {econBreakdown.net >= 0 ? `+${econBreakdown.net}` : `${econBreakdown.net}`}/turn
                 </Text>
-              ) : null}
+              ) : (
+                <Text style={[styles.creditsNet, { color: 'transparent' }]}>+0/turn</Text>
+              )}
             </TouchableOpacity>
           )}
 
@@ -2983,7 +2993,7 @@ export default function GameScreen() {
             <Animated.View style={endTurnStyle}>
               <TouchableOpacity style={styles.endTurnBtn} onPress={handleEndTurn} disabled={gameResult !== null}>
                 <Text style={styles.endTurnText}>End Turn</Text>
-                <Text style={{ fontSize: 13, color: '#F0D080' }}>→</Text>
+                <Text style={styles.endTurnArrow}>→</Text>
               </TouchableOpacity>
             </Animated.View>
           )}
@@ -3310,8 +3320,8 @@ const styles = StyleSheet.create({
     height: BOTTOM_BAR_H,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    gap: 8,
+    paddingHorizontal: 8,
+    gap: 6,
   },
   menuBtn: {
     flexDirection: 'row',
@@ -3333,8 +3343,8 @@ const styles = StyleSheet.create({
     height: BTN_H,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 13,
+    gap: 4,
+    paddingHorizontal: 10,
     borderRadius: 5,
     borderWidth: 1,
     borderColor: '#9A7830',
@@ -3361,17 +3371,23 @@ const styles = StyleSheet.create({
   },
   creditsDisplay: {
     height: BTN_H,
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
+    justifyContent: 'center',
+    gap: 1,
+    paddingHorizontal: 8,
     borderRadius: 5,
     borderWidth: 1,
     borderColor: '#7A6030',
     backgroundColor: '#3A2A10',
   },
+  creditsTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   creditsIcon: {
-    fontSize: 13,
+    fontSize: 12,
   },
   creditsAmount: {
     fontSize: 14,
@@ -3381,7 +3397,6 @@ const styles = StyleSheet.create({
   creditsNet: {
     fontSize: 10,
     fontFamily: 'Inter_400Regular',
-    marginLeft: 2,
   },
   creditsNetPos: {
     color: '#70C870',
@@ -3531,31 +3546,54 @@ const styles = StyleSheet.create({
     width: BTN_H,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'column',
+    gap: 1,
     borderRadius: 5,
     borderWidth: 1,
     borderColor: '#9A7830',
     backgroundColor: '#3A2A10',
   },
   undoBtnDisabled: {
-    borderColor: '#4A3A1A',
-    backgroundColor: '#2A1E08',
+    borderColor: '#6A5A28',
+    backgroundColor: '#2E2208',
+  },
+  undoBtnLabel: {
+    fontSize: 9,
+    fontFamily: 'Cinzel_400Regular',
+    color: '#C8A24A',
+    letterSpacing: 0.5,
+  },
+  undoBtnLabelDisabled: {
+    color: '#6A5828',
+  },
+  undoBtnIcon: {
+    fontSize: 17,
+    color: '#C8A24A',
+  },
+  undoBtnIconDisabled: {
+    color: '#6A5828',
   },
   endTurnBtn: {
     height: BTN_H,
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 16,
+    justifyContent: 'center',
+    gap: 1,
+    paddingHorizontal: 14,
     borderRadius: 5,
     borderWidth: 1,
     borderColor: '#B08030',
     backgroundColor: '#6A4014',
   },
   endTurnText: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: 'Cinzel_700Bold',
     color: '#F0D080',
     letterSpacing: 0.5,
+  },
+  endTurnArrow: {
+    fontSize: 13,
+    color: '#F0D080',
   },
   modalOverlay: {
     flex: 1,
@@ -3713,22 +3751,30 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   devBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 8,
     paddingVertical: 6,
     borderRadius: 5,
     borderWidth: 1,
-    borderColor: '#3A3A3A',
-    backgroundColor: '#1A1A1A',
+    borderColor: '#7A6030',
+    backgroundColor: '#3A2A10',
+  },
+  devBtnInactive: {
+    borderColor: '#8A2222',
+    backgroundColor: '#3A0808',
   },
   devBtnActive: {
     borderColor: '#00FF88',
     backgroundColor: '#003322',
   },
   devBtnText: {
-    fontSize: 10,
-    fontFamily: 'Cinzel_700Bold',
-    color: '#5A5A5A',
-    letterSpacing: 1,
+    fontSize: 11,
+    fontFamily: 'Cinzel_400Regular',
+    letterSpacing: 0.5,
+  },
+  devBtnTextInactive: {
+    color: '#CC4444',
   },
   devBtnTextActive: {
     color: '#00FF88',
