@@ -493,11 +493,13 @@ export default function GameScreen() {
   const [turn, setTurn] = useState(1);
   const [selectedEntityKey, setSelectedEntityKey] = useState<string | null>(null);
   const [spentUnits, setSpentUnits] = useState<Set<string>>(new Set());
+  const [combatSpentUnits, setCombatSpentUnits] = useState<Set<string>>(new Set());
   const [moveHistory, setMoveHistory] = useState<Array<{
     entities: Map<string, EntityType>;
     mutableTileMap: Map<string, HexTile>;
     territoryBalances: Map<string, number>;
     spentUnits: Set<string>;
+    combatSpentUnits: Set<string>;
     liveOwnerMap: Map<string, TerritoryOwner>;
     partialMoves: Map<string, number>;
     freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
@@ -643,6 +645,7 @@ export default function GameScreen() {
       setArmedEntityId(null);
       setSelectedEntityKey(null);
       setSpentUnits(new Set());
+      setCombatSpentUnits(new Set());
       setPartialMoves(new Map());
       setMutableTileMap(new Map(tileMap));
       setLiveOwnerMap(new Map());
@@ -1238,16 +1241,17 @@ export default function GameScreen() {
     const movingStrength = ENTITY_META[entityId].strength;
     const remaining = partialMoves.get(selectedEntityKey) ?? 3;
     const raw = getValidMoves(selectedEntityKey, 'player', entities, activeTileMap, spentUnits, remaining);
-    // Remove ally unit tiles where the merge would exceed max unit strength (3)
+    // Remove ally unit tiles where merge is invalid: combined strength > 3, or dest is combat-spent
     for (const k of raw) {
       const destTile = activeTileMap.get(k);
       if (destTile?.owner !== 'player') continue;
       const destEntity = entities.get(k);
       if (!destEntity || !ENTITY_META[destEntity].isUnit) continue;
       if (movingStrength + ENTITY_META[destEntity].strength > 3) raw.delete(k);
+      else if (combatSpentUnits.has(k)) raw.delete(k);
     }
     return raw;
-  }, [selectedEntityKey, entities, activeTileMap, spentUnits, partialMoves]);
+  }, [selectedEntityKey, entities, activeTileMap, spentUnits, partialMoves, combatSpentUnits]);
 
   const fortificationDots = useMemo<Set<string>>(() => {
     let territory: HexTile[];
@@ -1562,6 +1566,7 @@ export default function GameScreen() {
         mutableTileMap: new Map(mutableTileMap),
         territoryBalances: new Map(territoryBalances),
         spentUnits: new Set(spentUnits),
+        combatSpentUnits: new Set(combatSpentUnits),
         liveOwnerMap: new Map(liveOwnerMap),
         partialMoves: new Map(partialMoves),
         freeTowerUsedTiles: new Map([...freeTowerUsedTiles.entries()].map(([k, v]) => [k, new Set(v)])),
@@ -1569,7 +1574,7 @@ export default function GameScreen() {
         selectedTileKey,
       },
     ]);
-  }, [entities, mutableTileMap, territoryBalances, spentUnits, liveOwnerMap, partialMoves, freeTowerUsedTiles, lakeUnitFunds, selectedTileKey]);
+  }, [entities, mutableTileMap, territoryBalances, spentUnits, combatSpentUnits, liveOwnerMap, partialMoves, freeTowerUsedTiles, lakeUnitFunds, selectedTileKey]);
 
   const handleDeselect = useCallback(() => {
     if (Date.now() - lastTileTapMs.current < 150) return;
@@ -1682,7 +1687,8 @@ export default function GameScreen() {
         existingUnit !== 'rebel' &&
         ENTITY_META[existingUnit].isUnit &&
         activeTileMap.get(key)?.owner === 'player' &&
-        ENTITY_META[movingUnit].strength + ENTITY_META[existingUnit].strength <= 3;
+        ENTITY_META[movingUnit].strength + ENTITY_META[existingUnit].strength <= 3 &&
+        !combatSpentUnits.has(key);
 
       if (isMerge) {
         const merged = mergedUnitType(ENTITY_META[movingUnit].strength, ENTITY_META[existingUnit!].strength);
@@ -1716,6 +1722,12 @@ export default function GameScreen() {
         newSpentUnits.add(key);
         newPartialMoves.delete(key);
       }
+
+      // A move is "combat" if it defeated an entity or captured a non-neutral tile
+      const isCombatMove = !isMerge && (previousOwner !== 'neutral' || existingUnit !== undefined);
+      const newCombatSpentUnits = isCombatMove
+        ? new Set([...combatSpentUnits, key])
+        : combatSpentUnits;
 
       const { balances: newBalances } = recalculateTerritories(
         key,
@@ -1759,6 +1771,7 @@ export default function GameScreen() {
       setLiveOwnerMap(newLiveOwnerMap);
       setEntities(newEntities);
       setSpentUnits(newSpentUnits);
+      setCombatSpentUnits(newCombatSpentUnits);
       setPartialMoves(newPartialMoves);
       setTerritoryBalances(newBalances);
       setLakeUnitFunds(newLakeFunds);
@@ -1872,11 +1885,14 @@ export default function GameScreen() {
         applySingleHexPenalty(newTileMap, newBalances, newEntities, newGraveyard2);
         const newLiveOwnerMap = new Map(liveOwnerMap);
         newLiveOwnerMap.set(key, 'player');
+        // Placing a unit via attack counts as combat — it cannot be merged with this turn
+        const newCombatSpent2 = new Set([...combatSpentUnits, key]);
         setMutableTileMap(newTileMap);
         setLiveOwnerMap(newLiveOwnerMap);
         setEntities(newEntities);
         setTerritoryBalances(newBalances);
         setGraveyard(newGraveyard2);
+        setCombatSpentUnits(newCombatSpent2);
         setSpentUnits(prev => { const next = new Set(prev); next.add(key); return next; });
         setArmedEntityId(null);
         setSelectedEntityKey(null);
@@ -1924,7 +1940,7 @@ export default function GameScreen() {
     setSelectedEntityKey(null);
     setArmedEntityId(null);
     if (ribbonOpen) closeRibbon();
-  }, [activeTileMap, selectedTileKeys, armedEntityId, entities, selectedTerritoryId, territoryBalances, ribbonOpen, selectedEntityKey, validMoveTiles, validPlacementAttackTiles, spentUnits, liveOwnerMap, lakeUnitFunds, isAiTurn, gameResult, graveyard, turn, freeTowerUsedTiles, checkWinLoss, pushHistory, triggerErrorFlash]);
+  }, [activeTileMap, selectedTileKeys, armedEntityId, entities, selectedTerritoryId, territoryBalances, ribbonOpen, selectedEntityKey, validMoveTiles, validPlacementAttackTiles, spentUnits, combatSpentUnits, liveOwnerMap, lakeUnitFunds, isAiTurn, gameResult, graveyard, turn, freeTowerUsedTiles, checkWinLoss, pushHistory, triggerErrorFlash]);
 
   const handleUndo = useCallback(() => {
     if (isAiTurn || gameResult !== null) return;
@@ -1935,6 +1951,7 @@ export default function GameScreen() {
       setMutableTileMap(snapshot.mutableTileMap);
       setTerritoryBalances(snapshot.territoryBalances);
       setSpentUnits(snapshot.spentUnits);
+      setCombatSpentUnits(snapshot.combatSpentUnits ?? new Set());
       setLiveOwnerMap(snapshot.liveOwnerMap);
       setPartialMoves(snapshot.partialMoves);
       setFreeTowerUsedTiles(snapshot.freeTowerUsedTiles);
@@ -2094,6 +2111,7 @@ export default function GameScreen() {
     setArmedEntityId(null);
     setSelectedEntityKey(null);
     setSpentUnits(new Set());
+    setCombatSpentUnits(new Set());
     setPartialMoves(new Map());
     closeRibbon();
 
