@@ -956,6 +956,8 @@ export default function GameScreen() {
                 workingBalances.set(territoryId, currentBalance - 10);
                 workingGraveyard = new Set(workingGraveyard);
                 workingGraveyard.delete(rebelTile.key);
+                workingSpentUnits = new Set(workingSpentUnits);
+                workingSpentUnits.add(rebelTile.key);
                 setEntities(new Map(workingEntities));
                 setTerritoryBalances(new Map(workingBalances));
                 setGraveyard(new Set(workingGraveyard));
