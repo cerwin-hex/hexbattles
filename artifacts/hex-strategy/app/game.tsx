@@ -204,9 +204,18 @@ function AnimatedMovingUnit({
 }
 
 export default function GameScreen() {
-  const params = useLocalSearchParams<{ tileCount: string; opponentCount: string }>();
+  type Difficulty = 'easy' | 'medium' | 'hard';
+  type AiState = 'attacking' | 'defending';
+
+  const params = useLocalSearchParams<{ tileCount: string; opponentCount: string; difficulty: string }>();
   const numTiles = Math.min(300, Math.max(40, Number(params.tileCount) || 100));
   const numOpponents = Math.min(5, Math.max(1, Number(params.opponentCount) || 3));
+  const aiDifficulty = (params.difficulty as Difficulty) || 'medium';
+  const aiDifficultyRef = useRef<Difficulty>(aiDifficulty);
+  useEffect(() => { aiDifficultyRef.current = aiDifficulty; }, [aiDifficulty]);
+
+  const aiStateMapRef = useRef<Map<string, AiState>>(new Map());
+  const [aiStateMap, setAiStateMap] = useState<Map<string, AiState>>(new Map());
   const { width: SW, height: SH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const topInset = insets.top + (Platform.OS === 'web' ? 67 : 0);
@@ -778,9 +787,26 @@ export default function GameScreen() {
               if (onBorder) borderTowerCands.push(t.key);
               else innerTowerCands.push(t.key);
             }
-            const towerCands = borderTowerCands.length > 0 ? borderTowerCands : innerTowerCands;
-            if (towerCands.length > 0) {
-              const towerKey = towerCands[Math.floor(Math.random() * towerCands.length)];
+            const towerCandsRaw = borderTowerCands.length > 0 ? borderTowerCands : innerTowerCands;
+            // Apply building spacing: prefer ≥2 tile gap from existing towers/castles
+            const towerCandsSpaced = (() => {
+              const scored = towerCandsRaw.map(k => {
+                const [tq2, tr2] = k.split(',').map(Number);
+                let minD = 99;
+                for (const [ek, ee] of workingEntities) {
+                  if (ee !== 'tower' && ee !== 'castle') continue;
+                  const [eq, er] = ek.split(',').map(Number);
+                  const d = hexDistance(tq2, tr2, eq, er);
+                  if (d < minD) minD = d;
+                }
+                return { k, gap: minD };
+              });
+              const ideal = scored.filter(x => x.gap >= 2).map(x => x.k);
+              const acceptable = scored.filter(x => x.gap >= 1).map(x => x.k);
+              return ideal.length > 0 ? ideal : acceptable.length > 0 ? acceptable : towerCandsRaw;
+            })();
+            if (towerCandsSpaced.length > 0) {
+              const towerKey = towerCandsSpaced[Math.floor(Math.random() * towerCandsSpaced.length)];
               workingEntities = new Map(workingEntities);
               workingEntities.set(towerKey, 'tower');
               const newOwnerSet = new Set(workingFreeTowerUsed.get(aiOwner) ?? []);
@@ -789,6 +815,7 @@ export default function GameScreen() {
               workingFreeTowerUsed.set(aiOwner, newOwnerSet);
               setFreeTowerUsedTiles(new Map(workingFreeTowerUsed));
               setEntities(new Map(workingEntities));
+              setAiStateMap(new Map(aiStateMapRef.current));
               await awaitStep({
                 entities: new Map(workingEntities),
                 mutableTileMap: new Map(workingTileMap),
@@ -805,12 +832,69 @@ export default function GameScreen() {
         // Round 1: only the free tower is allowed — no other purchases
         if (currentTurn === 1) continue;
 
+        // --- Compute AI state for this territory (done before rebel clearing so state is live at every awaitStep) ---
+        const difficulty = aiDifficultyRef.current;
+
+        const enemyTilesNearTerritory = territory.some(t => {
+          const [tq, tr] = t.key.split(',').map(Number);
+          for (const { dir: [dq, dr] } of HEX_EDGES) {
+            const nk = tileKey(tq + dq, tr + dr);
+            const nb = workingTileMap.get(nk);
+            if (nb && nb.owner !== aiOwner && nb.owner !== 'neutral') return true;
+          }
+          return false;
+        });
+
+        // Hard difficulty: if any enemy unit within 4 tiles of an AI city, set defending
+        let forcedDefend = false;
+        if (difficulty === 'hard') {
+          const aiCities = territory.filter(t => t.isCity || workingEntities.get(t.key) === 'city');
+          for (const city of aiCities) {
+            const [cq, cr] = city.key.split(',').map(Number);
+            for (const [ek, ee] of workingEntities) {
+              if (!ENTITY_META[ee].isUnit) continue;
+              const et = workingTileMap.get(ek);
+              if (!et || et.owner === aiOwner) continue;
+              const [eq, er] = ek.split(',').map(Number);
+              if (hexDistance(cq, cr, eq, er) <= 4) { forcedDefend = true; break; }
+            }
+            if (forcedDefend) break;
+          }
+        }
+
+        const currentAiState: AiState = (!forcedDefend && enemyTilesNearTerritory) ? 'attacking' : 'defending';
+        aiStateMapRef.current = new Map(aiStateMapRef.current);
+        aiStateMapRef.current.set(territoryId, currentAiState);
+        setAiStateMap(new Map(aiStateMapRef.current));
+
+        // Detect if this territory can merge with another AI territory of the same owner
+        // Used to prioritize merging over rebel clearing and other lower-priority actions
+        const mergeCheckKeys = new Set(territory.map(t => t.key));
+        const hasMergeOpportunity = territory.some(t => {
+          const [tq, tr] = t.key.split(',').map(Number);
+          return HEX_EDGES.some(({ dir: [dq, dr] }) => {
+            const mk = tileKey(tq + dq, tr + dr);
+            const mt = workingTileMap.get(mk);
+            if (!mt || mt.owner === aiOwner || mt.terrain === 'mountain' || mt.terrain === 'lake') return false;
+            const [mq, mr] = mk.split(',').map(Number);
+            return HEX_EDGES.some(({ dir: [dq2, dr2] }) => {
+              const nk2 = tileKey(mq + dq2, mr + dr2);
+              const nt2 = workingTileMap.get(nk2);
+              return nt2 && nt2.owner === aiOwner && !mergeCheckKeys.has(nk2);
+            });
+          });
+        });
+
         // --- Rebel clearing: move an existing unit onto rebel tile, or buy a simple_unit onto it ---
+        // Territory merging is higher priority — don't spend combat units or credits on rebels if merging is possible
         {
-          const rebelTiles = territory.filter(t => workingEntities.get(t.key) === 'rebel');
+          const rebelTiles = territory.filter(t => {
+            if (workingEntities.get(t.key) !== 'rebel') return false;
+            const tileIncome = (TERRAIN_INCOME[t.terrain] ?? 0) + (t.isCity ? CITY_BONUS : 0);
+            return tileIncome > 0;
+          });
           for (const rebelTile of rebelTiles) {
             if (!aiTurnRef.current) return;
-            // Try to find an unspent friendly unit that can reach the rebel tile
             const aiUnitsNow = Array.from(workingEntities.entries()).filter(([k, e]) => {
               const tile = workingTileMap.get(k);
               return tile?.owner === aiOwner && ENTITY_META[e].isUnit && !workingSpentUnits.has(k);
@@ -818,41 +902,55 @@ export default function GameScreen() {
             let cleared = false;
             for (const [unitKey, unitEntity] of aiUnitsNow) {
               const validMoves = getValidMoves(unitKey, aiOwner, workingEntities, workingTileMap, workingSpentUnits);
-              if (validMoves.has(rebelTile.key)) {
-                // Move this unit to the rebel tile
-                workingEntities = new Map(workingEntities);
-                workingEntities.delete(rebelTile.key); // remove rebel
-                workingEntities.delete(unitKey);
-                workingEntities.set(rebelTile.key, unitEntity);
-                workingSpentUnits = new Set(workingSpentUnits);
-                workingSpentUnits.add(rebelTile.key);
-                workingGraveyard = new Set(workingGraveyard);
-                workingGraveyard.delete(rebelTile.key);
-                workingBalances = recalculateTerritoriesForCapture(
-                  rebelTile.key, aiOwner, aiOwner, workingTileMap, workingTileMap, workingBalances,
-                );
-                setEntities(new Map(workingEntities));
-                setTerritoryBalances(new Map(workingBalances));
-                setGraveyard(new Set(workingGraveyard));
-                await awaitStep({
-                  entities: new Map(workingEntities),
-                  mutableTileMap: new Map(workingTileMap),
-                  territoryBalances: new Map(workingBalances),
-                  liveOwnerMap: new Map(workingLiveOwnerMap),
-                  graveyard: new Set(workingGraveyard),
-                  freeTowerUsedTiles: new Map([...workingFreeTowerUsed.entries()].map(([k, v]) => [k, new Set(v)])),
+              if (!validMoves.has(rebelTile.key)) continue;
+              // If a merge is possible, preserve units that could reach a bridge tile for merging instead
+              if (hasMergeOpportunity) {
+                const canReachBridge = Array.from(validMoves).some(mk => {
+                  const mt = workingTileMap.get(mk);
+                  if (!mt || mt.owner === aiOwner || mt.terrain === 'mountain' || mt.terrain === 'lake') return false;
+                  const [mq, mr] = mk.split(',').map(Number);
+                  return HEX_EDGES.some(({ dir: [dq2, dr2] }) => {
+                    const nk2 = tileKey(mq + dq2, mr + dr2);
+                    const nt2 = workingTileMap.get(nk2);
+                    return nt2 && nt2.owner === aiOwner && !mergeCheckKeys.has(nk2);
+                  });
                 });
-                if (!aiTurnRef.current) return;
-                cleared = true;
-                break;
+                if (canReachBridge) continue;
               }
+              // Move this unit to the rebel tile
+              workingEntities = new Map(workingEntities);
+              workingEntities.delete(rebelTile.key);
+              workingEntities.delete(unitKey);
+              workingEntities.set(rebelTile.key, unitEntity);
+              workingSpentUnits = new Set(workingSpentUnits);
+              workingSpentUnits.add(rebelTile.key);
+              workingGraveyard = new Set(workingGraveyard);
+              workingGraveyard.delete(rebelTile.key);
+              workingBalances = recalculateTerritoriesForCapture(
+                rebelTile.key, aiOwner, aiOwner, workingTileMap, workingTileMap, workingBalances,
+              );
+              setEntities(new Map(workingEntities));
+              setTerritoryBalances(new Map(workingBalances));
+              setGraveyard(new Set(workingGraveyard));
+              setAiStateMap(new Map(aiStateMapRef.current));
+              await awaitStep({
+                entities: new Map(workingEntities),
+                mutableTileMap: new Map(workingTileMap),
+                territoryBalances: new Map(workingBalances),
+                liveOwnerMap: new Map(workingLiveOwnerMap),
+                graveyard: new Set(workingGraveyard),
+                freeTowerUsedTiles: new Map([...workingFreeTowerUsed.entries()].map(([k, v]) => [k, new Set(v)])),
+              });
+              if (!aiTurnRef.current) return;
+              cleared = true;
+              break;
             }
-            if (!cleared) {
-              // Buy a simple_unit directly onto the rebel tile if affordable
+            // Only buy a unit for rebel clearing if merging is not possible (credits better spent on merging)
+            if (!cleared && !hasMergeOpportunity) {
               const currentBalance = workingBalances.get(territoryId) ?? 0;
               if (currentBalance >= 10) {
                 workingEntities = new Map(workingEntities);
-                workingEntities.delete(rebelTile.key); // remove rebel
+                workingEntities.delete(rebelTile.key);
                 workingEntities.set(rebelTile.key, 'simple_unit');
                 workingBalances = new Map(workingBalances);
                 workingBalances.set(territoryId, currentBalance - 10);
@@ -861,6 +959,7 @@ export default function GameScreen() {
                 setEntities(new Map(workingEntities));
                 setTerritoryBalances(new Map(workingBalances));
                 setGraveyard(new Set(workingGraveyard));
+                setAiStateMap(new Map(aiStateMapRef.current));
                 await awaitStep({
                   entities: new Map(workingEntities),
                   mutableTileMap: new Map(workingTileMap),
@@ -876,27 +975,81 @@ export default function GameScreen() {
         }
 
         let balance = workingBalances.get(territoryId) ?? 0;
-        if (balance < 10) continue;
 
-        const territoryKeys = new Set(territory.map(t => t.key));
-        const vacantInside = territory.filter(
-          t => t.terrain !== 'mountain' && t.terrain !== 'lake' && !workingEntities.has(t.key),
-        );
+        // Hard keeps a 7-credit reserve; Medium/Easy spend full budget (skip chance handles restraint)
+        const creditReserve = difficulty === 'hard' ? 7 : 0;
+        if (balance < 10 || balance <= creditReserve) continue;
 
-        // --- Upgrades: collect upgradable units/buildings in territory ---
+        // --- Budget-exhaustion buying loop: all personalities loop until no affordable action ---
+        // Skip chance per action: Hard=0%, Medium=20%, Easy=40% — same base strategy, just fewer actions taken
         type AiAction =
           | { kind: 'upgrade'; key: string; from: EntityType; to: EntityType; cost: number }
           | { kind: 'buy'; unitType: EntityType; key: string; outside: boolean; cost: number };
 
+        let buyLoopBalance = workingBalances.get(territoryId) ?? 0;
+        let buyLoopIter = 0;
+        while (buyLoopIter++ < 50) {
+          buyLoopBalance = workingBalances.get(territoryId) ?? 0;
+          balance = buyLoopBalance; // refresh balance from source of truth each iteration
+          if (buyLoopBalance < 10 || buyLoopBalance <= creditReserve) break;
+
+        // Recompute territory each iteration (captures can expand territory boundary)
+        const freshTerritory = getContiguousTerritory(workingTileMap, startTile.key, aiOwner);
+        const currentTerritory = freshTerritory.length > 0 ? freshTerritory : territory;
+        const territoryKeys = new Set(currentTerritory.map(t => t.key));
+        const vacantInside = currentTerritory.filter(
+          t => t.terrain !== 'mountain' && t.terrain !== 'lake' && !workingEntities.has(t.key),
+        );
+
+        // Border tiles (adjacent to non-AI tiles)
+        const borderVacant = vacantInside.filter(t => {
+          const [tq, tr] = t.key.split(',').map(Number);
+          return HEX_EDGES.some(({ dir: [dq, dr] }) => {
+            const nk = tileKey(tq + dq, tr + dr);
+            const nb = workingTileMap.get(nk);
+            return nb && nb.owner !== aiOwner;
+          });
+        });
+
+        // Territory economics — used for upgrade safety check each iteration
+        const territoryIncome = currentTerritory.reduce((s, t) => {
+          if (workingEntities.get(t.key) === 'rebel') return s;
+          return s + (TERRAIN_INCOME[t.terrain] ?? 0) + (t.isCity ? CITY_BONUS : 0) + (workingEntities.get(t.key) === 'city' ? CITY_BONUS : 0);
+        }, 0);
+        const territoryUpkeep = currentTerritory.reduce((s, t) => {
+          const e = workingEntities.get(t.key);
+          return s + (e ? ENTITY_META[e].upkeep : 0);
+        }, 0);
+
+        // Building spacing: sort placement candidates to prefer ≥2 tile gap from existing towers/castles
+        // Ideal: 2+ tiles (no ZoC overlap); acceptable: 1 tile (partial overlap); avoid: 0 (adjacent, wasteful)
+        const buildingSpacingSort = (tiles: HexTile[]): HexTile[] => {
+          if (tiles.length <= 1) return tiles;
+          const scored = tiles.map(t => {
+            const [bq, br] = t.key.split(',').map(Number);
+            let minD = 99;
+            for (const [ek, ee] of workingEntities) {
+              if (ee !== 'tower' && ee !== 'castle') continue;
+              const [eq, er] = ek.split(',').map(Number);
+              const d = hexDistance(bq, br, eq, er);
+              if (d < minD) minD = d;
+            }
+            return { t, gap: minD };
+          });
+          const ideal = scored.filter(x => x.gap >= 2).map(x => x.t);
+          const acceptable = scored.filter(x => x.gap >= 1).map(x => x.t);
+          return ideal.length > 0 ? ideal : acceptable.length > 0 ? acceptable : tiles;
+        };
+
         const upgradeActions: AiAction[] = [];
-        for (const t of territory) {
+        for (const t of currentTerritory) {
           if (t.terrain === 'mountain' || t.terrain === 'lake') continue;
           const existing = workingEntities.get(t.key);
           if (!existing) continue;
           const upgradeTo = UNIT_UPGRADE[existing];
           if (!upgradeTo) continue;
           const cost = ENTITY_META[upgradeTo].cost - ENTITY_META[existing].cost;
-          if (balance >= cost) {
+          if (balance - cost >= creditReserve && balance >= cost) {
             upgradeActions.push({ kind: 'upgrade', key: t.key, from: existing, to: upgradeTo, cost });
           }
         }
@@ -905,7 +1058,7 @@ export default function GameScreen() {
         // Build a map of which outside tiles are reachable per unit strength
         const outsideTilesByStrength = new Map<number, { enemy: string[]; neutral: string[] }>();
         const seenAdjacent = new Set<string>();
-        for (const t of territory) {
+        for (const t of currentTerritory) {
           if (t.terrain === 'mountain' || t.terrain === 'lake') continue;
           const [q, r] = t.key.split(',').map(Number);
           for (const { dir: [dq, dr] } of HEX_EDGES) {
@@ -916,13 +1069,9 @@ export default function GameScreen() {
             if (!neighbor || neighbor.terrain === 'mountain' || neighbor.terrain === 'lake') continue;
             const existingEntity = workingEntities.get(nk);
             if (existingEntity && existingEntity !== 'rebel') {
-              // Skip tiles in other AI-owned clusters (ally units/buildings must not be overwritten)
               if (neighbor.owner === aiOwner) continue;
-              // Enemy or neutral tiles with entities (units, buildings, cities):
-              // allow — ZoC check below will enforce the required unit strength
             }
             const enemyZoC = getMaxEnemyZoC(nk, aiOwner, workingEntities, workingTileMap);
-            // Store tile under required minimum strength (unit must be strictly stronger: strength > enemyZoC)
             const requiredStrength = enemyZoC + 1;
             if (!outsideTilesByStrength.has(requiredStrength)) {
               outsideTilesByStrength.set(requiredStrength, { enemy: [], neutral: [] });
@@ -944,52 +1093,173 @@ export default function GameScreen() {
         ];
 
         const buyActions: AiAction[] = [];
-        for (const { unitType, cost, strength } of purchasableUnits) {
-          if (balance < cost) continue;
-          // Collect outside tiles this unit can reach (strength >= enemyZoC allows attack)
-          const enemyOpts: string[] = [];
-          const neutralOpts: string[] = [];
-          for (const [reqStr, { enemy, neutral }] of outsideTilesByStrength) {
-            if (strength >= reqStr) {
-              enemyOpts.push(...enemy);
-              neutralOpts.push(...neutral);
+
+        // RULE: Upgrade ASAP — always upgrade if affordable AND economy stays non-negative after upgrade
+        // Castle prerequisite: an advanced_unit or expert_unit must exist in or adjacent to this territory
+        const hasAdvancedUnitNearby = currentTerritory.some(t => {
+          const e = workingEntities.get(t.key);
+          if (e === 'advanced_unit' || e === 'expert_unit') return true;
+          const [tq, tr] = t.key.split(',').map(Number);
+          return HEX_EDGES.some(({ dir: [dq, dr] }) => {
+            const nk = tileKey(tq + dq, tr + dr);
+            const nt = workingTileMap.get(nk);
+            const ne = workingEntities.get(nk);
+            return nt && nt.owner === aiOwner && (ne === 'advanced_unit' || ne === 'expert_unit');
+          });
+        });
+
+        const economySafeUpgrades = upgradeActions.filter(a => {
+          const upkeepDelta = ENTITY_META[a.to].upkeep - ENTITY_META[a.from].upkeep;
+          if (territoryIncome - territoryUpkeep - upkeepDelta < 0) return false;
+          if (a.to === 'castle' && !hasAdvancedUnitNearby) return false;
+          return true;
+        });
+        if (economySafeUpgrades.length > 0) {
+          buyActions.push(economySafeUpgrades[Math.floor(Math.random() * economySafeUpgrades.length)]);
+        } else {
+          // Unified buying: strategic decisions based on actual situation
+
+          // Compute threat score for a given AI tile: max ZoC projected by adjacent enemy tiles
+          // Higher score = stronger enemy presence → place stronger defenses there
+          const tileBorderThreat = (aiTileKey: string): number => {
+            const [bq, br] = aiTileKey.split(',').map(Number);
+            let maxThreat = 0;
+            for (const { dir: [dq, dr] } of HEX_EDGES) {
+              const nk = tileKey(bq + dq, br + dr);
+              const nt = workingTileMap.get(nk);
+              if (!nt || nt.owner === aiOwner || nt.owner === 'neutral') continue;
+              const zoc = getMaxEnemyZoC(nk, aiOwner, workingEntities, workingTileMap);
+              if (zoc > maxThreat) maxThreat = zoc;
+            }
+            return maxThreat;
+          };
+
+          // Find territory merge bridges: tiles outside current territory that, if captured,
+          // would connect this territory to another AI territory of the same owner
+          const territoryKeys = new Set(currentTerritory.map(t => t.key));
+          const mergeBridgeTiles: string[] = [];
+          for (const t of currentTerritory) {
+            const [tq, tr] = t.key.split(',').map(Number);
+            for (const { dir: [dq, dr] } of HEX_EDGES) {
+              const mk = tileKey(tq + dq, tr + dr);
+              const mt = workingTileMap.get(mk);
+              if (!mt || mt.owner === aiOwner || mt.terrain === 'mountain' || mt.terrain === 'lake') continue;
+              const [mq, mr] = mk.split(',').map(Number);
+              const bridgesToOtherAi = HEX_EDGES.some(({ dir: [dq2, dr2] }) => {
+                const nk2 = tileKey(mq + dq2, mr + dr2);
+                const nt2 = workingTileMap.get(nk2);
+                return nt2 && nt2.owner === aiOwner && !territoryKeys.has(nk2);
+              });
+              if (bridgesToOtherAi && !mergeBridgeTiles.includes(mk)) mergeBridgeTiles.push(mk);
             }
           }
-          const outsideOpts = enemyOpts.length > 0 ? enemyOpts : neutralOpts;
-          if (outsideOpts.length > 0) {
-            const key = outsideOpts[Math.floor(Math.random() * outsideOpts.length)];
-            buyActions.push({ kind: 'buy', unitType, key, outside: true, cost });
-          } else if (vacantInside.length > 0) {
-            const key = vacantInside[Math.floor(Math.random() * vacantInside.length)].key;
-            buyActions.push({ kind: 'buy', unitType, key, outside: false, cost });
+
+          // Priority A: Territory merge — place cheapest unit on bridge tile to consolidate territories
+          if (mergeBridgeTiles.length > 0) {
+            const cheapAffordable = purchasableUnits
+              .filter(u => balance - u.cost >= creditReserve && balance >= u.cost)
+              .sort((a, b) => a.cost - b.cost);
+            if (cheapAffordable.length > 0) {
+              const unit = cheapAffordable[0];
+              const validBridges = mergeBridgeTiles.filter(mk => {
+                const enemyZoC = getMaxEnemyZoC(mk, aiOwner, workingEntities, workingTileMap);
+                return unit.strength > enemyZoC;
+              });
+              if (validBridges.length > 0) {
+                buyActions.push({ kind: 'buy', unitType: unit.unitType, key: validBridges[Math.floor(Math.random() * validBridges.length)], outside: true, cost: unit.cost });
+              }
+            }
+          }
+
+          if (buyActions.length === 0) {
+            // Priority B: Expansion — buy a unit to capture adjacent non-AI tiles if economy stays non-negative
+            // Expanding territory is more strategic than placing defensive buildings
+            const expansionUnits = purchasableUnits.filter(u => {
+              if (balance - u.cost < creditReserve || balance < u.cost) return false;
+              return territoryIncome - (territoryUpkeep + u.upkeep) >= 0;
+            });
+            if (expansionUnits.length > 0) {
+              const unit = expansionUnits.reduce((a, b) => b.strength > a.strength ? b : a);
+              const { unitType, cost, strength } = unit;
+              const enemyOpts: string[] = [];
+              const neutralOpts: string[] = [];
+              for (const [reqStr, { enemy, neutral }] of outsideTilesByStrength) {
+                if (strength >= reqStr) { enemyOpts.push(...enemy); neutralOpts.push(...neutral); }
+              }
+              const outsideOpts = currentAiState === 'attacking'
+                ? (enemyOpts.length > 0 ? enemyOpts : neutralOpts)
+                : (neutralOpts.length > 0 ? neutralOpts : enemyOpts);
+              if (outsideOpts.length > 0) {
+                buyActions.push({ kind: 'buy', unitType, key: outsideOpts[Math.floor(Math.random() * outsideOpts.length)], outside: true, cost });
+              }
+            }
+          }
+
+          if (buyActions.length === 0) {
+            // Priority C: Threat-directed buildings — tower/castle on the most threatened border tile
+            // Castle requires an advanced unit already present nearby (prerequisite check)
+            const bldCandidates = borderVacant.length > 0 ? borderVacant : vacantInside;
+            const threatScored = bldCandidates.map(t => ({ t, threat: tileBorderThreat(t.key) }));
+            const maxThreat = Math.max(0, ...threatScored.map(x => x.threat));
+            if (maxThreat >= 1) {
+              const highThreatTiles = threatScored.filter(x => x.threat >= maxThreat).map(x => x.t);
+              const spacedTiles = buildingSpacingSort(highThreatTiles);
+              if (spacedTiles.length > 0) {
+                if (maxThreat >= 2 && hasAdvancedUnitNearby && balance - ENTITY_META.castle.cost >= creditReserve && balance >= ENTITY_META.castle.cost) {
+                  buyActions.push({ kind: 'buy', unitType: 'castle', key: spacedTiles[Math.floor(Math.random() * spacedTiles.length)].key, outside: false, cost: ENTITY_META.castle.cost });
+                } else if (balance - ENTITY_META.tower.cost >= creditReserve && balance >= ENTITY_META.tower.cost) {
+                  buyActions.push({ kind: 'buy', unitType: 'tower', key: spacedTiles[Math.floor(Math.random() * spacedTiles.length)].key, outside: false, cost: ENTITY_META.tower.cost });
+                }
+              }
+            }
+          }
+
+          if (buyActions.length === 0) {
+            // Priority D: Strength-matched unit as fallback (no adjacent expansion possible, no building needed)
+            const allCandidates = borderVacant.length > 0 ? borderVacant : vacantInside;
+            const maxThreatForUnit = Math.max(0, ...allCandidates.map(t => tileBorderThreat(t.key)));
+            const targetStrength = maxThreatForUnit + 1;
+            const affordableUnits = purchasableUnits.filter(u => balance - u.cost >= creditReserve && balance >= u.cost);
+            const matchedUnits = affordableUnits.filter(u => u.strength >= targetStrength);
+            const unitPool = matchedUnits.length > 0 ? matchedUnits : affordableUnits;
+            if (unitPool.length > 0) {
+              const chosenUnit = unitPool.reduce((a, b) => b.strength > a.strength ? b : a);
+              const { unitType, cost, strength } = chosenUnit;
+              const enemyOpts: string[] = [];
+              const neutralOpts: string[] = [];
+              for (const [reqStr, { enemy, neutral }] of outsideTilesByStrength) {
+                if (strength >= reqStr) { enemyOpts.push(...enemy); neutralOpts.push(...neutral); }
+              }
+              const outsideOpts = currentAiState === 'attacking'
+                ? (enemyOpts.length > 0 ? enemyOpts : neutralOpts)
+                : (neutralOpts.length > 0 ? neutralOpts : enemyOpts);
+              if (outsideOpts.length > 0) {
+                buyActions.push({ kind: 'buy', unitType, key: outsideOpts[Math.floor(Math.random() * outsideOpts.length)], outside: true, cost });
+              } else if (vacantInside.length > 0) {
+                buyActions.push({ kind: 'buy', unitType, key: vacantInside[Math.floor(Math.random() * vacantInside.length)].key, outside: false, cost });
+              }
+            }
+          }
+
+          if (buyActions.length === 0 && upgradeActions.length > 0) {
+            buyActions.push(upgradeActions[Math.floor(Math.random() * upgradeActions.length)]);
           }
         }
 
-        // Purchasable buildings (tower, castle) placed on vacant inside tiles only
-        const purchasableBuildings: Array<{ unitType: EntityType; cost: number }> = [
-          { unitType: 'tower',  cost: ENTITY_META.tower.cost },
-          { unitType: 'castle', cost: ENTITY_META.castle.cost },
-        ];
-        for (const { unitType, cost } of purchasableBuildings) {
-          if (balance < cost) continue;
-          if (vacantInside.length > 0) {
-            const key = vacantInside[Math.floor(Math.random() * vacantInside.length)].key;
-            buyActions.push({ kind: 'buy', unitType, key, outside: false, cost });
-          }
-        }
+        const allBuyableActions: AiAction[] = buyActions;
+        if (allBuyableActions.length === 0) break; // no affordable actions — exit buy loop
 
-        // Combine all possible actions (upgrades + buys)
-        const allActions: AiAction[] = [...upgradeActions, ...buyActions];
-        if (allActions.length === 0) continue;
+        // Apply difficulty skip chance: Hard=0%, Medium=20%, Easy=40%
+        // Each iteration independently rolls — simulates imperfect play without changing strategy
+        const buySkipChance = difficulty === 'easy' ? 0.4 : difficulty === 'medium' ? 0.2 : 0;
+        if (buySkipChance > 0 && Math.random() < buySkipChance) continue;
 
-        // Choose a random action (weight equally)
-        const chosenAction = allActions[Math.floor(Math.random() * allActions.length)];
+        const chosenAction = allBuyableActions[Math.floor(Math.random() * allBuyableActions.length)];
         workingEntities = new Map(workingEntities);
         workingBalances = new Map(workingBalances);
         balance = workingBalances.get(territoryId) ?? 0;
 
         if (chosenAction.kind === 'upgrade') {
-          // Upgrade existing entity in place
           workingEntities.set(chosenAction.key, chosenAction.to);
           workingBalances.set(territoryId, balance - chosenAction.cost);
         } else {
@@ -1025,6 +1295,7 @@ export default function GameScreen() {
 
         setEntities(new Map(workingEntities));
         setTerritoryBalances(new Map(workingBalances));
+        setAiStateMap(new Map(aiStateMapRef.current));
         await awaitStep({
           entities: new Map(workingEntities),
           mutableTileMap: new Map(workingTileMap),
@@ -1034,6 +1305,8 @@ export default function GameScreen() {
           freeTowerUsedTiles: new Map([...workingFreeTowerUsed.entries()].map(([k, v]) => [k, new Set(v)])),
         });
         if (!aiTurnRef.current) return;
+
+        } // end buy loop
       }
 
       const aiUnits = Array.from(workingEntities.entries()).filter(([key, entityId]) => {
@@ -1052,6 +1325,23 @@ export default function GameScreen() {
         );
         if (allValidMoves.length === 0) continue;
 
+        // Look up AI state for this unit's territory to drive movement heuristics
+        const movDifficulty = aiDifficultyRef.current;
+        const unitTerritoryForState = getContiguousTerritory(workingTileMap, unitKey, aiOwner);
+        const unitTerritoryIdForState = getTerritoryId(unitTerritoryForState);
+        const movAiState: AiState = (unitTerritoryIdForState ? aiStateMapRef.current.get(unitTerritoryIdForState) : null) ?? 'defending';
+
+        // Movement skip chance: Hard=0%, Medium=20%, Easy=40%
+        // Never skip if there are adjacent non-AI tiles to capture (expansion/attack opportunity)
+        const moveSkipChance = movDifficulty === 'easy' ? 0.4 : movDifficulty === 'medium' ? 0.2 : 0;
+        if (moveSkipChance > 0) {
+          const hasAdjacentOpportunity = allValidMoves.some(k => {
+            const t = workingTileMap.get(k);
+            return t && t.owner !== aiOwner;
+          });
+          if (!hasAdjacentOpportunity && Math.random() < moveSkipChance) continue;
+        }
+
         const isMergeTarget = (k: string) => {
           const t = workingTileMap.get(k);
           if (!t || t.owner !== aiOwner) return false;
@@ -1059,42 +1349,350 @@ export default function GameScreen() {
           return !!e && ENTITY_META[e].isUnit;
         };
 
-        const attackMoves = allValidMoves.filter(k => {
+        const attackMovesAll = allValidMoves.filter(k => {
           const t = workingTileMap.get(k);
-          return t && t.owner !== aiOwner;
+          return t && t.owner !== aiOwner && t.owner !== 'neutral';
+        });
+        const neutralMoves = allValidMoves.filter(k => {
+          const t = workingTileMap.get(k);
+          return t && t.owner === 'neutral';
         });
         const nonMergeMoves = allValidMoves.filter(k => !isMergeTarget(k));
         const movesPool = nonMergeMoves.length > 0 ? nonMergeMoves : allValidMoves;
 
-        let moveTargets: string[];
-        if (attackMoves.length > 0) {
-          moveTargets = attackMoves;
-        } else {
-          const nonAiTiles = Array.from(workingTileMap.values()).filter(t => {
-            if (t.owner === aiOwner || t.terrain === 'mountain' || t.terrain === 'lake') return false;
-            if (t.owner === 'neutral') return true;
-            return getMaxEnemyZoC(t.key, aiOwner, workingEntities, workingTileMap) < unitStrength;
+        // Hard: BFS split-detection — prefer moves that INCREASE player territory fragmentation
+        // Returns delta: (clusters after capture) - (clusters before capture); only positive deltas are meaningful
+        const countPlayerClusters = (tileMap: Map<string, HexTile>): number => {
+          const playerTiles = Array.from(tileMap.values()).filter(t => t.owner === 'player' && t.terrain !== 'mountain' && t.terrain !== 'lake');
+          const visitedBfs = new Set<string>();
+          let clusterCount = 0;
+          for (const startT of playerTiles) {
+            if (visitedBfs.has(startT.key)) continue;
+            clusterCount++;
+            const queue = [startT.key];
+            visitedBfs.add(startT.key);
+            while (queue.length > 0) {
+              const curr = queue.shift()!;
+              const [cq, cr] = curr.split(',').map(Number);
+              for (const { dir: [dq, dr] } of HEX_EDGES) {
+                const nk = tileKey(cq + dq, cr + dr);
+                if (visitedBfs.has(nk)) continue;
+                const nt = tileMap.get(nk);
+                if (nt && nt.owner === 'player' && nt.terrain !== 'mountain' && nt.terrain !== 'lake') {
+                  visitedBfs.add(nk);
+                  queue.push(nk);
+                }
+              }
+            }
+          }
+          return clusterCount;
+        };
+        const getSplitScore = (moveKey: string): number => {
+          const [mq, mr] = moveKey.split(',').map(Number);
+          // Only meaningful if the capture tile is adjacent to at least 2 different player tiles
+          const adjPlayerKeys = HEX_EDGES
+            .map(({ dir: [dq, dr] }) => tileKey(mq + dq, mr + dr))
+            .filter(nk => { const nb = workingTileMap.get(nk); return nb && nb.owner === 'player'; });
+          if (adjPlayerKeys.length < 2) return 0;
+          // Count clusters before and after simulated capture
+          const baselineClusters = countPlayerClusters(workingTileMap);
+          const simulatedMap = new Map(workingTileMap);
+          const moveTile = simulatedMap.get(moveKey);
+          if (moveTile) simulatedMap.set(moveKey, { ...moveTile, owner: aiOwner });
+          const afterClusters = countPlayerClusters(simulatedMap);
+          // Return delta: only moves that actually increase fragmentation are preferred
+          return afterClusters - baselineClusters;
+        };
+
+        // Hard: BFS pathfinding helper — returns best immediate move step toward a target key
+        // Uses BFS from current unit position through AI-owned tiles to find the first step
+        const hardBfsFirstStep = (targetKey: string): string | null => {
+          // Self-target guard: if target is the current unit position, no move needed
+          if (targetKey === unitKey) return null;
+          if (movesPool.includes(targetKey)) return targetKey;
+          // BFS from unitKey through reachable tiles to find path to target
+          const bfsPrev = new Map<string, string>();
+          const bfsVisited = new Set<string>([unitKey]);
+          const bfsQueue: string[] = [unitKey];
+          while (bfsQueue.length > 0) {
+            const curr = bfsQueue.shift()!;
+            const [cq, cr] = curr.split(',').map(Number);
+            for (const { dir: [dq, dr] } of HEX_EDGES) {
+              const nk = tileKey(cq + dq, cr + dr);
+              if (bfsVisited.has(nk)) continue;
+              const nt = workingTileMap.get(nk);
+              if (!nt || nt.terrain === 'mountain' || nt.terrain === 'lake') continue;
+              bfsVisited.add(nk);
+              bfsPrev.set(nk, curr);
+              if (nk === targetKey) {
+                // Trace back to find first step from unitKey
+                let step = nk;
+                while (bfsPrev.get(step) !== unitKey) {
+                  const prev = bfsPrev.get(step);
+                  if (!prev) break;
+                  step = prev;
+                }
+                // Return only if step is a valid legal move
+                return movesPool.includes(step) ? step : null;
+              }
+              bfsQueue.push(nk);
+            }
+          }
+          return null;
+        };
+
+        // Moves that would reduce an enemy territory to exactly 1 tile (triggers auto-dissolve)
+        const getSingleTileKillMove = (): string | null => {
+          const validAttacks = attackMovesAll.filter(k => {
+            const enemyZoC = getMaxEnemyZoC(k, aiOwner, workingEntities, workingTileMap);
+            return unitStrength > enemyZoC;
           });
-          if (nonAiTiles.length === 0) {
-            moveTargets = movesPool;
+          for (const mk of validAttacks) {
+            const movTile = workingTileMap.get(mk);
+            if (!movTile || movTile.owner === aiOwner || movTile.owner === 'neutral') continue;
+            const enemyOwner = movTile.owner;
+            const simMap = new Map(workingTileMap);
+            simMap.set(mk, { ...movTile, owner: aiOwner });
+            const enemyTilesLeft = Array.from(simMap.values()).filter(t => t.owner === enemyOwner);
+            const visitedSim = new Set<string>();
+            for (const et of enemyTilesLeft) {
+              if (visitedSim.has(et.key)) continue;
+              const comp: string[] = [et.key];
+              const q2: string[] = [et.key];
+              visitedSim.add(et.key);
+              while (q2.length > 0) {
+                const curr2 = q2.shift()!;
+                const [cq2, cr2] = curr2.split(',').map(Number);
+                for (const { dir: [dq2, dr2] } of HEX_EDGES) {
+                  const nk2 = tileKey(cq2 + dq2, cr2 + dr2);
+                  if (visitedSim.has(nk2)) continue;
+                  const nt2 = simMap.get(nk2);
+                  if (nt2 && nt2.owner === enemyOwner) { visitedSim.add(nk2); q2.push(nk2); comp.push(nk2); }
+                }
+              }
+              if (comp.length === 1) return mk;
+            }
+          }
+          return null;
+        };
+        const singleTileKill = getSingleTileKillMove();
+
+        // Moves targeting enemy buildings (tower/castle) that this unit's strength can beat
+        // strength 2 → beats tower (str 1); strength 3 → beats castle (str 2)
+        const beatableEnemyBuildingMoves = attackMovesAll.filter(k => {
+          const enemyZoC = getMaxEnemyZoC(k, aiOwner, workingEntities, workingTileMap);
+          if (unitStrength <= enemyZoC) return false;
+          const e = workingEntities.get(k);
+          return !!e && !ENTITY_META[e].isUnit && ENTITY_META[e].strength > 0;
+        });
+
+        // Hard: city defense — identify threatened cities and if THIS unit is nearest to guard it
+        let hardDefendTarget: string | null = null;
+        if (movDifficulty === 'hard') {
+          const aiCitiesAll = Array.from(workingTileMap.values()).filter(t =>
+            t.owner === aiOwner && (t.isCity || workingEntities.get(t.key) === 'city')
+          );
+          const [uq, ur] = unitKey.split(',').map(Number);
+          for (const city of aiCitiesAll) {
+            // Check if any enemy unit is within 4 tiles of this city
+            const cityThreatened = Array.from(workingEntities.entries()).some(([ek, ee]) => {
+              if (!ENTITY_META[ee].isUnit) return false;
+              const et = workingTileMap.get(ek);
+              if (!et || et.owner === aiOwner) return false;
+              const [eq, er] = ek.split(',').map(Number);
+              return hexDistance(city.q, city.r, eq, er) <= 4;
+            });
+            if (!cityThreatened) continue;
+            // Only redirect this unit if it is the nearest AI unit to the city
+            const unitDistToCity = hexDistance(uq, ur, city.q, city.r);
+            const isNearestFriendly = !Array.from(workingEntities.entries()).some(([ek, ee]) => {
+              if (ek === unitKey || !ENTITY_META[ee].isUnit) return false;
+              const et = workingTileMap.get(ek);
+              if (!et || et.owner !== aiOwner) return false;
+              const [eq, er] = ek.split(',').map(Number);
+              return hexDistance(eq, er, city.q, city.r) < unitDistToCity;
+            });
+            if (isNearestFriendly) {
+              // Use BFS pathfinding to find best immediate step toward the city
+              hardDefendTarget = hardBfsFirstStep(city.key);
+              break;
+            }
+          }
+        }
+
+        let moveTargets: string[];
+
+        if (hardDefendTarget) {
+          moveTargets = [hardDefendTarget];
+        } else if (singleTileKill !== null) {
+          // Highest priority: capture that reduces an enemy territory to 1 tile → auto-dissolve
+          moveTargets = [singleTileKill];
+        } else if (beatableEnemyBuildingMoves.length > 0 && unitStrength >= 2) {
+          // Strong units (str≥2) aggressively target enemy defensive structures they can beat:
+          // advanced_unit (str2) → towers (str1); expert_unit (str3) → castles (str2)
+          // Weaker units then mop up the now-undefended land on subsequent moves
+          moveTargets = beatableEnemyBuildingMoves;
+        } else {
+          // Unified movement: strength-matched targeting + territory merging
+          const [uq, ur] = unitKey.split(',').map(Number);
+
+          // Strength-matched attacks: unit must exceed enemy ZoC to capture
+          // Prefer targets where the fight is challenging but winnable (ZoC = unitStrength - 1)
+          const validAttacks = attackMovesAll.filter(k => {
+            const enemyZoC = getMaxEnemyZoC(k, aiOwner, workingEntities, workingTileMap);
+            return unitStrength > enemyZoC;
+          });
+          const idealAttacks = validAttacks.filter(k => {
+            const enemyZoC = getMaxEnemyZoC(k, aiOwner, workingEntities, workingTileMap);
+            return enemyZoC === unitStrength - 1;
+          });
+          const preferredAttacks = idealAttacks.length > 0 ? idealAttacks : validAttacks;
+
+          // Territory merge: find tiles outside this territory that bridge to another AI territory
+          const unitTerritoryTiles = new Set(unitTerritoryForState.map(t => t.key));
+          const mergeBridgeDest: string[] = [];
+          for (const t of unitTerritoryForState) {
+            const [tq, tr] = t.key.split(',').map(Number);
+            for (const { dir: [dq, dr] } of HEX_EDGES) {
+              const mk = tileKey(tq + dq, tr + dr);
+              const mt = workingTileMap.get(mk);
+              if (!mt || mt.owner === aiOwner || mt.terrain === 'mountain' || mt.terrain === 'lake') continue;
+              const [mq, mr] = mk.split(',').map(Number);
+              const bridgesToOther = HEX_EDGES.some(({ dir: [dq2, dr2] }) => {
+                const nk2 = tileKey(mq + dq2, mr + dr2);
+                const nt2 = workingTileMap.get(nk2);
+                return nt2 && nt2.owner === aiOwner && !unitTerritoryTiles.has(nk2);
+              });
+              if (bridgesToOther && !mergeBridgeDest.includes(mk)) mergeBridgeDest.push(mk);
+            }
+          }
+
+          // Small or isolated territory: prioritize merging before attacking
+          const isTinyTerritory = unitTerritoryForState.length <= 3;
+          if (isTinyTerritory && mergeBridgeDest.length > 0) {
+            // Directly capture bridge tiles if possible; otherwise move toward them
+            const capturable = mergeBridgeDest.filter(mk => {
+              const enemyZoC = getMaxEnemyZoC(mk, aiOwner, workingEntities, workingTileMap);
+              return unitStrength > enemyZoC;
+            });
+            moveTargets = capturable.length > 0 ? capturable : mergeBridgeDest;
+          } else if (movAiState === 'attacking') {
+            if (preferredAttacks.length > 0) {
+              moveTargets = preferredAttacks;
+            } else {
+              // No immediate capture: advance toward nearest enemy territory
+              const enemyTiles = Array.from(workingTileMap.values()).filter(t =>
+                t.owner !== aiOwner && t.owner !== 'neutral' && t.terrain !== 'mountain' && t.terrain !== 'lake'
+              );
+              if (enemyTiles.length > 0) {
+                let nearest = enemyTiles[0];
+                let nearestD = hexDistance(uq, ur, nearest.q, nearest.r);
+                for (const t of enemyTiles) {
+                  const d = hexDistance(uq, ur, t.q, t.r);
+                  if (d < nearestD) { nearestD = d; nearest = t; }
+                }
+                if (movDifficulty === 'hard') {
+                  const bfsStep = hardBfsFirstStep(nearest.key);
+                  moveTargets = bfsStep ? [bfsStep] : movesPool;
+                } else {
+                  let bestDist = Infinity;
+                  let bestMoves: string[] = [];
+                  for (const mk of movesPool) {
+                    const [mq, mr] = mk.split(',').map(Number);
+                    let minD = Infinity;
+                    for (const t of enemyTiles) {
+                      const d = hexDistance(mq, mr, t.q, t.r);
+                      if (d < minD) minD = d;
+                    }
+                    if (minD < bestDist) { bestDist = minD; bestMoves = [mk]; }
+                    else if (minD === bestDist) bestMoves.push(mk);
+                  }
+                  moveTargets = bestMoves.length > 0 ? bestMoves : movesPool;
+                }
+              } else {
+                moveTargets = movesPool;
+              }
+            }
           } else {
-            let closestAfterMove = Infinity;
+            // Defending: retreat to city if threatened; otherwise take safe attacks or expand
+            const aiCities = Array.from(workingTileMap.values()).filter(t =>
+              t.owner === aiOwner && (t.isCity || workingEntities.get(t.key) === 'city')
+            );
+            const cityThreatened = aiCities.some(city => {
+              const [cq, cr] = city.key.split(',').map(Number);
+              return Array.from(workingEntities.entries()).some(([ek, ee]) => {
+                if (!ENTITY_META[ee].isUnit) return false;
+                const et = workingTileMap.get(ek);
+                if (!et || et.owner === aiOwner) return false;
+                const [eq, er] = ek.split(',').map(Number);
+                return hexDistance(cq, cr, eq, er) <= 3;
+              });
+            });
+            if (cityThreatened && aiCities.length > 0) {
+              let nearest = aiCities[0];
+              let nearestD = hexDistance(uq, ur, nearest.q, nearest.r);
+              for (const city of aiCities) {
+                const d = hexDistance(uq, ur, city.q, city.r);
+                if (d < nearestD) { nearestD = d; nearest = city; }
+              }
+              moveTargets = [nearest.key];
+            } else if (preferredAttacks.length > 0) {
+              moveTargets = preferredAttacks;
+            } else {
+              // Move toward nearest non-AI tile (neutral or enemy) to expand
+              const nonAiTiles = Array.from(workingTileMap.values()).filter(t =>
+                t.owner !== aiOwner && t.terrain !== 'mountain' && t.terrain !== 'lake'
+              );
+              if (nonAiTiles.length > 0) {
+                let nearest = nonAiTiles[0];
+                let nearestD = hexDistance(uq, ur, nearest.q, nearest.r);
+                for (const t of nonAiTiles) {
+                  const d = hexDistance(uq, ur, t.q, t.r);
+                  if (d < nearestD) { nearestD = d; nearest = t; }
+                }
+                moveTargets = [nearest.key];
+              } else {
+                moveTargets = movesPool;
+              }
+            }
+          }
+        }
+
+        // Split-detection overrides other move targets if splitting the enemy's territory is possible
+        if (!hardDefendTarget) {
+          const splitCandidates = movesPool.map(k => ({ k, s: getSplitScore(k) }));
+          const maxSplit = Math.max(...splitCandidates.map(x => x.s));
+          if (maxSplit > 0) {
+            moveTargets = splitCandidates.filter(x => x.s === maxSplit).map(x => x.k);
+          }
+        }
+
+        // Resolve distant destination tiles to immediate moves:
+        // Hard: BFS pathfinding (accurate first step); Non-hard: greedy one-step (closest movesPool tile)
+        if (movDifficulty === 'hard') {
+          const hardTargets = moveTargets
+            .map(k => (movesPool.includes(k) ? k : hardBfsFirstStep(k)))
+            .filter((k): k is string => k !== null);
+          // Fallback: if all BFS mappings returned null, use movesPool to prevent illegal moves
+          moveTargets = hardTargets.length > 0 ? hardTargets : movesPool;
+        } else {
+          // For Easy/Medium: if any target is a distant destination (not in movesPool), resolve to best immediate step
+          const hasDistantTarget = moveTargets.some(k => !movesPool.includes(k));
+          if (hasDistantTarget) {
+            let bestDist = Infinity;
             let bestMoves: string[] = [];
             for (const mk of movesPool) {
               const [mq, mr] = mk.split(',').map(Number);
               let minD = Infinity;
-              for (const t of nonAiTiles) {
-                const d = hexDistance(mq, mr, t.q, t.r);
+              for (const dest of moveTargets) {
+                const [dq, dr] = dest.split(',').map(Number);
+                const d = hexDistance(mq, mr, dq, dr);
                 if (d < minD) minD = d;
               }
-              if (minD < closestAfterMove) {
-                closestAfterMove = minD;
-                bestMoves = [mk];
-              } else if (minD === closestAfterMove) {
-                bestMoves.push(mk);
-              }
+              if (minD < bestDist) { bestDist = minD; bestMoves = [mk]; }
+              else if (minD === bestDist) bestMoves.push(mk);
             }
-            moveTargets = bestMoves.length > 0 ? bestMoves : movesPool;
+            if (bestMoves.length > 0) moveTargets = bestMoves;
           }
         }
 
@@ -1111,7 +1709,10 @@ export default function GameScreen() {
         });
         if (filteredMoveTargets.length === 0) continue;
 
-        const destKey = filteredMoveTargets[Math.floor(Math.random() * filteredMoveTargets.length)];
+        // Final validation: destKey must be a legal move; skip if not in allValidMoves
+        const legalMoveTargets = filteredMoveTargets.filter(k => allValidMoves.includes(k));
+        if (legalMoveTargets.length === 0) continue;
+        const destKey = legalMoveTargets[Math.floor(Math.random() * legalMoveTargets.length)];
         const destTile = workingTileMap.get(destKey);
         if (!destTile) continue;
         const movingToLake = destTile.terrain === 'lake';
@@ -1201,6 +1802,24 @@ export default function GameScreen() {
           setEntities(new Map(workingEntities));
           setTerritoryBalances(new Map(workingBalances));
           setGraveyard(new Set(workingGraveyard));
+        }
+
+        // Recompute and publish AI state at each awaitStep boundary so Dev label stays live
+        const movedUnitTerritory = getContiguousTerritory(workingTileMap, destKey, aiOwner);
+        const movedTerritoryId = getTerritoryId(movedUnitTerritory);
+        if (movedTerritoryId) {
+          const mEnemyNear = movedUnitTerritory.some(t => {
+            const [tq, tr] = t.key.split(',').map(Number);
+            return HEX_EDGES.some(({ dir: [dq, dr] }) => {
+              const nk = tileKey(tq + dq, tr + dr);
+              const nb = workingTileMap.get(nk);
+              return nb && nb.owner !== aiOwner && nb.owner !== 'neutral';
+            });
+          });
+          const updatedState: AiState = mEnemyNear ? 'attacking' : 'defending';
+          aiStateMapRef.current = new Map(aiStateMapRef.current);
+          aiStateMapRef.current.set(movedTerritoryId, updatedState);
+          setAiStateMap(new Map(aiStateMapRef.current));
         }
 
         await awaitStep({
@@ -1535,10 +2154,11 @@ export default function GameScreen() {
     return () => { cancelAnimation(territoryPulseVal); };
   }, [hasAffordableTerritories, armedEntityId, isAiTurn, gameResult]);
 
-  const devEconomicOverlays = useMemo<Array<{ cx: number; cy: number; label: string }>>(() => {
+  const devEconomicOverlays = useMemo<Array<{ cx: number; cy: number; label: string; aiLabel?: string }>>(() => {
     if (!isDeveloperModeActive) return [];
-    const result: Array<{ cx: number; cy: number; label: string }> = [];
+    const result: Array<{ cx: number; cy: number; label: string; aiLabel?: string }> = [];
     const visited = new Set<string>();
+    const diffLabel = aiDifficulty === 'hard' ? 'Hrd' : aiDifficulty === 'medium' ? 'Med' : 'Esy';
     for (const aiOwner of aiOwners) {
       for (const tile of Array.from(activeTileMap.values())) {
         if (tile.owner !== aiOwner || visited.has(tile.key)) continue;
@@ -1557,11 +2177,14 @@ export default function GameScreen() {
         }, 0);
         const net = income - upkeep;
         const label = net >= 0 ? `${balance}(+${net})` : `${balance}(${net})`;
+        const stateVal = aiStateMap.get(territoryId);
+        const stateLabel = stateVal === 'attacking' ? 'Atk' : 'Def';
+        const aiLabel = `${diffLabel}·${stateLabel}`;
         const central = findCentralTile(territory);
         if (!central) continue;
         const pos = tileDataMap.get(central.key);
         if (!pos) continue;
-        result.push({ cx: pos.cx, cy: pos.cy, label });
+        result.push({ cx: pos.cx, cy: pos.cy, label, aiLabel });
       }
     }
     for (const [lakeKey, fund] of lakeUnitFunds) {
@@ -1573,7 +2196,7 @@ export default function GameScreen() {
       result.push({ cx: pos.cx, cy: pos.cy, label });
     }
     return result;
-  }, [isDeveloperModeActive, aiOwners, activeTileMap, territoryBalances, entities, tileDataMap, lakeUnitFunds]);
+  }, [isDeveloperModeActive, aiOwners, activeTileMap, territoryBalances, entities, tileDataMap, lakeUnitFunds, aiDifficulty, aiStateMap]);
 
   const pushHistory = useCallback(() => {
     setMoveHistory(prev => [
@@ -2759,15 +3382,17 @@ export default function GameScreen() {
                   );
                 })}
 
-                {isDeveloperModeActive && devEconomicOverlays.map(({ cx, cy, label }, i) => {
+                {isDeveloperModeActive && devEconomicOverlays.map(({ cx, cy, label, aiLabel }, i) => {
                   const fontSize = Math.max(7, Math.min(11, HEX_SIZE * 0.32));
+                  const maxLen = aiLabel ? Math.max(label.length, aiLabel.length) : label.length;
+                  const totalHeight = aiLabel ? fontSize * 2.8 : fontSize * 1.4;
                   return (
                     <React.Fragment key={`dev-econ-${i}`}>
                       <Rect
-                        x={cx - fontSize * label.length * 0.32}
+                        x={cx - fontSize * maxLen * 0.32}
                         y={cy - fontSize * 0.85}
-                        width={fontSize * label.length * 0.64}
-                        height={fontSize * 1.4}
+                        width={fontSize * maxLen * 0.64}
+                        height={totalHeight}
                         fill="rgba(0,0,0,0.65)"
                         rx={2}
                       />
@@ -2781,6 +3406,18 @@ export default function GameScreen() {
                       >
                         {label}
                       </SvgText>
+                      {aiLabel && (
+                        <SvgText
+                          x={cx}
+                          y={cy + fontSize * 0.42 + fontSize * 1.4}
+                          textAnchor="middle"
+                          fontSize={fontSize}
+                          fill="#FFD700"
+                          fontWeight="bold"
+                        >
+                          {aiLabel}
+                        </SvgText>
+                      )}
                     </React.Fragment>
                   );
                 })}
