@@ -49,6 +49,7 @@ export const TERRAIN_FILLS: Record<string, string> = {
   desert: '#C7A760',
   mountain: '#4A4642',
   lake: '#5BAFD6',
+  forest: '#2D6A2D',
 };
 
 export const TERRITORY_FILLS: Record<string, string> = {

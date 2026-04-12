@@ -1,4 +1,4 @@
-export type TerrainType = 'grass' | 'desert' | 'mountain' | 'lake';
+export type TerrainType = 'grass' | 'desert' | 'mountain' | 'lake' | 'forest';
 export type TerritoryOwner = 'neutral' | 'player' | 'ai1' | 'ai2' | 'ai3' | 'ai4' | 'ai5';
 export type EntityType = 'simple_unit' | 'advanced_unit' | 'expert_unit' | 'tower' | 'castle' | 'city' | 'rebel';
 
@@ -36,6 +36,15 @@ export const TERRAIN_INCOME: Record<TerrainType, number> = {
   desert:   1,
   mountain: 0,
   lake:     0,
+  forest:   2,
+};
+
+export const TERRAIN_MOVE_COST: Record<TerrainType, number> = {
+  grass:    1,
+  desert:   1,
+  mountain: Infinity,
+  lake:     1,
+  forest:   2,
 };
 
 export const CITY_BONUS = 2;
@@ -116,55 +125,59 @@ export function getValidMoves(
   if (!unitEntity) return result;
   const unitStrength = ENTITY_META[unitEntity].strength;
 
-  const [uq, ur] = unitKey.split(',').map(Number);
-
-  const visited = new Set<string>([unitKey]);
-  const queue: Array<{ key: string; depth: number }> = [{ key: unitKey, depth: 0 }];
+  const bestCost = new Map<string, number>([[unitKey, 0]]);
+  const queue: Array<{ key: string; cost: number }> = [{ key: unitKey, cost: 0 }];
 
   while (queue.length > 0) {
-    const { key: curr, depth } = queue.shift()!;
+    queue.sort((a, b) => a.cost - b.cost);
+    const { key: curr, cost } = queue.shift()!;
+    if ((bestCost.get(curr) ?? Infinity) < cost) continue;
     const [cq, cr] = curr.split(',').map(Number);
 
     for (const { dir: [dq, dr] } of HEX_EDGES) {
       const nk = tileKey(cq + dq, cr + dr);
-      if (visited.has(nk)) continue;
       const neighbor = tileMap.get(nk);
       if (!neighbor) continue;
       if (neighbor.terrain === 'mountain') continue;
+
+      const moveCost = TERRAIN_MOVE_COST[neighbor.terrain] ?? 1;
+      const newCost = cost + moveCost;
+
       if (neighbor.terrain === 'lake') {
-        visited.add(nk);
-        if (depth < maxRange && !entities.has(nk)) result.add(nk);
+        if (newCost <= maxRange && !entities.has(nk)) {
+          const prev = bestCost.get(nk) ?? Infinity;
+          if (newCost < prev) {
+            bestCost.set(nk, newCost);
+            result.add(nk);
+          }
+        }
         continue;
       }
 
+      if (newCost > maxRange) continue;
+      const prev = bestCost.get(nk) ?? Infinity;
+      if (newCost >= prev) continue;
+      bestCost.set(nk, newCost);
+
       if (neighbor.owner === owner) {
-        visited.add(nk);
-        if (depth < maxRange) {
-          const allyEntity = entities.get(nk);
-          const allyIsRebel = allyEntity === 'rebel';
-          const allyIsUnit = allyEntity ? ENTITY_META[allyEntity].isUnit : false;
-          if (!allyEntity || allyIsRebel) {
-            result.add(nk);
-            queue.push({ key: nk, depth: depth + 1 });
-          } else if (allyIsUnit) {
-            result.add(nk);
-            queue.push({ key: nk, depth: depth + 1 });
-          } else {
-            queue.push({ key: nk, depth: depth + 1 });
-          }
+        const allyEntity = entities.get(nk);
+        const allyIsRebel = allyEntity === 'rebel';
+        const allyIsUnit = allyEntity ? ENTITY_META[allyEntity].isUnit : false;
+        if (!allyEntity || allyIsRebel) {
+          result.add(nk);
+          queue.push({ key: nk, cost: newCost });
+        } else if (allyIsUnit) {
+          result.add(nk);
+          queue.push({ key: nk, cost: newCost });
+        } else {
+          queue.push({ key: nk, cost: newCost });
         }
       } else if (neighbor.owner === 'neutral') {
-        visited.add(nk);
-        if (depth < maxRange) {
-          result.add(nk);
-        }
+        result.add(nk);
       } else {
-        visited.add(nk);
-        if (depth < maxRange) {
-          const enemyZoC = getMaxEnemyZoC(nk, owner, entities, tileMap);
-          if (unitStrength > enemyZoC) {
-            result.add(nk);
-          }
+        const enemyZoC = getMaxEnemyZoC(nk, owner, entities, tileMap);
+        if (unitStrength > enemyZoC) {
+          result.add(nk);
         }
       }
     }
@@ -179,19 +192,25 @@ export function getMoveCost(
   tileMap: Map<string, HexTile>,
 ): number {
   if (fromKey === toKey) return 0;
-  const visited = new Set<string>([fromKey]);
-  const queue: Array<{ key: string; depth: number }> = [{ key: fromKey, depth: 0 }];
+  const bestCost = new Map<string, number>([[fromKey, 0]]);
+  const queue: Array<{ key: string; cost: number }> = [{ key: fromKey, cost: 0 }];
   while (queue.length > 0) {
-    const { key: curr, depth } = queue.shift()!;
+    queue.sort((a, b) => a.cost - b.cost);
+    const { key: curr, cost } = queue.shift()!;
+    if ((bestCost.get(curr) ?? Infinity) < cost) continue;
+    if (curr === toKey) return cost;
     const [cq, cr] = curr.split(',').map(Number);
     for (const { dir: [dq, dr] } of HEX_EDGES) {
       const nk = tileKey(cq + dq, cr + dr);
-      if (visited.has(nk)) continue;
       const neighbor = tileMap.get(nk);
       if (!neighbor || neighbor.terrain === 'mountain') continue;
-      if (nk === toKey) return depth + 1;
-      visited.add(nk);
-      queue.push({ key: nk, depth: depth + 1 });
+      const moveCost = TERRAIN_MOVE_COST[neighbor.terrain] ?? 1;
+      const newCost = cost + moveCost;
+      const prev = bestCost.get(nk) ?? Infinity;
+      if (newCost < prev) {
+        bestCost.set(nk, newCost);
+        queue.push({ key: nk, cost: newCost });
+      }
     }
   }
   return Infinity;
@@ -594,8 +613,9 @@ export function generateHexGrid(tileCount: number, playerCount: number): HexTile
     const rand = Math.random();
     if (rand < 0.08) tile.terrain = 'mountain';
     else if (rand < 0.18) tile.terrain = 'lake';
-    else if (rand < 0.32) tile.terrain = 'desert';
-    else if (rand < 0.34) pendingCityKeys.add(tile.key);
+    else if (rand < 0.28) tile.terrain = 'desert';
+    else if (rand < 0.38) tile.terrain = 'forest';
+    else if (rand < 0.40) pendingCityKeys.add(tile.key);
     else tile.terrain = 'grass';
   }
 

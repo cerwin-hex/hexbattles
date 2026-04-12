@@ -112,6 +112,7 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
               <View style={styles.ruleDivider} />
               {[
                 { name: 'Grass', desc: 'Standard terrain with good income' },
+                { name: 'Forest', desc: 'Good income like grass, but costs 2 movement to enter' },
                 { name: 'Desert', desc: 'Lower income' },
                 { name: 'Mountain', desc: 'Impassable' },
                 { name: 'Lake', desc: 'Can be entered, but requires a reserve fund' },

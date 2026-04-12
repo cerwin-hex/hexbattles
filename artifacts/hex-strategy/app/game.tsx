@@ -2029,6 +2029,7 @@ export default function GameScreen() {
   const econBreakdown = useMemo(() => {
     if (selectedTerritory.length === 0) return null;
     let grassCount = 0;
+    let forestCount = 0;
     let desertCount = 0;
     let mountainCount = 0;
     let lakeCount = 0;
@@ -2038,6 +2039,7 @@ export default function GameScreen() {
     let activeCityCount = 0;
     for (const t of selectedTerritory) {
       if (t.terrain === 'grass') grassCount++;
+      else if (t.terrain === 'forest') forestCount++;
       else if (t.terrain === 'desert') desertCount++;
       else if (t.terrain === 'mountain') mountainCount++;
       else if (t.terrain === 'lake') lakeCount++;
@@ -2064,9 +2066,10 @@ export default function GameScreen() {
         return { icon: meta.icon, name: meta.name, count, upkeepPerUnit: meta.upkeep, total: meta.upkeep * count };
       });
     const grassIncome = grassCount * 2;
+    const forestIncome = forestCount * 2;
     const desertIncome = desertCount * 1;
     const cityIncome = cityCount * CITY_BONUS;
-    const totalIncome = grassIncome + desertIncome + cityIncome;
+    const totalIncome = grassIncome + forestIncome + desertIncome + cityIncome;
     const totalUpkeep = upkeepGroups.reduce((s, g) => s + g.total, 0);
     let rebelCount = 0;
     let rebelTotalLoss = 0;
@@ -2077,7 +2080,7 @@ export default function GameScreen() {
       else rebelTotalLoss += TERRAIN_INCOME[t.terrain];
     }
     const net = totalIncome - totalUpkeep - rebelTotalLoss;
-    return { grassCount, desertCount, cityCount, grassIncome, desertIncome, cityIncome, upkeepGroups, totalIncome, totalUpkeep, rebelCount, rebelTotalLoss, net };
+    return { grassCount, forestCount, desertCount, cityCount, grassIncome, forestIncome, desertIncome, cityIncome, upkeepGroups, totalIncome, totalUpkeep, rebelCount, rebelTotalLoss, net };
   }, [selectedTerritory, entities]);
 
   const selectionBorderEdges = useMemo<BorderEdge[]>(() => {
@@ -3793,6 +3796,12 @@ export default function GameScreen() {
                 <View style={styles.econRow}>
                   <Text style={styles.econRowLabel}>🌿 Grass ×{econBreakdown.grassCount} <Text style={styles.econPer}>(+2 each)</Text></Text>
                   <Text style={styles.econRowValue}>+{econBreakdown.grassIncome}</Text>
+                </View>
+              )}
+              {econBreakdown && econBreakdown.forestCount > 0 && (
+                <View style={styles.econRow}>
+                  <Text style={styles.econRowLabel}>🌲 Forest ×{econBreakdown.forestCount} <Text style={styles.econPer}>(+2 each)</Text></Text>
+                  <Text style={styles.econRowValue}>+{econBreakdown.forestIncome}</Text>
                 </View>
               )}
               {econBreakdown && econBreakdown.desertCount > 0 && (
