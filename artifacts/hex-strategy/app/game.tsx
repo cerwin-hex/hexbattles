@@ -1069,10 +1069,9 @@ export default function GameScreen() {
             seenAdjacent.add(nk);
             const neighbor = workingTileMap.get(nk);
             if (!neighbor || neighbor.terrain === 'mountain' || neighbor.terrain === 'lake') continue;
+            if (neighbor.owner === aiOwner) continue;
             const existingEntity = workingEntities.get(nk);
-            if (existingEntity && existingEntity !== 'rebel') {
-              if (neighbor.owner === aiOwner) continue;
-            }
+            if (existingEntity && existingEntity !== 'rebel') continue;
             const enemyZoC = getMaxEnemyZoC(nk, aiOwner, workingEntities, workingTileMap);
             const requiredStrength = enemyZoC + 1;
             if (!outsideTilesByStrength.has(requiredStrength)) {
@@ -1176,9 +1175,11 @@ export default function GameScreen() {
           if (buyActions.length === 0) {
             // Priority B: Expansion — buy a unit to capture adjacent non-AI tiles if economy stays non-negative
             // Expanding territory is more strategic than placing defensive buildings
+            // Account for income gained from the captured tile (minimum: 1 from desert)
+            const minCaptureIncome = 1;
             const expansionUnits = purchasableUnits.filter(u => {
               if (balance - u.cost < creditReserve || balance < u.cost) return false;
-              return territoryIncome - (territoryUpkeep + u.upkeep) >= 0;
+              return (territoryIncome + minCaptureIncome) - (territoryUpkeep + u.upkeep) >= 0;
             });
             if (expansionUnits.length > 0) {
               const unit = expansionUnits.reduce((a, b) => b.strength > a.strength ? b : a);
