@@ -2624,6 +2624,77 @@ export default function GameScreen() {
         }
       }
 
+      // ── Player bankruptcy check after all AI moves ────────────────────────
+      // When the AI splits or overruns a player territory, the resulting
+      // isolated sub-territory may have 0 balance + negative income delta.
+      // We kill those units now so the player sees graveyards immediately at
+      // the start of their turn (mirrors the same logic in handleEndTurn).
+      if (currentTurn !== 1) {
+        const playerVisited = new Set<string>();
+        let playerBankruptcyOccurred = false;
+        for (const tile of Array.from(workingTileMap.values())) {
+          if (tile.owner !== "player" || playerVisited.has(tile.key)) continue;
+          if (tile.terrain === "mountain" || tile.terrain === "lake") continue;
+          const territory = getContiguousTerritory(
+            workingTileMap,
+            tile.key,
+            "player",
+          );
+          for (const t of territory) playerVisited.add(t.key);
+          const territoryId = getTerritoryId(territory);
+          if (!territoryId) continue;
+          const income = territory.reduce((s, t) => {
+            if (workingEntities.get(t.key) === "rebel") return s;
+            return (
+              s +
+              TERRAIN_INCOME[t.terrain] +
+              (t.isCity ? CITY_BONUS : 0) +
+              (workingEntities.get(t.key) === "city" ? CITY_BONUS : 0)
+            );
+          }, 0);
+          const upkeep = territory.reduce((s, t) => {
+            const e = workingEntities.get(t.key);
+            return s + (e ? ENTITY_META[e].upkeep : 0);
+          }, 0);
+          const current = workingBalances.get(territoryId) ?? 0;
+          const delta = income - upkeep;
+          const newBalance = current + delta;
+          if (newBalance < 0) {
+            playerBankruptcyOccurred = true;
+            workingBalances = new Map(workingBalances);
+            workingBalances.set(territoryId, 0);
+            workingEntities = new Map(workingEntities);
+            let unitUpkeepSaved = 0;
+            for (const t of territory) {
+              const e = workingEntities.get(t.key);
+              if (e && ENTITY_META[e].isUnit) {
+                unitUpkeepSaved += ENTITY_META[e].upkeep;
+                workingEntities.delete(t.key);
+                workingGraveyard = new Set(workingGraveyard);
+                workingGraveyard.add(t.key);
+              }
+            }
+            if (delta + unitUpkeepSaved < 0) {
+              for (const t of territory) {
+                const e = workingEntities.get(t.key);
+                if (e && !ENTITY_META[e].isUnit && e !== "rebel") {
+                  workingEntities.delete(t.key);
+                  workingRuins = new Set(workingRuins);
+                  workingRuins.add(t.key);
+                }
+              }
+            }
+          }
+        }
+        if (playerBankruptcyOccurred) {
+          setEntities(new Map(workingEntities));
+          setTerritoryBalances(new Map(workingBalances));
+          setGraveyard(new Set(workingGraveyard));
+          setRuins(new Set(workingRuins));
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
       setLakeUnitFunds(new Map(workingLakeFunds));
       setIsAiTurn(false);
       aiTurnRef.current = false;
