@@ -5599,8 +5599,8 @@ export default function GameScreen() {
               Dominance!
             </Text>
             <Text style={styles.gameResultBody}>
-              Du kontrollerer 70% af riget. Vil du erklære sejr nu, eller
-              fortsætte og erobre det hele?
+              You control 70% of the realm. Claim victory now, or continue
+              your conquest and take it all?
             </Text>
             <TouchableOpacity
               style={[styles.gameResultBtn, styles.dominanceContinueBtn]}
@@ -5612,7 +5612,7 @@ export default function GameScreen() {
                   styles.dominanceContinueBtnText,
                 ]}
               >
-                Spil videre
+                Keep Playing
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -5628,7 +5628,7 @@ export default function GameScreen() {
                   styles.gameResultMenuBtnText,
                 ]}
               >
-                Afslut spillet
+                Claim Victory
               </Text>
             </TouchableOpacity>
           </View>
