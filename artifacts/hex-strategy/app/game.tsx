@@ -4305,7 +4305,7 @@ export default function GameScreen() {
                         fill="#fff"
                         opacity={0.9}
                       >
-                        🏙️
+                        {ENTITY_META.city.icon}
                       </SvgText>
                     </React.Fragment>
                   );
