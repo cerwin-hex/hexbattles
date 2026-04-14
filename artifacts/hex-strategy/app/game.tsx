@@ -174,7 +174,7 @@ function applySingleHexPenalty(
       if (ENTITY_META[entity].isUnit) {
         entities.delete(singleKey);
         graveyard.add(singleKey);
-      } else if (entity !== "rebel") {
+      } else if (entity !== "rebel" && entity !== "city") {
         entities.delete(singleKey);
         ruins.add(singleKey);
       }
@@ -2718,7 +2718,7 @@ export default function GameScreen() {
             if (delta + unitUpkeepSaved < 0) {
               for (const t of territory) {
                 const e = workingEntities.get(t.key);
-                if (e && !ENTITY_META[e].isUnit && e !== "rebel") {
+                if (e && !ENTITY_META[e].isUnit && e !== "rebel" && e !== "city") {
                   workingEntities.delete(t.key);
                   workingRuins = new Set(workingRuins);
                   workingRuins.add(t.key);
@@ -3942,7 +3942,7 @@ export default function GameScreen() {
           if (delta + unitUpkeepSaved < 0) {
             for (const t of territory) {
               const e = nextEntities.get(t.key);
-              if (e && !ENTITY_META[e].isUnit && e !== "rebel") {
+              if (e && !ENTITY_META[e].isUnit && e !== "rebel" && e !== "city") {
                 nextEntities.delete(t.key);
                 nextRuins.add(t.key);
               }
@@ -3996,7 +3996,7 @@ export default function GameScreen() {
             if (delta + unitUpkeepSaved < 0) {
               for (const t of territory) {
                 const e = nextEntities.get(t.key);
-                if (e && !ENTITY_META[e].isUnit && e !== "rebel") {
+                if (e && !ENTITY_META[e].isUnit && e !== "rebel" && e !== "city") {
                   nextEntities.delete(t.key);
                   nextRuins.add(t.key);
                 }
