@@ -81,7 +81,7 @@ import {
 const BTN_H = 52;
 const BOTTOM_BAR_H = BTN_H + 20;
 const RIBBON_H = 130;
-const ENTITY_PANEL_H = 56;
+const ENTITY_PANEL_H = 72;
 const EXTRA_PAN = 150;
 
 const ORDERED_EDGES: ReadonlyArray<{
@@ -5074,7 +5074,7 @@ export default function GameScreen() {
           <View style={styles.spacer} />
 
           {canBuild &&
-            (["units", "buildings"] as const).map((mode) => {
+            (["buildings", "units"] as const).map((mode) => {
               const isActive = ribbonMode === mode;
               return (
                 <TouchableOpacity
@@ -5107,7 +5107,7 @@ export default function GameScreen() {
                           : "#3A2E14",
                     }}
                   >
-                    {mode === "units" ? "⚔" : "🏛"}
+                    {mode === "units" ? "⚒" : "🏛"}
                   </Text>
                   <Text
                     style={[
@@ -5116,7 +5116,7 @@ export default function GameScreen() {
                       !canBuild && styles.buildBtnTextDisabled,
                     ]}
                   >
-                    {mode === "units" ? "Units" : "Builds"}
+                    {mode === "units" ? "Train" : "Build"}
                   </Text>
                 </TouchableOpacity>
               );
@@ -5511,6 +5511,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 12,
+    paddingVertical: 10,
     gap: 8,
     backgroundColor: "rgba(18, 12, 4, 0.97)",
     borderTopWidth: 1,
