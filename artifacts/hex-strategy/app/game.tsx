@@ -61,6 +61,8 @@ import {
   TERRAIN_INCOME,
   TerritoryOwner,
   UNIT_UPGRADE,
+  calcDefenseUpkeep,
+  nextDefenseUpkeep,
   findCentralTile,
   generateHexGrid,
   getBoardBounds,
@@ -104,6 +106,21 @@ const PURCHASABLES = (Object.keys(ENTITY_META) as EntityType[])
   }));
 const UNIT_PURCHASABLES = PURCHASABLES.filter((p) => p.isUnit);
 const BUILDING_PURCHASABLES = PURCHASABLES.filter((p) => !p.isUnit);
+
+function calcTerritoryUpkeep(
+  territory: HexTile[],
+  ents: Map<string, EntityType>,
+): number {
+  let towers = 0, castles = 0, unitUpkeep = 0;
+  for (const t of territory) {
+    const e = ents.get(t.key);
+    if (!e) continue;
+    if (e === "tower") towers++;
+    else if (e === "castle") castles++;
+    else unitUpkeep += ENTITY_META[e].upkeep;
+  }
+  return unitUpkeep + calcDefenseUpkeep("tower", towers) + calcDefenseUpkeep("castle", castles);
+}
 
 // Wipe out newly-isolated single-hex territories: zero balance, kill units→graveyard, remove buildings.
 // Only fires for tiles that were NOT already lone-hex before the current move (prevTileMap).
@@ -1395,10 +1412,7 @@ export default function GameScreen() {
                 (workingEntities.get(t.key) === "city" ? CITY_BONUS : 0)
               );
             }, 0);
-            const territoryUpkeep = currentTerritory.reduce((s, t) => {
-              const e = workingEntities.get(t.key);
-              return s + (e ? ENTITY_META[e].upkeep : 0);
-            }, 0);
+            const territoryUpkeep = calcTerritoryUpkeep(currentTerritory, workingEntities);
 
             // Building spacing: sort placement candidates to prefer ≥2 tile gap from existing towers/castles
             // Ideal: 2+ tiles (no ZoC overlap); acceptable: 1 tile (partial overlap); avoid: 0 (adjacent, wasteful)
@@ -1541,10 +1555,10 @@ export default function GameScreen() {
             });
 
             const economySafeUpgrades = upgradeActions.filter((a) => {
-              const upkeepDelta =
-                ENTITY_META[a.to].upkeep - ENTITY_META[a.from].upkeep;
-              if (territoryIncome - territoryUpkeep - upkeepDelta < 0)
-                return false;
+              const tempEntities = new Map(workingEntities);
+              tempEntities.set(a.key, a.to);
+              const newUpkeep = calcTerritoryUpkeep(currentTerritory, tempEntities);
+              if (territoryIncome - newUpkeep < 0) return false;
               if (a.to === "castle" && !hasAdvancedUnitNearby) return false;
               return true;
             });
@@ -1718,11 +1732,22 @@ export default function GameScreen() {
                     .map((x) => x.t);
                   const spacedTiles = buildingSpacingSort(highThreatTiles);
                   if (spacedTiles.length > 0) {
+                    // Count existing defense buildings to compute next linear upkeep cost
+                    let territoryTowers = 0;
+                    let territoryCastles = 0;
+                    for (const t of currentTerritory) {
+                      const e = workingEntities.get(t.key);
+                      if (e === "tower") territoryTowers++;
+                      else if (e === "castle") territoryCastles++;
+                    }
+                    const nextCastleUpkeep = nextDefenseUpkeep("castle", territoryCastles);
+                    const nextTowerUpkeep = nextDefenseUpkeep("tower", territoryTowers);
                     if (
                       maxThreat >= 2 &&
                       hasAdvancedUnitNearby &&
                       balance - ENTITY_META.castle.cost >= creditReserve &&
-                      balance >= ENTITY_META.castle.cost
+                      balance >= ENTITY_META.castle.cost &&
+                      territoryIncome - territoryUpkeep - nextCastleUpkeep >= 0
                     ) {
                       buyActions.push({
                         kind: "buy",
@@ -1735,7 +1760,8 @@ export default function GameScreen() {
                       });
                     } else if (
                       balance - ENTITY_META.tower.cost >= creditReserve &&
-                      balance >= ENTITY_META.tower.cost
+                      balance >= ENTITY_META.tower.cost &&
+                      territoryIncome - territoryUpkeep - nextTowerUpkeep >= 0
                     ) {
                       buyActions.push({
                         kind: "buy",
@@ -2670,10 +2696,7 @@ export default function GameScreen() {
               (workingEntities.get(t.key) === "city" ? CITY_BONUS : 0)
             );
           }, 0);
-          const upkeep = territory.reduce((s, t) => {
-            const e = workingEntities.get(t.key);
-            return s + (e ? ENTITY_META[e].upkeep : 0);
-          }, 0);
+          const upkeep = calcTerritoryUpkeep(territory, workingEntities);
           const current = workingBalances.get(territoryId) ?? 0;
           const delta = income - upkeep;
           const newBalance = current + delta;
@@ -2748,6 +2771,16 @@ export default function GameScreen() {
     () => new Set(selectedTerritory.map((t) => t.key)),
     [selectedTerritory],
   );
+
+  const selectedTerritoryDefenseCounts = useMemo<{ tower: number; castle: number }>(() => {
+    let tower = 0, castle = 0;
+    for (const t of selectedTerritory) {
+      const e = entities.get(t.key);
+      if (e === "tower") tower++;
+      else if (e === "castle") castle++;
+    }
+    return { tower, castle };
+  }, [selectedTerritory, entities]);
 
   const validMoveTiles = useMemo<Set<string>>(() => {
     if (!selectedEntityKey) return new Set();
@@ -3042,12 +3075,20 @@ export default function GameScreen() {
     ).map((type) => {
       const count = upkeepGroupMap.get(type)!;
       const meta = ENTITY_META[type];
+      const isDefense = type === "tower" || type === "castle";
+      const total = isDefense
+        ? calcDefenseUpkeep(type as "tower" | "castle", count)
+        : meta.upkeep * count;
+      const mostExpensiveCost = isDefense
+        ? nextDefenseUpkeep(type as "tower" | "castle", count - 1)
+        : null;
       return {
         icon: meta.icon,
         name: meta.name,
         count,
-        upkeepPerUnit: meta.upkeep,
-        total: meta.upkeep * count,
+        upkeepPerUnit: isDefense ? null : meta.upkeep,
+        mostExpensiveCost,
+        total,
       };
     });
     const grassIncome = grassCount * 2;
@@ -3239,10 +3280,7 @@ export default function GameScreen() {
             (entities.get(t.key) === "city" ? CITY_BONUS : 0)
           );
         }, 0);
-        const upkeep = territory.reduce((s, t) => {
-          const e = entities.get(t.key);
-          return s + (e ? ENTITY_META[e].upkeep : 0);
-        }, 0);
+        const upkeep = calcTerritoryUpkeep(territory, entities);
         const net = income - upkeep;
         const label = net >= 0 ? `${balance}(+${net})` : `${balance}(${net})`;
         const stateVal = aiStateMap.get(territoryId);
@@ -3883,10 +3921,7 @@ export default function GameScreen() {
             (nextEntities.get(t.key) === "city" ? CITY_BONUS : 0)
           );
         }, 0);
-        const upkeep = territory.reduce((s, t) => {
-          const e = nextEntities.get(t.key);
-          return s + (e ? ENTITY_META[e].upkeep : 0);
-        }, 0);
+        const upkeep = calcTerritoryUpkeep(territory, nextEntities);
         const current = nextBalances.get(territoryId) ?? 0;
         const delta = income - upkeep;
         const newBalance = current + delta;
@@ -3940,10 +3975,7 @@ export default function GameScreen() {
               (nextEntities.get(t.key) === "city" ? CITY_BONUS : 0)
             );
           }, 0);
-          const upkeep = territory.reduce((s, t) => {
-            const e = nextEntities.get(t.key);
-            return s + (e ? ENTITY_META[e].upkeep : 0);
-          }, 0);
+          const upkeep = calcTerritoryUpkeep(territory, nextEntities);
           const current = nextBalances.get(territoryId) ?? 0;
           const delta = income - upkeep;
           const newBalance = current + delta;
@@ -4884,6 +4916,7 @@ export default function GameScreen() {
           ).map((item) => {
             const isArmed = armedEntityId === item.id;
             const isTower = item.id === "tower";
+            const isCastle = item.id === "castle";
             const round1Locked = turn === 1 && !isTower;
             const cityAlreadyBuilt = item.id === "city" && territoryHasCity;
             const cityTooSmall =
@@ -4908,6 +4941,17 @@ export default function GameScreen() {
                   : playerTowerFree
                     ? "FREE"
                     : `${item.cost}g`;
+            const nextUpkeepLabel = (() => {
+              if (isTower) {
+                const cost = nextDefenseUpkeep("tower", selectedTerritoryDefenseCounts.tower);
+                return `${cost}/turn`;
+              }
+              if (isCastle) {
+                const cost = nextDefenseUpkeep("castle", selectedTerritoryDefenseCounts.castle);
+                return `${cost}/turn`;
+              }
+              return null;
+            })();
             return (
               <TouchableOpacity
                 key={item.id}
@@ -4943,6 +4987,17 @@ export default function GameScreen() {
                 >
                   {costLabel}
                 </Text>
+                {nextUpkeepLabel && (
+                  <Text
+                    style={[
+                      styles.ribbonCost,
+                      !enabled && styles.ribbonDim,
+                      { fontSize: 10, marginTop: 1 },
+                    ]}
+                  >
+                    {nextUpkeepLabel}
+                  </Text>
+                )}
               </TouchableOpacity>
             );
           })}
@@ -5476,9 +5531,11 @@ export default function GameScreen() {
                     <View key={i} style={styles.econRow}>
                       <Text style={styles.econRowLabel}>
                         {g.icon} {g.name} ×{g.count}{" "}
-                        <Text style={styles.econPer}>
-                          (−{g.upkeepPerUnit} each)
-                        </Text>
+                        {g.upkeepPerUnit !== null && (
+                          <Text style={styles.econPer}>
+                            (−{g.upkeepPerUnit} each)
+                          </Text>
+                        )}
                       </Text>
                       <Text style={[styles.econRowValue, { color: "#E07060" }]}>
                         −{g.total}

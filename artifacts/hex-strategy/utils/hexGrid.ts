@@ -25,6 +25,8 @@ export const ENTITY_META: Record<EntityType, EntityMeta> = {
   simple_unit:   { name: 'Peasant',   icon: '⚒️',  cost: 10, upkeep: 3,  isUnit: true,  strength: 1 },
   advanced_unit: { name: 'Warrior',   icon: '🗡️',  cost: 20, upkeep: 9,  isUnit: true,  strength: 2 },
   expert_unit:   { name: 'Swordsman', icon: '⚔️',  cost: 30, upkeep: 27, isUnit: true,  strength: 3 },
+  // NOTE: tower/castle upkeep here is the per-building BASE rate only.
+  // Actual territory upkeep is LINEAR (n-th building costs n×base); use calcDefenseUpkeep/nextDefenseUpkeep.
   tower:         { name: 'Tower',     icon: '🛕',  cost: 15, upkeep: 1,  isUnit: false, strength: 1 },
   castle:        { name: 'Castle',    icon: '🏰',  cost: 30, upkeep: 5,  isUnit: false, strength: 2 },
   city:          { name: 'City',          icon: '🏘️',  cost: 10, upkeep: 0,  isUnit: false, strength: 1 },
@@ -54,6 +56,28 @@ export const UNIT_UPGRADE: Partial<Record<EntityType, EntityType>> = {
   advanced_unit: 'expert_unit',
   tower: 'castle',
 };
+
+/**
+ * Total upkeep for `count` defense buildings of the given type in one territory.
+ * Towers:  1 + 2 + ... + n = n*(n+1)/2
+ * Castles: 5 + 10 + ... + 5n = 5*n*(n+1)/2
+ */
+export function calcDefenseUpkeep(type: 'tower' | 'castle', count: number): number {
+  if (count <= 0) return 0;
+  const base = type === 'castle' ? 5 : 1;
+  return base * count * (count + 1) / 2;
+}
+
+/**
+ * Upkeep cost of the NEXT defense building of the given type,
+ * given `currentCount` already in the territory.
+ * Towers:  currentCount + 1
+ * Castles: 5 * (currentCount + 1)
+ */
+export function nextDefenseUpkeep(type: 'tower' | 'castle', currentCount: number): number {
+  const base = type === 'castle' ? 5 : 1;
+  return base * (currentCount + 1);
+}
 
 export function getZoCStrength(
   tileKey2: string,
