@@ -50,7 +50,7 @@ Every package extends `tsconfig.base.json` which sets `composite: true`. The roo
 
 ## Artifacts
 
-### `artifacts/hex-strategy` (`@workspace/hex-strategy`) — Hex Conquest
+### `artifacts/hex-strategy` (`@workspace/hex-strategy`) — Hex Battle
 
 Android-first Expo React Native turn-based hexagonal strategy game.
 

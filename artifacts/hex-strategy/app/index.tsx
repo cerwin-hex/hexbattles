@@ -59,7 +59,7 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
               <Text style={styles.ruleSectionTitle}>About the Game</Text>
               <View style={styles.ruleDivider} />
               <Text style={styles.ruleBody}>
-                Hex Strategy is a turn-based strategy game where you fight to conquer and defend territories on a hexagonal map. You start with a small area and must expand, build your economy, and eliminate all opponents, while keeping an eye on the rebels.
+                Hex Battle is a turn-based strategy game where you fight to conquer and defend territories on a hexagonal map. You start with a small area and must expand, build your economy, and eliminate all opponents, while keeping an eye on the rebels.
               </Text>
             </View>
 
@@ -193,9 +193,8 @@ export default function MainMenuScreen() {
       <View style={[styles.content, { paddingTop: topPad + 24, paddingBottom: botPad + 24 }]}>
 
         <View style={styles.header}>
-          <Text style={styles.eyebrow}>Turn-Based Strategy</Text>
           <View style={styles.titleRow}>
-            <Text style={styles.title}>{'HEX\nCONQUEST'}</Text>
+            <Text style={styles.title}>{'HEX\nBATTLE'}</Text>
             <TouchableOpacity
               style={styles.helpBtn}
               onPress={() => { Haptics.selectionAsync(); setRulesVisible(true); }}
@@ -289,12 +288,6 @@ const styles = StyleSheet.create({
   },
   header: {
     gap: 8,
-  },
-  eyebrow: {
-    fontSize: 11,
-    fontFamily: 'Cinzel_400Regular',
-    color: '#786A54',
-    letterSpacing: 2,
   },
   titleRow: {
     flexDirection: 'row',
