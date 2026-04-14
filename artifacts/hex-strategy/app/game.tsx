@@ -114,6 +114,7 @@ function applySingleHexPenalty(
   entities: Map<string, EntityType>,
   graveyard: Set<string>,
   ruins: Set<string>,
+  exemptKey?: string,
 ): void {
   const allOwners = new Set<TerritoryOwner>([
     "player",
@@ -136,6 +137,9 @@ function applySingleHexPenalty(
     for (const t of territory) visited.add(t.key);
     if (territory.length !== 1) continue;
     const singleKey = territory[0].key;
+    // Never penalise a tile that was just freshly captured/landed on — it is
+    // expansion (e.g. naval landing), not an enemy-induced isolation.
+    if (exemptKey && singleKey === exemptKey) continue;
     // Skip if this tile was already isolated before this move — it is not newly cut off
     const prevOwner = prevTileMap.get(singleKey)?.owner;
     if (prevOwner === tile.owner) {
@@ -3425,6 +3429,9 @@ export default function GameScreen() {
         const newGraveyard = new Set(graveyard);
         const newRuins = new Set(ruins);
         newGraveyard.delete(key);
+        // Exempt the destination tile when landing from a lake — the unit is
+        // intentionally establishing a new beachhead, not being cut off.
+        const lakeLanding = fromLake && !movingToLake;
         applySingleHexPenalty(
           activeTileMap,
           newTileMap,
@@ -3432,6 +3439,7 @@ export default function GameScreen() {
           newEntities,
           newGraveyard,
           newRuins,
+          lakeLanding ? key : undefined,
         );
 
         const newLiveOwnerMap = new Map(liveOwnerMap);
