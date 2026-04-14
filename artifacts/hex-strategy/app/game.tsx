@@ -717,6 +717,8 @@ export default function GameScreen() {
   const [gameResult, setGameResult] = useState<"victory" | "defeat" | null>(
     null,
   );
+  const [showDominancePopup, setShowDominancePopup] = useState(false);
+  const dominanceShownRef = useRef(false);
   const aiTurnRef = useRef<boolean>(false);
   const [graveyard, setGraveyard] = useState<Set<string>>(new Set());
   const [ruins, setRuins] = useState<Set<string>>(new Set());
@@ -952,6 +954,22 @@ export default function GameScreen() {
       if (allAiEliminated) {
         setGameResult("victory");
         return true;
+      }
+      // 70% dominance check — show once per game
+      if (!dominanceShownRef.current) {
+        const playableTiles = Array.from(currentTileMap.values()).filter(
+          (t) => t.terrain !== "mountain" && t.terrain !== "lake",
+        );
+        const playerPlayable = playableTiles.filter(
+          (t) => t.owner === "player",
+        ).length;
+        if (
+          playableTiles.length > 0 &&
+          playerPlayable / playableTiles.length >= 0.7
+        ) {
+          dominanceShownRef.current = true;
+          setShowDominancePopup(true);
+        }
       }
       return false;
     },
@@ -5513,6 +5531,53 @@ export default function GameScreen() {
         </TouchableOpacity>
       </Modal>
 
+      {/* 70% Dominance popup */}
+      <Modal visible={showDominancePopup} transparent animationType="fade">
+        <View style={styles.gameResultOverlay}>
+          <View style={styles.gameResultCard}>
+            <Text style={styles.gameResultEmoji}>⚔️</Text>
+            <Text
+              style={[styles.gameResultTitle, styles.gameResultVictoryTitle]}
+            >
+              Dominance!
+            </Text>
+            <Text style={styles.gameResultBody}>
+              Du kontrollerer 70% af riget. Vil du erklære sejr nu, eller
+              fortsætte og erobre det hele?
+            </Text>
+            <TouchableOpacity
+              style={[styles.gameResultBtn, styles.dominanceContinueBtn]}
+              onPress={() => setShowDominancePopup(false)}
+            >
+              <Text
+                style={[
+                  styles.gameResultBtnText,
+                  styles.dominanceContinueBtnText,
+                ]}
+              >
+                Spil videre
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.gameResultBtn, styles.gameResultMenuBtn]}
+              onPress={() => {
+                setShowDominancePopup(false);
+                setGameResult("victory");
+              }}
+            >
+              <Text
+                style={[
+                  styles.gameResultBtnText,
+                  styles.gameResultMenuBtnText,
+                ]}
+              >
+                Afslut spillet
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={gameResult !== null} transparent animationType="fade">
         <View style={styles.gameResultOverlay}>
           <View style={styles.gameResultCard}>
@@ -6207,5 +6272,12 @@ const styles = StyleSheet.create({
   gameResultMenuBtnText: {
     color: "#C8A24A",
     fontSize: 12,
+  },
+  dominanceContinueBtn: {
+    backgroundColor: "#1A3A20",
+    borderColor: "#4A8A50",
+  },
+  dominanceContinueBtnText: {
+    color: "#80D090",
   },
 });
