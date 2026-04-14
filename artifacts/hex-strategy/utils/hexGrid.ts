@@ -29,7 +29,7 @@ export const ENTITY_META: Record<EntityType, EntityMeta> = {
   // Actual territory upkeep is LINEAR (n-th building costs n×base); use calcDefenseUpkeep/nextDefenseUpkeep.
   tower:         { name: 'Tower',     icon: '🛕',  cost: 15, upkeep: 1,  isUnit: false, strength: 1 },
   castle:        { name: 'Castle',    icon: '🏰',  cost: 30, upkeep: 5,  isUnit: false, strength: 2 },
-  city:          { name: 'City',          icon: '🏘️',  cost: 10, upkeep: 0,  isUnit: false, strength: 1 },
+  city:          { name: 'City',          icon: '🏘️',  cost: 10, upkeep: 0,  isUnit: false, strength: 0 },
   rebel:         { name: 'Rebel',         icon: '✊',   cost: 0,  upkeep: 0,  isUnit: false, strength: 0 },
 };
 
