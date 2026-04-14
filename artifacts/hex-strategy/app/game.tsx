@@ -5361,7 +5361,7 @@ export default function GameScreen() {
               {econBreakdown && econBreakdown.cityCount > 0 && (
                 <View style={styles.econRow}>
                   <Text style={styles.econRowLabel}>
-                    🏙️ Cities ×{econBreakdown.cityCount}{" "}
+                    {ENTITY_META.city.icon} Cities ×{econBreakdown.cityCount}{" "}
                     <Text style={styles.econPer}>(+{CITY_BONUS} each)</Text>
                   </Text>
                   <Text style={styles.econRowValue}>
