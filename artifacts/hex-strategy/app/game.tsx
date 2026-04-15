@@ -2598,6 +2598,7 @@ export default function GameScreen() {
             workingEntities,
             workingGraveyard,
             workingRuins,
+            movingFromLake && !movingToLake ? destKey : undefined,
           );
           setRuins(new Set(workingRuins));
 
