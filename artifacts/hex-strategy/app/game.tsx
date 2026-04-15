@@ -8,6 +8,7 @@ import React, {
   useTransition,
 } from "react";
 import {
+  Image,
   Modal,
   Platform,
   ScrollView,
@@ -317,6 +318,24 @@ export default function GameScreen() {
   const INNER_SIZE = HEX_SIZE - BORDER_W * 0.65 * (2 / Math.sqrt(3));
 
   const [gameKey, setGameKey] = useState(0);
+
+  const [showSplash, setShowSplash] = useState(true);
+  const splashOpacity = useSharedValue(1);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      splashOpacity.value = withTiming(0, { duration: 600 }, (finished) => {
+        if (finished) {
+          runOnJS(setShowSplash)(false);
+        }
+      });
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const splashAnimStyle = useAnimatedStyle(() => ({
+    opacity: splashOpacity.value,
+  }));
 
   const tiles = useMemo(
     () => generateHexGrid(numTiles, numOpponents + 1),
@@ -5676,6 +5695,23 @@ export default function GameScreen() {
           </View>
         </View>
       </Modal>
+      {showSplash && (
+        <Animated.View style={[styles.splashOverlay, splashAnimStyle]}>
+          <Image
+            source={MOUNTAIN_IMG}
+            style={styles.splashPreloadImg}
+            resizeMode="cover"
+          />
+          <Image
+            source={WATER_IMG}
+            style={styles.splashPreloadImg}
+            resizeMode="cover"
+          />
+          <Text style={styles.splashTitle}>Tower Deployment</Text>
+          <View style={styles.splashSeparator} />
+          <Text style={styles.splashSubtitle}>Game starts next turn</Text>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -6337,5 +6373,43 @@ const styles = StyleSheet.create({
   },
   dominanceContinueBtnText: {
     color: "#80D090",
+  },
+  splashOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#0D0A06",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 9999,
+  },
+  splashPreloadImg: {
+    position: "absolute",
+    width: 1,
+    height: 1,
+    opacity: 0,
+  },
+  splashTitle: {
+    fontFamily: "Cinzel_700Bold",
+    fontSize: 34,
+    color: "#C8A24A",
+    letterSpacing: 2,
+    textAlign: "center",
+  },
+  splashSeparator: {
+    width: 180,
+    height: 1.5,
+    backgroundColor: "#C8A24A",
+    marginVertical: 14,
+    opacity: 0.7,
+  },
+  splashSubtitle: {
+    fontFamily: "Cinzel_400Regular",
+    fontSize: 17,
+    color: "#D4BF96",
+    letterSpacing: 1,
+    textAlign: "center",
   },
 });
