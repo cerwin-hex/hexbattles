@@ -763,7 +763,9 @@ export default function GameScreen() {
   );
   const [isDeveloperModeActive, setIsDeveloperModeActive] = useState(false);
   const [isAiPaused, setIsAiPaused] = useState(false);
+  const [isAiTurnDone, setIsAiTurnDone] = useState(false);
   const resumeAiRef = useRef<(() => void) | null>(null);
+  const resumeAfterAiRef = useRef<(() => void) | null>(null);
   const isDeveloperModeRef = useRef(false);
   const [freeTowerUsedTiles, setFreeTowerUsedTiles] = useState<
     Map<TerritoryOwner, Set<string>>
@@ -872,7 +874,11 @@ export default function GameScreen() {
       resumeAiRef.current?.();
       resumeAiRef.current = null;
     }
-  }, [isDeveloperModeActive, isAiPaused]);
+    if (!isDeveloperModeActive && isAiTurnDone) {
+      resumeAfterAiRef.current?.();
+      resumeAfterAiRef.current = null;
+    }
+  }, [isDeveloperModeActive, isAiPaused, isAiTurnDone]);
 
   const restoreAiSnapshot = useCallback((snap: AiStepSnapshot) => {
     setEntities(snap.entities);
@@ -903,11 +909,8 @@ export default function GameScreen() {
   }, [aiHistoryIndex, restoreAiSnapshot]);
 
   const handleEndAiTurn = useCallback(() => {
-    aiTurnRef.current = false;
-    resumeAiRef.current?.();
-    resumeAiRef.current = null;
-    setIsAiPaused(false);
-    setIsAiTurn(false);
+    resumeAfterAiRef.current?.();
+    resumeAfterAiRef.current = null;
   }, []);
 
   const idleBounceY = useSharedValue(0);
@@ -2740,6 +2743,15 @@ export default function GameScreen() {
       // ─────────────────────────────────────────────────────────────────────
 
       setLakeUnitFunds(new Map(workingLakeFunds));
+      // Dev mode: pause after all AI steps so user can review before player's turn begins
+      if (isDeveloperModeRef.current) {
+        setIsAiTurnDone(true);
+        await new Promise<void>((resolve) => {
+          resumeAfterAiRef.current = resolve;
+        });
+        resumeAfterAiRef.current = null;
+        setIsAiTurnDone(false);
+      }
       setIsAiTurn(false);
       aiTurnRef.current = false;
       checkWinLoss(workingTileMap);
@@ -5325,19 +5337,18 @@ export default function GameScreen() {
             </TouchableOpacity>
           )}
 
-          {isAiTurn ? (
-            isDeveloperModeActive ? (
-              <TouchableOpacity
-                style={[styles.endTurnBtn, styles.aiTurnBtn]}
-                onPress={handleEndAiTurn}
-              >
-                <Text style={styles.aiTurnText}>⏹ End AI Turn</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={[styles.endTurnBtn, styles.aiTurnBtn]}>
-                <Text style={styles.aiTurnText}>AI Turn...</Text>
-              </View>
-            )
+          {isAiTurnDone ? (
+            <TouchableOpacity
+              style={styles.endTurnBtn}
+              onPress={handleEndAiTurn}
+            >
+              <Text style={styles.endTurnText}>End AI Turn</Text>
+              <Text style={styles.endTurnArrow}>→</Text>
+            </TouchableOpacity>
+          ) : isAiTurn ? (
+            <View style={[styles.endTurnBtn, styles.aiTurnBtn]}>
+              <Text style={styles.aiTurnText}>AI Turn...</Text>
+            </View>
           ) : (
             <Animated.View style={endTurnStyle}>
               <TouchableOpacity
