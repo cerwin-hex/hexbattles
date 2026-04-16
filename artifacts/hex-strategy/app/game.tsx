@@ -1435,6 +1435,7 @@ export default function GameScreen() {
             const upgradeActions: AiAction[] = [];
             for (const t of currentTerritory) {
               if (t.terrain === "mountain" || t.terrain === "lake") continue;
+              if (workingSpentUnits.has(t.key)) continue;
               const existing = workingEntities.get(t.key);
               if (!existing) continue;
               const upgradeTo = UNIT_UPGRADE[existing];
@@ -1905,8 +1906,13 @@ export default function GameScreen() {
               // Buy: chosenAction.kind === 'buy'
               const { unitType, key: target, outside } = chosenAction;
               if (!outside) {
+                const wasRebel = workingEntities.get(target) === "rebel";
                 workingEntities.set(target, unitType);
                 workingBalances.set(territoryId, balance - chosenAction.cost);
+                if (wasRebel) {
+                  workingSpentUnits = new Set(workingSpentUnits);
+                  workingSpentUnits.add(target);
+                }
               } else {
                 const previousOwner = (workingTileMap.get(target)?.owner ??
                   "neutral") as TerritoryOwner;

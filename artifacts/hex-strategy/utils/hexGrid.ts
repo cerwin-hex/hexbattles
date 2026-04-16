@@ -186,8 +186,9 @@ export function getValidMoves(
       if (neighbor.owner === owner) {
         const allyEntity = entities.get(nk);
         const allyIsRebel = allyEntity === 'rebel';
+        const allyIsCity = allyEntity === 'city';
         const allyIsUnit = allyEntity ? ENTITY_META[allyEntity].isUnit : false;
-        if (!allyEntity || allyIsRebel) {
+        if (!allyEntity || allyIsRebel || allyIsCity) {
           result.add(nk);
           queue.push({ key: nk, cost: newCost });
         } else if (allyIsUnit) {
