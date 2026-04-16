@@ -1054,9 +1054,20 @@ export default function GameScreen() {
         initialLakeFunds ?? lakeUnitFundsRef.current,
       );
 
-      aiStepHistoryRef.current = [];
-      setAiHistoryIndex(-1);
-      setAiHistoryLen(0);
+      // Snapshot state BEFORE any AI action so the user can step back to the start of AI's turn
+      const preAiSnap: AiStepSnapshot = {
+        entities: new Map(currentEntities),
+        mutableTileMap: new Map(currentTileMap),
+        territoryBalances: new Map(currentBalances),
+        liveOwnerMap: new Map(),
+        graveyard: new Set(workingGraveyard),
+        freeTowerUsedTiles: new Map(
+          [...workingFreeTowerUsed.entries()].map(([k, v]) => [k, new Set(v)]),
+        ),
+      };
+      aiStepHistoryRef.current = [preAiSnap];
+      setAiHistoryIndex(0);
+      setAiHistoryLen(1);
 
       for (const aiOwner of aiOwners) {
         if (aiTurnRef.current === false) return;
@@ -3272,7 +3283,33 @@ export default function GameScreen() {
         const aiLabel = `${diffLabel}·${stateLabel}`;
         const central = findCentralTile(territory);
         if (!central) continue;
-        const pos = tileDataMap.get(central.key);
+        // Pick label position: vacant tile closest to center → tower tile → central tile
+        const [centQ, centR] = central.key.split(",").map(Number);
+        const vacantTiles = territory.filter(
+          (t) =>
+            t.terrain !== "mountain" &&
+            t.terrain !== "lake" &&
+            !entities.has(t.key),
+        );
+        const towerTiles = territory.filter(
+          (t) => entities.get(t.key) === "tower",
+        );
+        const labelCandidates =
+          vacantTiles.length > 0
+            ? vacantTiles
+            : towerTiles.length > 0
+              ? towerTiles
+              : [central];
+        let labelTile = labelCandidates[0];
+        let labelDist = hexDistance(centQ, centR, labelTile.q, labelTile.r);
+        for (const t of labelCandidates) {
+          const d = hexDistance(centQ, centR, t.q, t.r);
+          if (d < labelDist) {
+            labelDist = d;
+            labelTile = t;
+          }
+        }
+        const pos = tileDataMap.get(labelTile.key);
         if (!pos) continue;
         result.push({ cx: pos.cx, cy: pos.cy, label, aiLabel });
       }
