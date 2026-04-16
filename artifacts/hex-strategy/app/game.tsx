@@ -902,6 +902,14 @@ export default function GameScreen() {
     setAiHistoryIndex(prev);
   }, [aiHistoryIndex, restoreAiSnapshot]);
 
+  const handleEndAiTurn = useCallback(() => {
+    aiTurnRef.current = false;
+    resumeAiRef.current?.();
+    resumeAiRef.current = null;
+    setIsAiPaused(false);
+    setIsAiTurn(false);
+  }, []);
+
   const idleBounceY = useSharedValue(0);
   useEffect(() => {
     if (isAiTurn) {
@@ -5318,9 +5326,18 @@ export default function GameScreen() {
           )}
 
           {isAiTurn ? (
-            <View style={[styles.endTurnBtn, styles.aiTurnBtn]}>
-              <Text style={styles.aiTurnText}>AI Turn...</Text>
-            </View>
+            isDeveloperModeActive ? (
+              <TouchableOpacity
+                style={[styles.endTurnBtn, styles.aiTurnBtn]}
+                onPress={handleEndAiTurn}
+              >
+                <Text style={styles.aiTurnText}>⏹ End AI Turn</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={[styles.endTurnBtn, styles.aiTurnBtn]}>
+                <Text style={styles.aiTurnText}>AI Turn...</Text>
+              </View>
+            )
           ) : (
             <Animated.View style={endTurnStyle}>
               <TouchableOpacity
