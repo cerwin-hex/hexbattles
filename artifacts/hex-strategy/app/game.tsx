@@ -1080,6 +1080,16 @@ export default function GameScreen() {
       setAiHistoryIndex(0);
       setAiHistoryLen(1);
 
+      // Dev mode: pause at index 0 so user sees the pre-AI state before the first action runs
+      if (isDeveloperModeRef.current) {
+        setIsAiPaused(true);
+        await new Promise<void>((resolve) => {
+          resumeAiRef.current = resolve;
+        });
+        resumeAiRef.current = null;
+        setIsAiPaused(false);
+      }
+
       for (const aiOwner of aiOwners) {
         if (aiTurnRef.current === false) return;
 
@@ -5315,7 +5325,7 @@ export default function GameScreen() {
               );
             })}
 
-          {isDeveloperModeActive && isAiPaused && aiHistoryIndex > 0 && (
+          {isDeveloperModeActive && (isAiPaused || isAiTurnDone) && aiHistoryIndex > 0 && (
             <TouchableOpacity
               style={styles.prevActionBtn}
               onPress={handleAiStepBack}
