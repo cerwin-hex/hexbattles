@@ -5335,17 +5335,21 @@ export default function GameScreen() {
             </TouchableOpacity>
           )}
 
-          {isDeveloperModeActive && isAiPaused && (
-            <TouchableOpacity
-              style={styles.nextActionBtn}
-              onPress={handleAiStepNext}
-            >
-              <Text style={styles.nextActionBtnText}>
-                {aiHistoryIndex < aiHistoryLen - 1 ? "Next ▶" : "Next"}
-              </Text>
-              <Text style={{ fontSize: 13, color: "#00FF88" }}>→</Text>
-            </TouchableOpacity>
-          )}
+          {isDeveloperModeActive && (isAiPaused || isAiTurnDone) && (() => {
+            const atEnd = isAiTurnDone && aiHistoryIndex >= aiHistoryLen - 1;
+            return (
+              <TouchableOpacity
+                style={[styles.nextActionBtn, atEnd && { opacity: 0.35 }]}
+                onPress={atEnd ? undefined : handleAiStepNext}
+                disabled={atEnd}
+              >
+                <Text style={styles.nextActionBtnText}>
+                  {aiHistoryIndex < aiHistoryLen - 1 ? "Next ▶" : "Next"}
+                </Text>
+                <Text style={{ fontSize: 13, color: "#00FF88" }}>→</Text>
+              </TouchableOpacity>
+            );
+          })()}
 
           {isAiTurnDone ? (
             <TouchableOpacity
