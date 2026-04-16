@@ -1,6 +1,6 @@
 kind = "mobile"
 previewPath = "/"
-title = "Hex Wars"
+title = "Hex Battles"
 version = "1.0.0"
 id = "artifacts/hex-strategy"
 router = "expo-domain"
