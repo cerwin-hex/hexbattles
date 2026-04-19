@@ -379,6 +379,195 @@ function areBorderEdgeLayerEqual(
 
 const BorderEdgeLayer = React.memo(BorderEdgeLayerInner, areBorderEdgeLayerEqual);
 
+interface MovementHighlightTapTargetsProps {
+  validMoveTiles: Set<string>;
+  validPlacementAttackTiles: Set<string>;
+  armedEntityId: EntityType | null;
+  tileDataMap: Map<string, { cx: number; cy: number }>;
+  HEX_SIZE: number;
+}
+
+function MovementHighlightTapTargetsInner({
+  validMoveTiles,
+  validPlacementAttackTiles,
+  armedEntityId,
+  tileDataMap,
+  HEX_SIZE,
+}: MovementHighlightTapTargetsProps) {
+  return (
+    <G>
+      {validMoveTiles.size > 0 &&
+        Array.from(validMoveTiles).map((key) => {
+          const pos = tileDataMap.get(key);
+          if (!pos) return null;
+          return (
+            <Polygon
+              key={`move-tap-${key}`}
+              points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
+              fill="transparent"
+            />
+          );
+        })}
+
+      {armedEntityId &&
+        Array.from(validPlacementAttackTiles).map((key) => {
+          const pos = tileDataMap.get(key);
+          if (!pos) return null;
+          return (
+            <Polygon
+              key={`atk-tap-${key}`}
+              points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
+              fill="transparent"
+            />
+          );
+        })}
+    </G>
+  );
+}
+
+function areMovementHighlightTapTargetsEqual(
+  prev: MovementHighlightTapTargetsProps,
+  next: MovementHighlightTapTargetsProps,
+): boolean {
+  return (
+    prev.validMoveTiles === next.validMoveTiles &&
+    prev.validPlacementAttackTiles === next.validPlacementAttackTiles &&
+    prev.armedEntityId === next.armedEntityId &&
+    prev.tileDataMap === next.tileDataMap &&
+    prev.HEX_SIZE === next.HEX_SIZE
+  );
+}
+
+const MovementHighlightTapTargets = React.memo(
+  MovementHighlightTapTargetsInner,
+  areMovementHighlightTapTargetsEqual,
+);
+
+interface MovementHighlightLayerProps {
+  validMoveTiles: Set<string>;
+  validPlacementAttackTiles: Set<string>;
+  selectedTileKeys: Set<string>;
+  armedEntityId: EntityType | null;
+  entities: Map<string, EntityType>;
+  activeTileMap: Map<string, HexTile>;
+  graveyard: Set<string>;
+  fortificationDots: Set<string>;
+  tileDataMap: Map<string, { cx: number; cy: number }>;
+  boardW: number;
+  boardH: number;
+  HEX_SIZE: number;
+}
+
+function MovementHighlightLayerInner({
+  validMoveTiles,
+  validPlacementAttackTiles,
+  selectedTileKeys,
+  armedEntityId,
+  entities,
+  activeTileMap,
+  graveyard,
+  fortificationDots,
+  tileDataMap,
+  boardW,
+  boardH,
+  HEX_SIZE,
+}: MovementHighlightLayerProps) {
+  return (
+    <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+      <Svg width={boardW} height={boardH}>
+        {Array.from(validMoveTiles).map((key) => {
+          const pos = tileDataMap.get(key);
+          if (!pos) return null;
+          const tileOwner = activeTileMap.get(key)?.owner;
+          const hasRebel = entities.get(key) === "rebel";
+          const isAttackMove =
+            (tileOwner !== "player" && tileOwner !== undefined) || hasRebel;
+          return (
+            <Circle
+              key={`move-dot-${key}`}
+              cx={pos.cx}
+              cy={pos.cy}
+              r={HEX_SIZE * 0.18}
+              fill={isAttackMove ? "rgba(220,40,40,0.85)" : "rgba(255,220,0,0.85)"}
+            />
+          );
+        })}
+
+        {armedEntityId &&
+          Array.from(selectedTileKeys).map((key) => {
+            const pos = tileDataMap.get(key);
+            if (!pos) return null;
+            if (armedEntityId && !ENTITY_META[armedEntityId].isUnit) {
+              if (entities.get(key) || graveyard.has(key) || fortificationDots.has(key))
+                return null;
+            }
+            if (armedEntityId && ENTITY_META[armedEntityId].isUnit) {
+              const existingEntity = entities.get(key);
+              if (
+                existingEntity &&
+                !ENTITY_META[existingEntity].isUnit &&
+                existingEntity !== "rebel" &&
+                activeTileMap.get(key)?.owner === "player"
+              )
+                return null;
+            }
+            const isRebelTarget =
+              ENTITY_META[armedEntityId].isUnit && entities.get(key) === "rebel";
+            return (
+              <Circle
+                key={`place-dot-${key}`}
+                cx={pos.cx}
+                cy={pos.cy}
+                r={HEX_SIZE * 0.18}
+                fill={isRebelTarget ? "rgba(220,40,40,0.85)" : "rgba(255,220,0,0.85)"}
+              />
+            );
+          })}
+
+        {armedEntityId &&
+          Array.from(validPlacementAttackTiles).map((key) => {
+            const pos = tileDataMap.get(key);
+            if (!pos) return null;
+            return (
+              <Circle
+                key={`atk-dot-${key}`}
+                cx={pos.cx}
+                cy={pos.cy}
+                r={HEX_SIZE * 0.18}
+                fill="rgba(220,40,40,0.85)"
+              />
+            );
+          })}
+      </Svg>
+    </View>
+  );
+}
+
+function areMovementHighlightLayerEqual(
+  prev: MovementHighlightLayerProps,
+  next: MovementHighlightLayerProps,
+): boolean {
+  return (
+    prev.validMoveTiles === next.validMoveTiles &&
+    prev.validPlacementAttackTiles === next.validPlacementAttackTiles &&
+    prev.selectedTileKeys === next.selectedTileKeys &&
+    prev.armedEntityId === next.armedEntityId &&
+    prev.entities === next.entities &&
+    prev.activeTileMap === next.activeTileMap &&
+    prev.graveyard === next.graveyard &&
+    prev.fortificationDots === next.fortificationDots &&
+    prev.tileDataMap === next.tileDataMap &&
+    prev.boardW === next.boardW &&
+    prev.boardH === next.boardH &&
+    prev.HEX_SIZE === next.HEX_SIZE
+  );
+}
+
+const MovementHighlightLayer = React.memo(
+  MovementHighlightLayerInner,
+  areMovementHighlightLayerEqual,
+);
+
 export default function GameScreen() {
 
   const params = useLocalSearchParams<{
@@ -3008,31 +3197,13 @@ export default function GameScreen() {
                   );
                 })}
 
-              {validMoveTiles.size > 0 &&
-                Array.from(validMoveTiles).map((key) => {
-                  const pos = tileDataMap.get(key);
-                  if (!pos) return null;
-                  return (
-                    <Polygon
-                      key={`move-tap-${key}`}
-                      points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
-                      fill="transparent"
-                    />
-                  );
-                })}
-
-              {armedEntityId &&
-                Array.from(validPlacementAttackTiles).map((key) => {
-                  const pos = tileDataMap.get(key);
-                  if (!pos) return null;
-                  return (
-                    <Polygon
-                      key={`atk-tap-${key}`}
-                      points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
-                      fill="transparent"
-                    />
-                  );
-                })}
+              <MovementHighlightTapTargets
+                validMoveTiles={validMoveTiles}
+                validPlacementAttackTiles={validPlacementAttackTiles}
+                armedEntityId={armedEntityId}
+                tileDataMap={tileDataMap}
+                HEX_SIZE={HEX_SIZE}
+              />
 
               {errorTileKey &&
                 (() => {
@@ -3170,88 +3341,23 @@ export default function GameScreen() {
               </View>
             )}
 
+            <MovementHighlightLayer
+              validMoveTiles={validMoveTiles}
+              validPlacementAttackTiles={validPlacementAttackTiles}
+              selectedTileKeys={selectedTileKeys}
+              armedEntityId={armedEntityId}
+              entities={entities}
+              activeTileMap={activeTileMap}
+              graveyard={graveyard}
+              fortificationDots={fortificationDots}
+              tileDataMap={tileDataMap}
+              boardW={boardW}
+              boardH={boardH}
+              HEX_SIZE={HEX_SIZE}
+            />
+
             <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
               <Svg width={boardW} height={boardH}>
-                {Array.from(validMoveTiles).map((key) => {
-                  const pos = tileDataMap.get(key);
-                  if (!pos) return null;
-                  const tileOwner = activeTileMap.get(key)?.owner;
-                  const hasRebel = entities.get(key) === "rebel";
-                  const isAttackMove =
-                    (tileOwner !== "player" && tileOwner !== undefined) ||
-                    hasRebel;
-                  return (
-                    <Circle
-                      key={`move-dot-${key}`}
-                      cx={pos.cx}
-                      cy={pos.cy}
-                      r={HEX_SIZE * 0.18}
-                      fill={
-                        isAttackMove
-                          ? "rgba(220,40,40,0.85)"
-                          : "rgba(255,220,0,0.85)"
-                      }
-                    />
-                  );
-                })}
-
-                {armedEntityId &&
-                  Array.from(selectedTileKeys).map((key) => {
-                    const pos = tileDataMap.get(key);
-                    if (!pos) return null;
-                    // For buildings: only show dot on empty, non-graveyard tiles not already showing a blue fortification dot
-                    if (armedEntityId && !ENTITY_META[armedEntityId].isUnit) {
-                      if (
-                        entities.get(key) ||
-                        graveyard.has(key) ||
-                        fortificationDots.has(key)
-                      )
-                        return null;
-                    }
-                    // For units: skip tiles occupied by own buildings (tower/castle/city) — can't place there
-                    if (armedEntityId && ENTITY_META[armedEntityId].isUnit) {
-                      const existingEntity = entities.get(key);
-                      if (
-                        existingEntity &&
-                        !ENTITY_META[existingEntity].isUnit &&
-                        existingEntity !== "rebel" &&
-                        activeTileMap.get(key)?.owner === "player"
-                      )
-                        return null;
-                    }
-                    const isRebelTarget =
-                      ENTITY_META[armedEntityId].isUnit &&
-                      entities.get(key) === "rebel";
-                    return (
-                      <Circle
-                        key={`place-dot-${key}`}
-                        cx={pos.cx}
-                        cy={pos.cy}
-                        r={HEX_SIZE * 0.18}
-                        fill={
-                          isRebelTarget
-                            ? "rgba(220,40,40,0.85)"
-                            : "rgba(255,220,0,0.85)"
-                        }
-                      />
-                    );
-                  })}
-
-                {armedEntityId &&
-                  Array.from(validPlacementAttackTiles).map((key) => {
-                    const pos = tileDataMap.get(key);
-                    if (!pos) return null;
-                    return (
-                      <Circle
-                        key={`atk-dot-${key}`}
-                        cx={pos.cx}
-                        cy={pos.cy}
-                        r={HEX_SIZE * 0.18}
-                        fill="rgba(220,40,40,0.85)"
-                      />
-                    );
-                  })}
-
                 <DevEconomicSvgOverlays
                   isDeveloperModeActive={isDeveloperModeActive}
                   devEconomicOverlays={devEconomicOverlays}
