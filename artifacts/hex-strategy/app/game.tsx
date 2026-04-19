@@ -48,7 +48,6 @@ const MOUNTAIN_IMG = require("../assets/images/mountain.webp");
 const WATER_IMG = require("../assets/images/water.webp");
 
 import {
-  CITY_BUFFER_BORDER,
   CITY_NEUTRAL_FILL,
   TERRAIN_FILLS,
   TERRITORY_BORDERS,
@@ -66,7 +65,6 @@ import type {
 import {
   HEX_EDGES,
   getBoardBounds,
-  hexCornerPoint,
   hexCornersString,
   hexDistance,
   hexToPixel,
@@ -95,7 +93,6 @@ import {
   RIBBON_H,
   ENTITY_PANEL_H,
   EXTRA_PAN,
-  ORDERED_EDGES,
 } from "@/constants/gameConstants";
 import {
   calcTerritoryUpkeep,
@@ -126,6 +123,13 @@ import { FortificationDotLayer } from "@/components/FortificationDotLayer";
 import { CityOverlayLayer } from "@/components/CityOverlayLayer";
 import { GraveyardLayer } from "@/components/GraveyardLayer";
 import { AffordableTerritoryLayer } from "@/components/AffordableTerritoryLayer";
+import {
+  computeBorderEdges,
+  computeOuterTerritoryEdges,
+  computeSelectionBorderEdges,
+  type BorderEdgesCache,
+  type OuterEdgesCache,
+} from "@/utils/borderEdges";
 
 export default function GameScreen() {
 
@@ -217,303 +221,19 @@ export default function GameScreen() {
     new Map(),
   );
 
-  const borderEdgesCache = useRef<{
-    mutableTileMap: Map<string, HexTile>;
-    tileData: Array<{ tile: HexTile; cx: number; cy: number }>;
-    INNER_SIZE: number;
-    perTileEdges: Map<string, BorderEdge[]>;
-    result: BorderEdge[];
-  } | null>(null);
+  const borderEdgesCache = useRef<BorderEdgesCache>(null);
 
-  const borderEdges = useMemo<BorderEdge[]>(() => {
-    const ownerOf = (key: string, base: HexTile) =>
-      mutableTileMap.get(key)?.owner ?? base.owner;
+  const borderEdges = useMemo<BorderEdge[]>(
+    () => computeBorderEdges(borderEdgesCache, tileData, tileMap, tileDataMap, mutableTileMap, INNER_SIZE, BORDER_W),
+    [tileData, tileMap, tileDataMap, mutableTileMap, INNER_SIZE],
+  );
 
-    const prev = borderEdgesCache.current;
-    const isNewBoard =
-      !prev || prev.tileData !== tileData || prev.INNER_SIZE !== INNER_SIZE;
+  const outerEdgesCache = useRef<OuterEdgesCache>(null);
 
-    const perTileEdges: Map<string, BorderEdge[]> = isNewBoard
-      ? new Map()
-      : new Map(prev!.perTileEdges);
-
-    const changedKeys = new Set<string>();
-    if (isNewBoard) {
-      for (const { tile } of tileData) changedKeys.add(tile.key);
-    } else {
-      for (const [key, tile] of mutableTileMap) {
-        if (prev!.mutableTileMap.get(key)?.owner !== tile.owner) {
-          changedKeys.add(key);
-          for (const {
-            dir: [dq, dr],
-          } of ORDERED_EDGES) {
-            const [q, r] = key.split(",").map(Number);
-            changedKeys.add(tileKey(q + dq, r + dr));
-          }
-        }
-      }
-      for (const [key] of prev!.mutableTileMap) {
-        if (!mutableTileMap.has(key)) {
-          changedKeys.add(key);
-          for (const {
-            dir: [dq, dr],
-          } of ORDERED_EDGES) {
-            const [q, r] = key.split(",").map(Number);
-            changedKeys.add(tileKey(q + dq, r + dr));
-          }
-        }
-      }
-    }
-
-    const computeEdgesForTile = (
-      tile: HexTile,
-      cx: number,
-      cy: number,
-    ): BorderEdge[] => {
-      const edges: BorderEdge[] = [];
-      const liveOwner = ownerOf(tile.key, tile);
-      if (
-        tile.terrain === "mountain" ||
-        tile.terrain === "lake" ||
-        liveOwner === "neutral"
-      ) {
-        if ((tile.cityBuffer || tile.isCity) && liveOwner === "neutral") {
-          for (const {
-            dir: [dq, dr],
-            verts: [va, vb],
-          } of ORDERED_EDGES) {
-            const nk = tileKey(tile.q + dq, tile.r + dr);
-            const neighborBase = tileMap.get(nk);
-            const neighborLiveOwner = neighborBase
-              ? ownerOf(nk, neighborBase)
-              : null;
-            const neighborIsNeutralCity =
-              neighborBase !== undefined &&
-              neighborLiveOwner === "neutral" &&
-              (neighborBase.cityBuffer || neighborBase.isCity);
-            if (neighborIsNeutralCity) continue;
-            const ptA = hexCornerPoint(cx, cy, INNER_SIZE, va);
-            const ptB = hexCornerPoint(cx, cy, INNER_SIZE, vb);
-            edges.push({
-              x1: ptA.x,
-              y1: ptA.y,
-              x2: ptB.x,
-              y2: ptB.y,
-              color: CITY_BUFFER_BORDER,
-              width: BORDER_W,
-            });
-          }
-        }
-        return edges;
-      }
-      const color = TERRITORY_BORDERS[liveOwner as TerritoryOwner]!;
-      if (!color) return edges;
-      for (const {
-        dir: [dq, dr],
-        verts: [va, vb],
-      } of ORDERED_EDGES) {
-        const nk = tileKey(tile.q + dq, tile.r + dr);
-        const neighborBase = tileMap.get(nk);
-        if (!neighborBase) {
-          const ptA = hexCornerPoint(cx, cy, INNER_SIZE, va);
-          const ptB = hexCornerPoint(cx, cy, INNER_SIZE, vb);
-          edges.push({
-            x1: ptA.x,
-            y1: ptA.y,
-            x2: ptB.x,
-            y2: ptB.y,
-            color,
-            width: BORDER_W,
-          });
-          continue;
-        }
-        const neighborLiveOwner = ownerOf(nk, neighborBase);
-        const needsBorder =
-          neighborBase.terrain === "mountain" ||
-          neighborBase.terrain === "lake" ||
-          neighborLiveOwner === "neutral" ||
-          neighborLiveOwner !== liveOwner;
-        if (!needsBorder) continue;
-        const ptA = hexCornerPoint(cx, cy, INNER_SIZE, va);
-        const ptB = hexCornerPoint(cx, cy, INNER_SIZE, vb);
-        edges.push({
-          x1: ptA.x,
-          y1: ptA.y,
-          x2: ptB.x,
-          y2: ptB.y,
-          color,
-          width: BORDER_W,
-        });
-      }
-      return edges;
-    };
-
-    for (const key of changedKeys) {
-      const baseTile = tileMap.get(key);
-      const pos = tileDataMap.get(key);
-      if (!baseTile || !pos) {
-        perTileEdges.delete(key);
-        continue;
-      }
-      perTileEdges.set(key, computeEdgesForTile(baseTile, pos.cx, pos.cy));
-    }
-
-    const allEdges: BorderEdge[] = [];
-    for (const { tile } of tileData) {
-      const tileEdges = perTileEdges.get(tile.key);
-      if (tileEdges) for (const e of tileEdges) allEdges.push(e);
-    }
-
-    borderEdgesCache.current = {
-      mutableTileMap,
-      tileData,
-      INNER_SIZE,
-      perTileEdges,
-      result: allEdges,
-    };
-    return allEdges;
-  }, [tileData, tileMap, tileDataMap, mutableTileMap, INNER_SIZE]);
-
-  const outerEdgesCache = useRef<{
-    mutableTileMap: Map<string, HexTile>;
-    tileData: Array<{ tile: HexTile; cx: number; cy: number }>;
-    HEX_SIZE: number;
-    perTileEdges: Map<string, BorderEdge[]>;
-    result: BorderEdge[];
-  } | null>(null);
-
-  const outerTerritoryEdges = useMemo<BorderEdge[]>(() => {
-    const ownerOf = (key: string, base: HexTile) =>
-      mutableTileMap.get(key)?.owner ?? base.owner;
-
-    const prev = outerEdgesCache.current;
-    const isNewBoard =
-      !prev || prev.tileData !== tileData || prev.HEX_SIZE !== HEX_SIZE;
-
-    const perTileEdges: Map<string, BorderEdge[]> = isNewBoard
-      ? new Map()
-      : new Map(prev!.perTileEdges);
-
-    const changedKeys = new Set<string>();
-    if (isNewBoard) {
-      for (const { tile } of tileData) changedKeys.add(tile.key);
-    } else {
-      for (const [key, tile] of mutableTileMap) {
-        if (prev!.mutableTileMap.get(key)?.owner !== tile.owner) {
-          changedKeys.add(key);
-          for (const {
-            dir: [dq, dr],
-          } of ORDERED_EDGES) {
-            const [q, r] = key.split(",").map(Number);
-            changedKeys.add(tileKey(q + dq, r + dr));
-          }
-        }
-      }
-      for (const [key] of prev!.mutableTileMap) {
-        if (!mutableTileMap.has(key)) {
-          changedKeys.add(key);
-          for (const {
-            dir: [dq, dr],
-          } of ORDERED_EDGES) {
-            const [q, r] = key.split(",").map(Number);
-            changedKeys.add(tileKey(q + dq, r + dr));
-          }
-        }
-      }
-    }
-
-    const computeOuterEdgesForTile = (
-      tile: HexTile,
-      cx: number,
-      cy: number,
-    ): BorderEdge[] => {
-      const edges: BorderEdge[] = [];
-      const liveOwner = ownerOf(tile.key, tile);
-      const isImpassable =
-        tile.terrain === "mountain" || tile.terrain === "lake";
-      if (!isImpassable && liveOwner === "neutral") return edges;
-
-      for (const {
-        dir: [dq, dr],
-        verts: [va, vb],
-      } of ORDERED_EDGES) {
-        const nk = tileKey(tile.q + dq, tile.r + dr);
-        const neighborBase = tileMap.get(nk);
-
-        if (!neighborBase) {
-          const ptA = hexCornerPoint(cx, cy, HEX_SIZE, va);
-          const ptB = hexCornerPoint(cx, cy, HEX_SIZE, vb);
-          edges.push({
-            x1: ptA.x,
-            y1: ptA.y,
-            x2: ptB.x,
-            y2: ptB.y,
-            color: "#000000",
-            width: 2,
-          });
-          continue;
-        }
-
-        if (isImpassable) {
-          if (neighborBase.terrain === tile.terrain) continue;
-          const ptA = hexCornerPoint(cx, cy, HEX_SIZE, va);
-          const ptB = hexCornerPoint(cx, cy, HEX_SIZE, vb);
-          edges.push({
-            x1: ptA.x,
-            y1: ptA.y,
-            x2: ptB.x,
-            y2: ptB.y,
-            color: "#000000",
-            width: 2,
-          });
-        } else {
-          const neighborLiveOwner = ownerOf(nk, neighborBase);
-          const needsBorder =
-            neighborBase.terrain === "mountain" ||
-            neighborBase.terrain === "lake" ||
-            neighborLiveOwner === "neutral" ||
-            neighborLiveOwner !== liveOwner;
-          if (!needsBorder) continue;
-          const ptA = hexCornerPoint(cx, cy, HEX_SIZE, va);
-          const ptB = hexCornerPoint(cx, cy, HEX_SIZE, vb);
-          edges.push({
-            x1: ptA.x,
-            y1: ptA.y,
-            x2: ptB.x,
-            y2: ptB.y,
-            color: "#000000",
-            width: 2,
-          });
-        }
-      }
-      return edges;
-    };
-
-    for (const key of changedKeys) {
-      const baseTile = tileMap.get(key);
-      const pos = tileDataMap.get(key);
-      if (!baseTile || !pos) {
-        perTileEdges.delete(key);
-        continue;
-      }
-      perTileEdges.set(key, computeOuterEdgesForTile(baseTile, pos.cx, pos.cy));
-    }
-
-    const allEdges: BorderEdge[] = [];
-    for (const { tile } of tileData) {
-      const tileEdges = perTileEdges.get(tile.key);
-      if (tileEdges) for (const e of tileEdges) allEdges.push(e);
-    }
-
-    outerEdgesCache.current = {
-      mutableTileMap,
-      tileData,
-      HEX_SIZE,
-      perTileEdges,
-      result: allEdges,
-    };
-    return allEdges;
-  }, [tileData, tileMap, tileDataMap, mutableTileMap, HEX_SIZE]);
+  const outerTerritoryEdges = useMemo<BorderEdge[]>(
+    () => computeOuterTerritoryEdges(outerEdgesCache, tileData, tileMap, tileDataMap, mutableTileMap, HEX_SIZE),
+    [tileData, tileMap, tileDataMap, mutableTileMap, HEX_SIZE],
+  );
 
   const boardW = bounds.width;
   const boardH = bounds.height;
@@ -1351,34 +1071,10 @@ export default function GameScreen() {
     };
   }, [selectedTerritory, entities, cities]);
 
-  const selectionBorderEdges = useMemo<BorderEdge[]>(() => {
-    if (selectedTileKeys.size === 0) return [];
-    const edges: BorderEdge[] = [];
-    for (const key of selectedTileKeys) {
-      const pos = tileDataMap.get(key);
-      const tile = tileMap.get(key);
-      if (!pos || !tile) continue;
-      const { cx, cy } = pos;
-      for (const {
-        dir: [dq, dr],
-        verts: [va, vb],
-      } of ORDERED_EDGES) {
-        const nk = tileKey(tile.q + dq, tile.r + dr);
-        if (selectedTileKeys.has(nk)) continue;
-        const ptA = hexCornerPoint(cx, cy, INNER_SIZE, va);
-        const ptB = hexCornerPoint(cx, cy, INNER_SIZE, vb);
-        edges.push({
-          x1: ptA.x,
-          y1: ptA.y,
-          x2: ptB.x,
-          y2: ptB.y,
-          color: "#FFFFFF",
-          width: BORDER_W,
-        });
-      }
-    }
-    return edges;
-  }, [selectedTileKeys, tileDataMap, tileMap, INNER_SIZE]);
+  const selectionBorderEdges = useMemo<BorderEdge[]>(
+    () => computeSelectionBorderEdges(selectedTileKeys, tileDataMap, tileMap, INNER_SIZE, BORDER_W),
+    [selectedTileKeys, tileDataMap, tileMap, INNER_SIZE],
+  );
 
   const affordableTerritoryCache = useRef<{
     activeTileMap: Map<string, HexTile>;
