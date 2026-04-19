@@ -737,6 +737,7 @@ export default function GameScreen() {
   const [moveHistory, setMoveHistory] = useState<
     Array<{
       entities: Map<string, EntityType>;
+      cities: Set<string>;
       mutableTileMap: Map<string, HexTile>;
       territoryBalances: Map<string, number>;
       spentUnits: Set<string>;
@@ -757,6 +758,12 @@ export default function GameScreen() {
   const aiTurnRef = useRef<boolean>(false);
   const [graveyard, setGraveyard] = useState<Set<string>>(new Set());
   const [ruins, setRuins] = useState<Set<string>>(new Set());
+  // cities is completely separate from entities — a permanent Set of tile keys
+  // that have a city (pre-placed OR player/AI built). Units can freely occupy
+  // city tiles without touching this set. Cities are never removed once placed.
+  const [cities, setCities] = useState<Set<string>>(new Set());
+  const citiesRef = useRef<Set<string>>(new Set());
+  useEffect(() => { citiesRef.current = cities; }, [cities]);
   const [partialMoves, setPartialMoves] = useState<Map<string, number>>(
     new Map(),
   );
@@ -955,9 +962,11 @@ export default function GameScreen() {
       setLakeTransferAmount(6);
 
       const initialEntities = new Map<string, EntityType>();
-      // Cities are now tracked purely via tile.isCity (permanent flag on HexTile).
-      // No "city" entity is stored in the entities map — cities can never be
-      // removed, and units can occupy city tiles without erasing the city.
+      // Cities are tracked purely via the cities Set<string> (permanent tile keys).
+      // No "city" entity is stored in the entities map — units can occupy city
+      // tiles without erasing the city, and built cities work identically.
+      const initialCities = new Set(tiles.filter((t) => t.isCity).map((t) => t.key));
+      setCities(initialCities);
       const owners: TerritoryOwner[] = [
         "player",
         "ai1",
@@ -1054,6 +1063,7 @@ export default function GameScreen() {
       currentTurn?: number,
       initialGraveyard?: Set<string>,
       initialRuins?: Set<string>,
+      initialCities?: Set<string>,
     ) => {
       let workingTileMap = new Map(currentTileMap);
       let workingEntities = new Map(currentEntities);
@@ -1061,6 +1071,7 @@ export default function GameScreen() {
       let workingLiveOwnerMap = new Map<string, TerritoryOwner>();
       let workingGraveyard = new Set(initialGraveyard ?? graveyardRef.current);
       let workingRuins = new Set(initialRuins ?? ruinsRef.current);
+      let workingCities = new Set(initialCities ?? citiesRef.current);
       let workingSpentUnits = new Set<string>();
       let workingPartialMoves = new Map<string, number>(); // remaining move range for partially-moved units
       let workingFreeTowerUsed = new Map(freeTowerUsedTilesRef.current);
@@ -1247,7 +1258,7 @@ export default function GameScreen() {
             const remTerr = getContiguousTerritory(simMap, anyRemaining.key, enemyOwner);
             const remIncome = remTerr.reduce((s, t) => {
               if (simEntities.get(t.key) === "rebel") return s;
-              return s + (TERRAIN_INCOME[t.terrain] ?? 0) + (t.isCity || simEntities.get(t.key) === "city" ? CITY_BONUS : 0);
+              return s + (TERRAIN_INCOME[t.terrain] ?? 0) + (workingCities.has(t.key) ? CITY_BONUS : 0);
             }, 0);
             const remUpkeep = calcTerritoryUpkeep(remTerr, simEntities);
             return enemyBal + (remIncome - remUpkeep) < 0;
@@ -1505,50 +1516,9 @@ export default function GameScreen() {
               destTile.owner === aiOwner &&
               ENTITY_META[unitEntity].strength + ENTITY_META[destExisting].strength <= 3;
 
-            if (destExisting === "city") {
-              // City capture: city is permanent — stays on the tile.
-              // The capturing unit is consumed (deleted); city entity remains.
-              workingEntities.delete(fromKey);
-              // Spend & recalculate
-              workingSpentUnits = new Set(workingSpentUnits);
-              workingSpentUnits.add(toKey);
-              workingPartialMoves = new Map(workingPartialMoves);
-              workingPartialMoves.delete(fromKey);
-              workingPartialMoves.delete(toKey);
-              workingBalances = recalculateTerritoriesForCapture(
-                toKey, aiOwner, previousOwner, prevTileMapSnapshot, workingTileMap, workingBalances,
-              );
-              workingLiveOwnerMap = new Map(workingLiveOwnerMap);
-              workingLiveOwnerMap.set(toKey, aiOwner);
-              workingGraveyard = new Set(workingGraveyard);
-              workingGraveyard.delete(toKey);
-              applySingleHexPenalty(
-                prevTileMapSnapshot, workingTileMap, workingBalances, workingEntities,
-                workingGraveyard, workingRuins,
-              );
-              setRuins(new Set(workingRuins));
-              if (!isDeveloperModeRef.current) {
-                await new Promise<void>((resolve) => {
-                  triggerUnitAnimation(fromKey, toKey, unitEntity, aiOwner as TerritoryOwner, true, () => {
-                    setMutableTileMap(new Map(workingTileMap));
-                    setLiveOwnerMap(new Map(workingLiveOwnerMap));
-                    setEntities(new Map(workingEntities));
-                    setTerritoryBalances(new Map(workingBalances));
-                    setGraveyard(new Set(workingGraveyard));
-                    resolve();
-                  });
-                });
-              } else {
-                setMutableTileMap(new Map(workingTileMap));
-                setLiveOwnerMap(new Map(workingLiveOwnerMap));
-                setEntities(new Map(workingEntities));
-                setTerritoryBalances(new Map(workingBalances));
-                setGraveyard(new Set(workingGraveyard));
-              }
-              dtPublishState(toKey);
-              await dtAwait();
-              return true;
-            } else if (isAllyMerge) {
+            // NOTE: cities are tracked in workingCities (not entities), so
+            // destExisting will never be "city" — no special branch needed.
+            if (isAllyMerge) {
               const merged = mergedUnitType(
                 ENTITY_META[unitEntity].strength,
                 ENTITY_META[destExisting].strength,
@@ -1678,7 +1648,12 @@ export default function GameScreen() {
 
             if (!outside) {
               const wasRebel = workingEntities.get(target) === "rebel";
-              workingEntities.set(target, unitType);
+              if (unitType === "city") {
+                workingCities = new Set(workingCities);
+                workingCities.add(target);
+              } else {
+                workingEntities.set(target, unitType);
+              }
               const buyTerr = getContiguousTerritory(workingTileMap, startTile.key, aiOwner);
               const buyTid = getTerritoryId(buyTerr);
               if (buyTid) workingBalances.set(buyTid, (workingBalances.get(buyTid) ?? 0) - cost);
@@ -1693,8 +1668,13 @@ export default function GameScreen() {
               const targetTile = workingTileMap.get(target);
               if (targetTile && (targetTile.terrain === "mountain" || targetTile.terrain === "lake")) return false;
               if (targetTile) workingTileMap.set(target, { ...targetTile, owner: aiOwner });
-              workingEntities.delete(target);
-              workingEntities.set(target, unitType);
+              if (unitType === "city") {
+                workingCities = new Set(workingCities);
+                workingCities.add(target);
+              } else {
+                workingEntities.delete(target);
+                workingEntities.set(target, unitType);
+              }
               workingBalances = recalculateTerritoriesForCapture(
                 target, aiOwner, previousOwner, prevSnapshot, workingTileMap, workingBalances,
               );
@@ -1712,6 +1692,7 @@ export default function GameScreen() {
             }
 
             setEntities(new Map(workingEntities));
+            setCities(new Set(workingCities));
             setTerritoryBalances(new Map(workingBalances));
             setAiStateMap(new Map(aiStateMapRef.current));
             await dtAwait();
@@ -1736,13 +1717,19 @@ export default function GameScreen() {
           // Build a building inside the territory (no ownership change)
           const dtExecBuild = async (buildingType: EntityType, targetKey: string, cost: number): Promise<boolean> => {
             if (!aiTurnRef.current) return false;
-            workingEntities = new Map(workingEntities);
-            workingEntities.set(targetKey, buildingType);
             workingBalances = new Map(workingBalances);
+            if (buildingType === "city") {
+              workingCities = new Set(workingCities);
+              workingCities.add(targetKey);
+            } else {
+              workingEntities = new Map(workingEntities);
+              workingEntities.set(targetKey, buildingType);
+            }
             const buyTerr = getContiguousTerritory(workingTileMap, startTile.key, aiOwner);
             const buyTid = getTerritoryId(buyTerr);
             if (buyTid) workingBalances.set(buyTid, (workingBalances.get(buyTid) ?? 0) - cost);
             setEntities(new Map(workingEntities));
+            setCities(new Set(workingCities));
             setTerritoryBalances(new Map(workingBalances));
             await dtAwait();
             return true;
@@ -1775,7 +1762,7 @@ export default function GameScreen() {
 
             const currIncome = currTerr.reduce((s, t) => {
               if (workingEntities.get(t.key) === "rebel") return s;
-              return s + (TERRAIN_INCOME[t.terrain] ?? 0) + (t.isCity || workingEntities.get(t.key) === "city" ? CITY_BONUS : 0);
+              return s + (TERRAIN_INCOME[t.terrain] ?? 0) + (workingCities.has(t.key) ? CITY_BONUS : 0);
             }, 0);
             const currUpkeep = calcTerritoryUpkeep(currTerr, workingEntities);
 
@@ -2267,7 +2254,7 @@ export default function GameScreen() {
             // ══ PRIORITY D: Build a city ══
             if (!actionTaken) {
               const cityCost = ENTITY_META.city.cost;
-              const alreadyHasCity = currTerr.some((t) => t.isCity || workingEntities.get(t.key) === "city");
+              const alreadyHasCity = currTerr.some((t) => workingCities.has(t.key));
               if (canAfford(cityCost, 0) && currTerr.length >= 6 && !alreadyHasCity) {
                 const bldgZoC = new Set<string>();
                 for (const [bk, be] of workingEntities) {
@@ -2290,7 +2277,7 @@ export default function GameScreen() {
                 }
                 const [lEq, lEr] = largestEnemyKey ? largestEnemyKey.split(",").map(Number) : [0, 0];
                 const cityCands = currTerr.filter((t) => {
-                  if (t.terrain === "mountain" || t.terrain === "lake" || t.isCity || workingEntities.get(t.key) === "city") return false;
+                  if (t.terrain === "mountain" || t.terrain === "lake" || workingCities.has(t.key)) return false;
                   if (workingEntities.has(t.key)) return false;
                   return bldgZoC.has(t.key);
                 }).sort((a, b) => {
@@ -2448,7 +2435,7 @@ export default function GameScreen() {
 
               // E3: Conquer neutral tile (city first, then grass/forest, then desert)
               if (!actionTaken) {
-                const neutralPrio = (t: HexTile): number => (t.isCity || workingEntities.get(t.key) === "city") ? 3 : (t.terrain === "grass" || t.terrain === "forest") ? 2 : 1;
+                const neutralPrio = (t: HexTile): number => workingCities.has(t.key) ? 3 : (t.terrain === "grass" || t.terrain === "forest") ? 2 : 1;
                 const neutralMoves: { fk: string; tk: string; prio: number }[] = [];
                 for (const [uk, ue] of availUnits) {
                   const vm = getValidMoves(uk, aiOwner, workingEntities, workingTileMap, workingSpentUnits, workingPartialMoves.get(uk) ?? 3);
@@ -2570,7 +2557,7 @@ export default function GameScreen() {
                   if (actionTaken) break;
                   const cost = ENTITY_META.simple_unit.cost;
                   const upk = ENTITY_META.simple_unit.upkeep;
-                  const rtIncome = (TERRAIN_INCOME[rt.terrain] ?? 0) + (rt.isCity || workingEntities.get(rt.key) === "city" ? CITY_BONUS : 0);
+                  const rtIncome = (TERRAIN_INCOME[rt.terrain] ?? 0) + (workingCities.has(rt.key) ? CITY_BONUS : 0);
                   if (currBal >= cost && currIncome + rtIncome - (currUpkeep + upk) >= 0) {
                     actionTaken = await dtExecBuy("simple_unit", rt.key, cost, false);
                   }
@@ -2625,7 +2612,7 @@ export default function GameScreen() {
             return (
               s +
               TERRAIN_INCOME[t.terrain] +
-              (t.isCity || workingEntities.get(t.key) === "city" ? CITY_BONUS : 0)
+              (workingCities.has(t.key) ? CITY_BONUS : 0)
             );
           }, 0);
           const upkeep = calcTerritoryUpkeep(territory, workingEntities);
@@ -2968,8 +2955,8 @@ export default function GameScreen() {
   const canBuild = selectedTerritory.length > 0;
 
   const territoryHasCity = useMemo(
-    () => selectedTerritory.some((t) => t.isCity || entities.get(t.key) === "city"),
-    [selectedTerritory, entities],
+    () => selectedTerritory.some((t) => cities.has(t.key)),
+    [selectedTerritory, cities],
   );
 
   const econBreakdown = useMemo(() => {
@@ -2991,13 +2978,13 @@ export default function GameScreen() {
       else if (t.terrain === "lake") lakeCount++;
       const entityId = entities.get(t.key);
       const hasRebel = entityId === "rebel";
-      const isCity = t.isCity || entityId === "city";
+      const isCity = cities.has(t.key);
       if (isCity) cityCount++;
       if (!hasRebel) {
         if (t.terrain === "grass") activeGrassCount++;
         if (isCity) activeCityCount++;
       }
-      if (entityId && entityId !== "city" && entityId !== "rebel") {
+      if (entityId && entityId !== "rebel") {
         const meta = ENTITY_META[entityId];
         if (meta.upkeep > 0) {
           upkeepGroupMap.set(entityId, (upkeepGroupMap.get(entityId) ?? 0) + 1);
@@ -3062,7 +3049,7 @@ export default function GameScreen() {
       rebelTotalLoss,
       net,
     };
-  }, [selectedTerritory, entities]);
+  }, [selectedTerritory, entities, cities]);
 
   const selectionBorderEdges = useMemo<BorderEdge[]>(() => {
     if (selectedTileKeys.size === 0) return [];
@@ -3219,7 +3206,7 @@ export default function GameScreen() {
           return (
             s +
             TERRAIN_INCOME[t.terrain] +
-            (t.isCity || entities.get(t.key) === "city" ? CITY_BONUS : 0)
+            (cities.has(t.key) ? CITY_BONUS : 0)
           );
         }, 0);
         const upkeep = calcTerritoryUpkeep(territory, entities);
@@ -3287,6 +3274,7 @@ export default function GameScreen() {
       ...prev,
       {
         entities: new Map(entities),
+        cities: new Set(cities),
         mutableTileMap: new Map(mutableTileMap),
         territoryBalances: new Map(territoryBalances),
         spentUnits: new Set(spentUnits),
@@ -3302,6 +3290,7 @@ export default function GameScreen() {
     ]);
   }, [
     entities,
+    cities,
     mutableTileMap,
     territoryBalances,
     spentUnits,
@@ -3473,11 +3462,9 @@ export default function GameScreen() {
           );
           newEntities.delete(selectedEntityKey);
           newEntities.set(key, merged);
-        } else if (existingUnit === "city") {
-          // City capture: city is permanent — it stays on the tile.
-          // The capturing unit is consumed (it "enters" the city).
-          newEntities.delete(selectedEntityKey);
         } else {
+          // NOTE: cities are in the cities Set (not entities), so
+          // existingUnit will never be "city" — unit moves freely onto city tiles.
           newEntities.delete(key);
           newEntities.delete(selectedEntityKey);
           newEntities.set(key, movingUnit);
@@ -3629,10 +3616,9 @@ export default function GameScreen() {
           ENTITY_META[armedEntityId].strength >=
             ENTITY_META[existingOnTile as EntityType].strength;
         const alreadyOccupied =
-          !!existingOnTile &&
-          !canMerge &&
-          !canOverwriteRebel &&
-          !canOverwriteBuilding;
+          (!!existingOnTile && !canMerge && !canOverwriteRebel && !canOverwriteBuilding) ||
+          // prevent placing a second city on an existing city tile
+          (armedEntityId === "city" && cities.has(key));
         if (!alreadyOccupied && selectedTerritoryId) {
           const meta = ENTITY_META[armedEntityId];
           const balance = territoryBalances.get(selectedTerritoryId) ?? 0;
@@ -3667,6 +3653,8 @@ export default function GameScreen() {
               } else if (mergedRemaining < 3) {
                 newPartialMoves.set(key, mergedRemaining);
               }
+            } else if (armedEntityId === "city") {
+              setCities((prev) => new Set([...prev, key]));
             } else {
               newEntities.set(key, armedEntityId);
               if (canOverwriteRebel) {
@@ -3716,8 +3704,12 @@ export default function GameScreen() {
           if (targetTile)
             newTileMap.set(key, { ...targetTile, owner: "player" });
           const newEntities = new Map(entities);
-          newEntities.delete(key);
-          newEntities.set(key, armedEntityId);
+          if (armedEntityId === "city") {
+            setCities((prev) => new Set([...prev, key]));
+          } else {
+            newEntities.delete(key);
+            newEntities.set(key, armedEntityId);
+          }
           const newBalances = recalculateTerritoriesForCapture(
             key,
             "player",
@@ -3846,6 +3838,7 @@ export default function GameScreen() {
       if (prev.length === 0) return prev;
       const snapshot = prev[prev.length - 1];
       setEntities(snapshot.entities);
+      setCities(snapshot.cities ?? new Set());
       setMutableTileMap(snapshot.mutableTileMap);
       setTerritoryBalances(snapshot.territoryBalances);
       setSpentUnits(snapshot.spentUnits);
@@ -3889,7 +3882,7 @@ export default function GameScreen() {
           return (
             s +
             TERRAIN_INCOME[t.terrain] +
-            (t.isCity || nextEntities.get(t.key) === "city" ? CITY_BONUS : 0)
+            (cities.has(t.key) ? CITY_BONUS : 0)
           );
         }, 0);
         const upkeep = calcTerritoryUpkeep(territory, nextEntities);
@@ -3946,7 +3939,7 @@ export default function GameScreen() {
             return (
               s +
               TERRAIN_INCOME[t.terrain] +
-              (t.isCity || nextEntities.get(t.key) === "city" ? CITY_BONUS : 0)
+              (cities.has(t.key) ? CITY_BONUS : 0)
             );
           }, 0);
           const incomeModifier =
@@ -4091,6 +4084,7 @@ export default function GameScreen() {
         turn,
         nextGraveyard,
         nextRuins,
+        cities,
       );
     }
   }, [
@@ -4106,6 +4100,7 @@ export default function GameScreen() {
     graveyard,
     ruins,
     turn,
+    cities,
     checkWinLoss,
     runAiTurn,
   ]);
@@ -4324,7 +4319,7 @@ export default function GameScreen() {
               />
               {tileData.map(({ tile, cx, cy }) => {
                 const liveTile = activeTileMap.get(tile.key) ?? tile;
-                const isCityZone = tile.cityBuffer || tile.isCity;
+                const isCityZone = tile.cityBuffer || cities.has(tile.key);
                 const fill =
                   tile.terrain === "lake"
                     ? "#5BAFD6"
@@ -4382,7 +4377,7 @@ export default function GameScreen() {
                 })}
 
               {tileData
-                .filter(({ tile }) => tile.isCity || entities.get(tile.key) === "city")
+                .filter(({ tile }) => cities.has(tile.key))
                 .map(({ tile, cx, cy }) => {
                   const liveTile = activeTileMap.get(tile.key) ?? tile;
                   const cityBorderColor =
