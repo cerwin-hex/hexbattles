@@ -1,5 +1,6 @@
 import React from "react";
-import { Animated, ScrollView, StyleProp, Text, TouchableOpacity, ViewStyle } from "react-native";
+import { ScrollView, StyleProp, Text, TouchableOpacity, ViewStyle } from "react-native";
+import Animated from "react-native-reanimated";
 import { nextDefenseUpkeep } from "@/utils/hexGrid";
 import type { HexTile, TerritoryOwner, EntityType } from "@/types";
 import {
