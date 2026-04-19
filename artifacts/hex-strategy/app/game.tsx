@@ -568,6 +568,149 @@ const MovementHighlightLayer = React.memo(
   areMovementHighlightLayerEqual,
 );
 
+interface CityOverlayLayerProps {
+  cities: Set<string>;
+  activeTileMap: Map<string, HexTile>;
+  tileDataMap: Map<string, { cx: number; cy: number }>;
+  HEX_SIZE: number;
+}
+
+function CityOverlayLayerInner({
+  cities,
+  activeTileMap,
+  tileDataMap,
+  HEX_SIZE,
+}: CityOverlayLayerProps) {
+  return (
+    <G>
+      {Array.from(cities).map((key) => {
+        const pos = tileDataMap.get(key);
+        if (!pos) return null;
+        const { cx, cy } = pos;
+        const liveTile = activeTileMap.get(key);
+        const cityBorderColor =
+          TERRITORY_BORDERS[liveTile?.owner ?? "neutral"] ?? "#888888";
+        const cr = HEX_SIZE * 0.46;
+        return (
+          <React.Fragment key={`city-${key}`}>
+            <Rect
+              x={cx - cr}
+              y={cy - cr}
+              width={cr * 2}
+              height={cr * 2}
+              rx={4}
+              fill="rgba(0,0,0,0.25)"
+              stroke={cityBorderColor}
+              strokeWidth={3.2}
+            />
+            <SvgText
+              x={cx}
+              y={cy + HEX_SIZE * 0.28}
+              textAnchor="middle"
+              fontSize={HEX_SIZE * 0.72}
+              fill="#fff"
+              opacity={0.9}
+            >
+              {ENTITY_META.city.icon}
+            </SvgText>
+          </React.Fragment>
+        );
+      })}
+    </G>
+  );
+}
+
+// Reference equality is safe here because game state always replaces Set/Map
+// instances (never mutates in place), so a changed reference means changed data.
+function areCityOverlayLayerEqual(
+  prev: CityOverlayLayerProps,
+  next: CityOverlayLayerProps,
+): boolean {
+  return (
+    prev.cities === next.cities &&
+    prev.activeTileMap === next.activeTileMap &&
+    prev.tileDataMap === next.tileDataMap &&
+    prev.HEX_SIZE === next.HEX_SIZE
+  );
+}
+
+const CityOverlayLayer = React.memo(CityOverlayLayerInner, areCityOverlayLayerEqual);
+
+interface GraveyardLayerProps {
+  graveyard: Set<string>;
+  ruins: Set<string>;
+  entities: Map<string, EntityType>;
+  tileDataMap: Map<string, { cx: number; cy: number }>;
+  HEX_SIZE: number;
+}
+
+function GraveyardLayerInner({
+  graveyard,
+  ruins,
+  entities,
+  tileDataMap,
+  HEX_SIZE,
+}: GraveyardLayerProps) {
+  const fs = HEX_SIZE * 0.7;
+  return (
+    <G>
+      {graveyard.size > 0 &&
+        Array.from(graveyard).map((key) => {
+          const pos = tileDataMap.get(key);
+          if (!pos) return null;
+          if (entities.has(key)) return null;
+          return (
+            <SvgText
+              key={`grave-${key}`}
+              x={pos.cx}
+              y={pos.cy + fs * 0.38}
+              textAnchor="middle"
+              fontSize={fs}
+              opacity={0.85}
+            >
+              ☠️
+            </SvgText>
+          );
+        })}
+      {ruins.size > 0 &&
+        Array.from(ruins).map((key) => {
+          const pos = tileDataMap.get(key);
+          if (!pos) return null;
+          if (entities.has(key)) return null;
+          return (
+            <SvgText
+              key={`ruin-${key}`}
+              x={pos.cx}
+              y={pos.cy + fs * 0.38}
+              textAnchor="middle"
+              fontSize={fs}
+              opacity={0.85}
+            >
+              🏚️
+            </SvgText>
+          );
+        })}
+    </G>
+  );
+}
+
+// Reference equality is safe here because game state always replaces Set/Map
+// instances (never mutates in place), so a changed reference means changed data.
+function areGraveyardLayerEqual(
+  prev: GraveyardLayerProps,
+  next: GraveyardLayerProps,
+): boolean {
+  return (
+    prev.graveyard === next.graveyard &&
+    prev.ruins === next.ruins &&
+    prev.entities === next.entities &&
+    prev.tileDataMap === next.tileDataMap &&
+    prev.HEX_SIZE === next.HEX_SIZE
+  );
+}
+
+const GraveyardLayer = React.memo(GraveyardLayerInner, areGraveyardLayerEqual);
+
 export default function GameScreen() {
 
   const params = useLocalSearchParams<{
@@ -3121,38 +3264,12 @@ export default function GameScreen() {
                   );
                 })}
 
-              {tileData
-                .filter(({ tile }) => cities.has(tile.key))
-                .map(({ tile, cx, cy }) => {
-                  const liveTile = activeTileMap.get(tile.key) ?? tile;
-                  const cityBorderColor =
-                    TERRITORY_BORDERS[liveTile.owner] ?? "#888888";
-                  const cr = HEX_SIZE * 0.46;
-                  return (
-                    <React.Fragment key={`city-${tile.key}`}>
-                      <Rect
-                        x={cx - cr}
-                        y={cy - cr}
-                        width={cr * 2}
-                        height={cr * 2}
-                        rx={4}
-                        fill="rgba(0,0,0,0.25)"
-                        stroke={cityBorderColor}
-                        strokeWidth={3.2}
-                      />
-                      <SvgText
-                        x={cx}
-                        y={cy + HEX_SIZE * 0.28}
-                        textAnchor="middle"
-                        fontSize={HEX_SIZE * 0.72}
-                        fill="#fff"
-                        opacity={0.9}
-                      >
-                        {ENTITY_META.city.icon}
-                      </SvgText>
-                    </React.Fragment>
-                  );
-                })}
+              <CityOverlayLayer
+                cities={cities}
+                activeTileMap={activeTileMap}
+                tileDataMap={tileDataMap}
+                HEX_SIZE={HEX_SIZE}
+              />
 
               <BorderEdgeLayer
                 outerEdges={outerTerritoryEdges}
@@ -3161,45 +3278,13 @@ export default function GameScreen() {
                 selectionEdges={selectionBorderEdges}
               />
 
-              {graveyard.size > 0 &&
-                Array.from(graveyard).map((key) => {
-                  const pos = tileDataMap.get(key);
-                  if (!pos) return null;
-                  if (entities.has(key)) return null;
-                  const fs = HEX_SIZE * 0.7;
-                  return (
-                    <SvgText
-                      key={`grave-${key}`}
-                      x={pos.cx}
-                      y={pos.cy + fs * 0.38}
-                      textAnchor="middle"
-                      fontSize={fs}
-                      opacity={0.85}
-                    >
-                      ☠️
-                    </SvgText>
-                  );
-                })}
-
-              {ruins.size > 0 &&
-                Array.from(ruins).map((key) => {
-                  const pos = tileDataMap.get(key);
-                  if (!pos) return null;
-                  if (entities.has(key)) return null;
-                  const fs = HEX_SIZE * 0.7;
-                  return (
-                    <SvgText
-                      key={`ruin-${key}`}
-                      x={pos.cx}
-                      y={pos.cy + fs * 0.38}
-                      textAnchor="middle"
-                      fontSize={fs}
-                      opacity={0.85}
-                    >
-                      🏚️
-                    </SvgText>
-                  );
-                })}
+              <GraveyardLayer
+                graveyard={graveyard}
+                ruins={ruins}
+                entities={entities}
+                tileDataMap={tileDataMap}
+                HEX_SIZE={HEX_SIZE}
+              />
 
               <MovementHighlightTapTargets
                 validMoveTiles={validMoveTiles}
