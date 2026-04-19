@@ -1,0 +1,440 @@
+import React from "react";
+import {
+  Modal,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { ENTITY_META, CITY_BONUS } from "@/utils/hexGrid";
+import type { EntityType } from "@/utils/hexGrid";
+import styles from "@/app/gameStyles";
+
+export interface EconBreakdown {
+  grassCount: number;
+  forestCount: number;
+  desertCount: number;
+  cityCount: number;
+  grassIncome: number;
+  forestIncome: number;
+  desertIncome: number;
+  cityIncome: number;
+  upkeepGroups: {
+    icon: string;
+    name: string;
+    count: number;
+    upkeepPerUnit: number | null;
+    mostExpensiveCost: number | null;
+    total: number;
+  }[];
+  rebelCount: number;
+  rebelTotalLoss: number;
+  net: number;
+}
+
+interface GameModalsProps {
+  confirmLeave: boolean;
+  setConfirmLeave: (v: boolean) => void;
+  onLeaveConfirm: () => void;
+
+  pendingLakeMove: { minAmount: number; maxAmount: number } | null;
+  setPendingLakeMove: (v: null) => void;
+  lakeTransferAmount: number;
+  setLakeTransferAmount: (updater: (prev: number) => number) => void;
+  sliderTrackWidth: number;
+  setSliderTrackWidth: (w: number) => void;
+  sliderTrackPageX: React.RefObject<number>;
+  commitPendingLakeMove: (amount: number) => void;
+
+  showEconModal: boolean;
+  setShowEconModal: (v: boolean) => void;
+  econBreakdown: EconBreakdown | null;
+  selectedTerritoryBalance: number;
+
+  showDominancePopup: boolean;
+  setShowDominancePopup: (v: boolean) => void;
+  setGameResult: (v: "victory" | "defeat" | null) => void;
+
+  gameResult: "victory" | "defeat" | null;
+  onReturnToMenu: () => void;
+}
+
+export default function GameModals({
+  confirmLeave,
+  setConfirmLeave,
+  onLeaveConfirm,
+  pendingLakeMove,
+  setPendingLakeMove,
+  lakeTransferAmount,
+  setLakeTransferAmount,
+  sliderTrackWidth,
+  setSliderTrackWidth,
+  sliderTrackPageX,
+  commitPendingLakeMove,
+  showEconModal,
+  setShowEconModal,
+  econBreakdown,
+  selectedTerritoryBalance,
+  showDominancePopup,
+  setShowDominancePopup,
+  setGameResult,
+  gameResult,
+  onReturnToMenu,
+}: GameModalsProps) {
+  return (
+    <>
+      <Modal
+        visible={confirmLeave}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConfirmLeave(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Leave Game?</Text>
+            <Text style={styles.modalBody}>
+              Return to the main menu? Your progress will be lost.
+            </Text>
+            <View style={styles.modalRow}>
+              <TouchableOpacity
+                style={styles.modalStayBtn}
+                onPress={() => setConfirmLeave(false)}
+              >
+                <Text style={styles.modalStayText}>Stay</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalLeaveBtn}
+                onPress={() => {
+                  setConfirmLeave(false);
+                  onLeaveConfirm();
+                }}
+              >
+                <Text style={styles.modalLeaveText}>Leave</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {pendingLakeMove && (
+        <Modal
+          visible={true}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setPendingLakeMove(null)}
+        >
+          <View style={styles.lakeModalOverlay}>
+            <View style={styles.lakeModalBox}>
+              <Text style={styles.lakeModalTitle}>⚓ Naval Supply</Text>
+              <Text style={styles.lakeModalSubtitle}>
+                How many credits to provision this unit?{"\n"}
+                (min {pendingLakeMove.minAmount}, max{" "}
+                {pendingLakeMove.maxAmount})
+              </Text>
+
+              <Text style={styles.lakeModalAmount}>{lakeTransferAmount}</Text>
+
+              <View style={styles.lakeSliderRow}>
+                <TouchableOpacity
+                  style={styles.lakeStepBtn}
+                  onPress={() =>
+                    setLakeTransferAmount((prev) =>
+                      Math.max(pendingLakeMove.minAmount, prev - 1),
+                    )
+                  }
+                >
+                  <Text style={styles.lakeStepText}>−</Text>
+                </TouchableOpacity>
+
+                <View
+                  style={styles.lakeTrackHitZone}
+                  onLayout={(e) => {
+                    setSliderTrackWidth(e.nativeEvent.layout.width);
+                  }}
+                  onStartShouldSetResponder={() => true}
+                  onMoveShouldSetResponder={() => true}
+                  onMoveShouldSetResponderCapture={() => true}
+                  onResponderGrant={(e) => {
+                    sliderTrackPageX.current = e.nativeEvent.pageX - e.nativeEvent.locationX;
+                    const x = Math.max(0, Math.min(sliderTrackWidth, e.nativeEvent.pageX - sliderTrackPageX.current));
+                    const range = pendingLakeMove.maxAmount - pendingLakeMove.minAmount;
+                    if (range <= 0) return;
+                    setLakeTransferAmount(
+                      () => pendingLakeMove.minAmount + Math.round((x / sliderTrackWidth) * range),
+                    );
+                  }}
+                  onResponderMove={(e) => {
+                    const x = Math.max(0, Math.min(sliderTrackWidth, e.nativeEvent.pageX - sliderTrackPageX.current));
+                    const range = pendingLakeMove.maxAmount - pendingLakeMove.minAmount;
+                    if (range <= 0) return;
+                    setLakeTransferAmount(
+                      () => pendingLakeMove.minAmount + Math.round((x / sliderTrackWidth) * range),
+                    );
+                  }}
+                >
+                  <View style={styles.lakeTrack} pointerEvents="none">
+                    <View
+                      style={[
+                        styles.lakeTrackFill,
+                        {
+                          width: `${pendingLakeMove.maxAmount <= pendingLakeMove.minAmount ? 100 : Math.round(((lakeTransferAmount - pendingLakeMove.minAmount) / (pendingLakeMove.maxAmount - pendingLakeMove.minAmount)) * 100)}%`,
+                        },
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.lakeThumb,
+                        {
+                          left:
+                            pendingLakeMove.maxAmount <= pendingLakeMove.minAmount
+                              ? sliderTrackWidth - 12
+                              : Math.round(
+                                  ((lakeTransferAmount - pendingLakeMove.minAmount) /
+                                    (pendingLakeMove.maxAmount - pendingLakeMove.minAmount)) *
+                                    (sliderTrackWidth - 24),
+                                ),
+                        },
+                      ]}
+                    />
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.lakeStepBtn}
+                  onPress={() =>
+                    setLakeTransferAmount((prev) =>
+                      Math.min(pendingLakeMove.maxAmount, prev + 1),
+                    )
+                  }
+                >
+                  <Text style={styles.lakeStepText}>+</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.lakeModalButtons}>
+                <TouchableOpacity
+                  style={styles.lakeCancelBtn}
+                  onPress={() => setPendingLakeMove(null)}
+                >
+                  <Text style={styles.lakeCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.lakeConfirmBtn}
+                  onPress={() => commitPendingLakeMove(lakeTransferAmount)}
+                >
+                  <Text style={styles.lakeConfirmText}>Dispatch ⚓</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      <Modal
+        visible={showEconModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowEconModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowEconModal(false)}
+        >
+          <View style={styles.econCard} onStartShouldSetResponder={() => true}>
+            <Text style={styles.econTitle}>Economy Breakdown</Text>
+            <View style={styles.econSection}>
+              <Text style={styles.econSectionLabel}>INCOME / TURN</Text>
+              {econBreakdown && econBreakdown.grassCount > 0 && (
+                <View style={styles.econRow}>
+                  <Text style={styles.econRowLabel}>
+                    🌿 Grass ×{econBreakdown.grassCount}{" "}
+                    <Text style={styles.econPer}>(+2 each)</Text>
+                  </Text>
+                  <Text style={styles.econRowValue}>
+                    +{econBreakdown.grassIncome}
+                  </Text>
+                </View>
+              )}
+              {econBreakdown && econBreakdown.forestCount > 0 && (
+                <View style={styles.econRow}>
+                  <Text style={styles.econRowLabel}>
+                    🌲 Forest ×{econBreakdown.forestCount}{" "}
+                    <Text style={styles.econPer}>(+2 each)</Text>
+                  </Text>
+                  <Text style={styles.econRowValue}>
+                    +{econBreakdown.forestIncome}
+                  </Text>
+                </View>
+              )}
+              {econBreakdown && econBreakdown.desertCount > 0 && (
+                <View style={styles.econRow}>
+                  <Text style={styles.econRowLabel}>
+                    🏜️ Desert ×{econBreakdown.desertCount}{" "}
+                    <Text style={styles.econPer}>(+1 each)</Text>
+                  </Text>
+                  <Text style={styles.econRowValue}>
+                    +{econBreakdown.desertIncome}
+                  </Text>
+                </View>
+              )}
+              {econBreakdown && econBreakdown.cityCount > 0 && (
+                <View style={styles.econRow}>
+                  <Text style={styles.econRowLabel}>
+                    {ENTITY_META.city.icon} Cities ×{econBreakdown.cityCount}{" "}
+                    <Text style={styles.econPer}>(+{CITY_BONUS} each)</Text>
+                  </Text>
+                  <Text style={styles.econRowValue}>
+                    +{econBreakdown.cityIncome}
+                  </Text>
+                </View>
+              )}
+            </View>
+            {econBreakdown &&
+              (econBreakdown.upkeepGroups.length > 0 ||
+                econBreakdown.rebelTotalLoss > 0) && (
+                <View style={styles.econSection}>
+                  <Text style={styles.econSectionLabel}>UPKEEP / TURN</Text>
+                  {econBreakdown.upkeepGroups.map((g, i) => (
+                    <View key={i} style={styles.econRow}>
+                      <Text style={styles.econRowLabel}>
+                        {g.icon} {g.name} ×{g.count}{" "}
+                        {g.upkeepPerUnit !== null && (
+                          <Text style={styles.econPer}>
+                            (−{g.upkeepPerUnit} each)
+                          </Text>
+                        )}
+                      </Text>
+                      <Text style={[styles.econRowValue, { color: "#E07060" }]}>
+                        −{g.total}
+                      </Text>
+                    </View>
+                  ))}
+                  {econBreakdown.rebelTotalLoss > 0 && (
+                    <View style={styles.econRow}>
+                      <Text style={styles.econRowLabel}>
+                        ✊ Rebels ×{econBreakdown.rebelCount}
+                      </Text>
+                      <Text style={[styles.econRowValue, { color: "#E07060" }]}>
+                        −{econBreakdown.rebelTotalLoss}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+            <View style={styles.econDivider} />
+            <View style={styles.econRow}>
+              <Text style={styles.econNetLabel}>Net per turn</Text>
+              <Text
+                style={[
+                  styles.econNetValue,
+                  {
+                    color:
+                      econBreakdown && econBreakdown.net >= 0
+                        ? "#7EC87E"
+                        : "#E07060",
+                  },
+                ]}
+              >
+                {econBreakdown && econBreakdown.net >= 0 ? "+" : ""}
+                {econBreakdown?.net ?? 0}
+              </Text>
+            </View>
+            <View style={styles.econRow}>
+              <Text style={styles.econNetLabel}>Current balance</Text>
+              <Text style={styles.econNetValue}>
+                ⚜️ {selectedTerritoryBalance}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.econCloseBtn}
+              onPress={() => setShowEconModal(false)}
+            >
+              <Text style={styles.econCloseBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={showDominancePopup} transparent animationType="fade">
+        <View style={styles.gameResultOverlay}>
+          <View style={styles.gameResultCard}>
+            <Text style={styles.gameResultEmoji}>⚔️</Text>
+            <Text
+              style={[styles.gameResultTitle, styles.gameResultVictoryTitle]}
+            >
+              Dominance!
+            </Text>
+            <Text style={styles.gameResultBody}>
+              You control 70% of the realm. Claim victory now, or continue
+              your conquest and take it all?
+            </Text>
+            <TouchableOpacity
+              style={[styles.gameResultBtn, styles.dominanceContinueBtn]}
+              onPress={() => setShowDominancePopup(false)}
+            >
+              <Text
+                style={[
+                  styles.gameResultBtnText,
+                  styles.dominanceContinueBtnText,
+                ]}
+              >
+                Keep Playing
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.gameResultBtn, styles.gameResultMenuBtn]}
+              onPress={() => {
+                setShowDominancePopup(false);
+                setGameResult("victory");
+              }}
+            >
+              <Text
+                style={[
+                  styles.gameResultBtnText,
+                  styles.gameResultMenuBtnText,
+                ]}
+              >
+                Claim Victory
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={gameResult !== null} transparent animationType="fade">
+        <View style={styles.gameResultOverlay}>
+          <View style={styles.gameResultCard}>
+            <Text style={styles.gameResultEmoji}>
+              {gameResult === "victory" ? "🏆" : "💀"}
+            </Text>
+            <Text
+              style={[
+                styles.gameResultTitle,
+                gameResult === "victory"
+                  ? styles.gameResultVictoryTitle
+                  : styles.gameResultDefeatTitle,
+              ]}
+            >
+              {gameResult === "victory" ? "Victory!" : "Game Over"}
+            </Text>
+            <Text style={styles.gameResultBody}>
+              {gameResult === "victory"
+                ? "All opponents have been eliminated. The realm is yours!"
+                : "Your territory has been conquered. The campaign is lost."}
+            </Text>
+            <TouchableOpacity
+              style={[styles.gameResultBtn, styles.gameResultMenuBtn]}
+              onPress={onReturnToMenu}
+            >
+              <Text
+                style={[styles.gameResultBtnText, styles.gameResultMenuBtnText]}
+              >
+                Return to Main Menu
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </>
+  );
+}

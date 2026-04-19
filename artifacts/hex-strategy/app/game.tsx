@@ -48,10 +48,7 @@ const WATER_IMG = require("../assets/images/water.webp");
 
 import {
   CITY_BUFFER_BORDER,
-  CITY_NEUTRAL_FILL,
-  TERRAIN_FILLS,
   TERRITORY_BORDERS,
-  TERRITORY_FILLS,
 } from "@/constants/colors";
 import {
   CITY_BONUS,
@@ -81,151 +78,41 @@ import {
   tileKey,
 } from "@/utils/hexGrid";
 
-const BTN_H = 52;
-const BOTTOM_BAR_H = BTN_H + 20;
-const RIBBON_H = 130;
-const ENTITY_PANEL_H = 72;
-const EXTRA_PAN = 150;
+import type { BorderEdge, AiStepSnapshot, Difficulty, AiState } from "@/types";
+import {
+  BTN_H,
+  BOTTOM_BAR_H,
+  RIBBON_H,
+  ENTITY_PANEL_H,
+  EXTRA_PAN,
+  ORDERED_EDGES,
+} from "@/constants/gameConstants";
+import {
+  calcTerritoryUpkeep,
+  applySingleHexPenalty,
+  initTerritoryBalances,
+  mergedUnitType,
+} from "@/logic/gameLogic";
+import {
+  dtCountClusters as _dtCountClusters,
+  dtSplitScore as _dtSplitScore,
+  dtCaptureNegatesIncome as _dtCaptureNegatesIncome,
+  dtCaptureCreatesOneHex as _dtCaptureCreatesOneHex,
+  dtBfsStep as _dtBfsStep,
+  dtLakeHasLandTarget as _dtLakeHasLandTarget,
+  dtLakeHasSplitOpportunity as _dtLakeHasSplitOpportunity,
+  dtDefenseMinDist as _dtDefenseMinDist,
+  dtSpacedPlacements as _dtSpacedPlacements,
+  dtFindMergeMove as _dtFindMergeMove,
+} from "@/logic/aiHelpers";
+import type { AiContext } from "@/logic/aiHelpers";
+import styles from "@/app/gameStyles";
+import PurchaseRibbon from "@/components/PurchaseRibbon";
+import EntityPanel from "@/components/EntityPanel";
+import GameModals from "@/components/GameModals";
+import type { EconBreakdown } from "@/components/GameModals";
+import { HexCell } from "@/components/HexCell";
 
-const ORDERED_EDGES: ReadonlyArray<{
-  dir: [number, number];
-  verts: [number, number];
-}> = [
-  { dir: [1, 0], verts: [0, 1] },
-  { dir: [0, 1], verts: [1, 2] },
-  { dir: [-1, 1], verts: [2, 3] },
-  { dir: [-1, 0], verts: [3, 4] },
-  { dir: [0, -1], verts: [4, 5] },
-  { dir: [1, -1], verts: [5, 0] },
-];
-
-const PURCHASABLES = (Object.keys(ENTITY_META) as EntityType[])
-  .filter((id) => id !== "rebel")
-  .map((id) => ({
-    id,
-    ...ENTITY_META[id],
-  }));
-const UNIT_PURCHASABLES = PURCHASABLES.filter((p) => p.isUnit);
-const BUILDING_PURCHASABLES = PURCHASABLES.filter((p) => !p.isUnit);
-
-function calcTerritoryUpkeep(
-  territory: HexTile[],
-  ents: Map<string, EntityType>,
-): number {
-  let towers = 0, castles = 0, unitUpkeep = 0;
-  for (const t of territory) {
-    const e = ents.get(t.key);
-    if (!e) continue;
-    if (e === "tower") towers++;
-    else if (e === "castle") castles++;
-    else unitUpkeep += ENTITY_META[e].upkeep;
-  }
-  return unitUpkeep + calcDefenseUpkeep("tower", towers) + calcDefenseUpkeep("castle", castles);
-}
-
-// Wipe out newly-isolated single-hex territories: zero balance, kill units→graveyard, remove buildings.
-// Only fires for tiles that were NOT already lone-hex before the current move (prevTileMap).
-function applySingleHexPenalty(
-  prevTileMap: Map<string, HexTile>,
-  tileMap: Map<string, HexTile>,
-  balances: Map<string, number>,
-  entities: Map<string, EntityType>,
-  graveyard: Set<string>,
-  ruins: Set<string>,
-  exemptKey?: string,
-): void {
-  const allOwners = new Set<TerritoryOwner>([
-    "player",
-    "ai1",
-    "ai2",
-    "ai3",
-    "ai4",
-    "ai5",
-  ]);
-  const visited = new Set<string>();
-  for (const tile of tileMap.values()) {
-    if (!allOwners.has(tile.owner as TerritoryOwner) || visited.has(tile.key))
-      continue;
-    if (tile.terrain === "mountain" || tile.terrain === "lake") continue;
-    const territory = getContiguousTerritory(
-      tileMap,
-      tile.key,
-      tile.owner as TerritoryOwner,
-    );
-    for (const t of territory) visited.add(t.key);
-    if (territory.length !== 1) continue;
-    const singleKey = territory[0].key;
-    // Never penalise a tile that was just freshly captured/landed on — it is
-    // expansion (e.g. naval landing), not an enemy-induced isolation.
-    if (exemptKey && singleKey === exemptKey) continue;
-    // Skip if this tile was already isolated before this move — it is not newly cut off
-    const prevOwner = prevTileMap.get(singleKey)?.owner;
-    if (prevOwner === tile.owner) {
-      const prevTerritory = getContiguousTerritory(
-        prevTileMap,
-        singleKey,
-        tile.owner as TerritoryOwner,
-      );
-      if (prevTerritory.length === 1) continue;
-    }
-    const id = getTerritoryId(territory);
-    if (id) balances.set(id, 0);
-    const entity = entities.get(singleKey);
-    if (entity) {
-      entities.delete(singleKey);
-      if (ENTITY_META[entity].isUnit) {
-        graveyard.add(singleKey);
-      } else if (entity !== "rebel" && entity !== "city") {
-        ruins.add(singleKey);
-      }
-    }
-  }
-}
-
-const STRENGTH_TO_UNIT: Record<number, EntityType> = {
-  1: "simple_unit",
-  2: "advanced_unit",
-  3: "expert_unit",
-};
-
-function mergedUnitType(strA: number, strB: number): EntityType {
-  const total = Math.min(strA + strB, 3);
-  return STRENGTH_TO_UNIT[total] ?? "expert_unit";
-}
-
-interface BorderEdge {
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
-  color: string;
-  width: number;
-}
-
-function initTerritoryBalances(
-  tiles: HexTile[],
-  tileMap: Map<string, HexTile>,
-): Map<string, number> {
-  const balances = new Map<string, number>();
-  const visited = new Set<string>();
-  const owners: TerritoryOwner[] = [
-    "player",
-    "ai1",
-    "ai2",
-    "ai3",
-    "ai4",
-    "ai5",
-  ];
-  for (const tile of tiles) {
-    if (!owners.includes(tile.owner) || visited.has(tile.key)) continue;
-    const territory = getContiguousTerritory(tileMap, tile.key, tile.owner);
-    const id = getTerritoryId(territory);
-    if (!id) continue;
-    balances.set(id, territory.length >= 2 ? 10 : 0);
-    for (const t of territory) visited.add(t.key);
-  }
-  return balances;
-}
 
 function AnimatedMovingUnit({
   fromPos,
@@ -283,8 +170,6 @@ function AnimatedMovingUnit({
 }
 
 export default function GameScreen() {
-  type Difficulty = "super_easy" | "easy" | "medium" | "hard" | "super_hard";
-  type AiState = "attacking" | "defending";
 
   const params = useLocalSearchParams<{
     tileCount: string;
@@ -862,14 +747,6 @@ export default function GameScreen() {
     ruinsRef.current = ruins;
   }, [ruins]);
 
-  type AiStepSnapshot = {
-    entities: Map<string, EntityType>;
-    mutableTileMap: Map<string, HexTile>;
-    territoryBalances: Map<string, number>;
-    liveOwnerMap: Map<string, TerritoryOwner>;
-    graveyard: Set<string>;
-    freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
-  };
   const aiStepHistoryRef = useRef<AiStepSnapshot[]>([]);
   const [aiHistoryIndex, setAiHistoryIndex] = useState(-1);
   const [aiHistoryLen, setAiHistoryLen] = useState(0);
@@ -1194,243 +1071,41 @@ export default function GameScreen() {
 
           const difficulty = aiDifficultyRef.current;
 
-          // ─── Decision Tree Helpers (closures over working* state) ─────────
-
-          // Count contiguous clusters of an owner in a (possibly simulated) tile map
-          const dtCountClusters = (owner: TerritoryOwner, simMap: Map<string, HexTile>): number => {
-            const tiles = Array.from(simMap.values()).filter(
-              (t) => t.owner === owner && t.terrain !== "mountain" && t.terrain !== "lake",
-            );
-            const vis = new Set<string>();
-            let cnt = 0;
-            for (const tile of tiles) {
-              if (vis.has(tile.key)) continue;
-              cnt++;
-              const q = [tile.key];
-              vis.add(tile.key);
-              while (q.length > 0) {
-                const curr = q.shift()!;
-                const [cq, cr] = curr.split(",").map(Number);
-                for (const { dir: [dq, dr] } of HEX_EDGES) {
-                  const nk = tileKey(cq + dq, cr + dr);
-                  if (vis.has(nk)) continue;
-                  const nt = simMap.get(nk);
-                  if (nt && nt.owner === owner && nt.terrain !== "mountain" && nt.terrain !== "lake") {
-                    vis.add(nk);
-                    q.push(nk);
-                  }
-                }
-              }
-            }
-            return cnt;
+          // ─── Decision Tree Helpers (delegating to aiHelpers module) ────────
+          // aiCtx uses getters so it always reads the current `let` variable,
+          // even after reassignment (e.g. workingTileMap = new Map(...)).
+          const aiCtx: AiContext = {
+            get tileMap() { return workingTileMap; },
+            get entities() { return workingEntities; },
+            get balances() { return workingBalances; },
+            get cities() { return workingCities; },
+            get spentUnits() { return workingSpentUnits; },
+            get partialMoves() { return workingPartialMoves; },
+            get aiOwner() { return aiOwner; },
           };
 
-          // Split score: extra clusters created for enemyOwner by capturing captureKey
-          const dtSplitScore = (captureKey: string, enemyOwner: TerritoryOwner): number => {
-            const capTile = workingTileMap.get(captureKey);
-            if (!capTile || capTile.owner !== enemyOwner) return 0;
-            const [cq, cr] = captureKey.split(",").map(Number);
-            const adjOwnerCount = HEX_EDGES.filter(({ dir: [dq, dr] }) => {
-              const nk = tileKey(cq + dq, cr + dr);
-              const nt = workingTileMap.get(nk);
-              return nt && nt.owner === enemyOwner;
-            }).length;
-            if (adjOwnerCount < 2) return 0;
-            const before = dtCountClusters(enemyOwner, workingTileMap);
-            const simMap = new Map(workingTileMap);
-            simMap.set(captureKey, { ...capTile, owner: aiOwner });
-            return dtCountClusters(enemyOwner, simMap) - before;
-          };
-
-          // Would capturing captureKey cause the enemy territory to go bankrupt next round?
-          const dtCaptureNegatesIncome = (captureKey: string, enemyOwner: TerritoryOwner): boolean => {
-            const capTile = workingTileMap.get(captureKey);
-            if (!capTile || capTile.owner !== enemyOwner) return false;
-            const origTerr = getContiguousTerritory(workingTileMap, captureKey, enemyOwner);
-            const origId = getTerritoryId(origTerr);
-            const enemyBal = origId ? (workingBalances.get(origId) ?? 0) : 0;
-            const simMap = new Map(workingTileMap);
-            simMap.set(captureKey, { ...capTile, owner: aiOwner });
-            const simEntities = new Map(workingEntities);
-            simEntities.delete(captureKey);
-            const anyRemaining = Array.from(simMap.values()).find((t) => t.owner === enemyOwner);
-            if (!anyRemaining) return true;
-            const remTerr = getContiguousTerritory(simMap, anyRemaining.key, enemyOwner);
-            const remIncome = remTerr.reduce((s, t) => {
-              if (simEntities.get(t.key) === "rebel") return s;
-              return s + (TERRAIN_INCOME[t.terrain] ?? 0) + (workingCities.has(t.key) ? CITY_BONUS : 0);
-            }, 0);
-            const remUpkeep = calcTerritoryUpkeep(remTerr, simEntities);
-            return enemyBal + (remIncome - remUpkeep) < 0;
-          };
-
-          // Does capturing captureKey leave any enemy component with exactly 1 tile (instant kill)?
-          const dtCaptureCreatesOneHex = (captureKey: string, enemyOwner: TerritoryOwner): boolean => {
-            const capTile = workingTileMap.get(captureKey);
-            if (!capTile || capTile.owner !== enemyOwner) return false;
-            const simMap = new Map(workingTileMap);
-            simMap.set(captureKey, { ...capTile, owner: aiOwner });
-            const vis = new Set<string>();
-            for (const t of Array.from(simMap.values())) {
-              if (t.owner !== enemyOwner || vis.has(t.key)) continue;
-              const comp = getContiguousTerritory(simMap, t.key, enemyOwner);
-              for (const ct of comp) vis.add(ct.key);
-              if (comp.length === 1) return true;
-            }
-            return false;
-          };
-
-          // BFS first step: walk from fromKey toward targetKey; only return steps in validMoves
-          const dtBfsStep = (fromKey: string, targetKey: string, validMoves: Set<string>): string | null => {
-            if (fromKey === targetKey) return null;
-            if (validMoves.has(targetKey)) return targetKey;
-            const prev = new Map<string, string>();
-            const vis = new Set<string>([fromKey]);
-            const q: string[] = [fromKey];
-            while (q.length > 0) {
-              const curr = q.shift()!;
-              const [cq, cr] = curr.split(",").map(Number);
-              for (const { dir: [dq, dr] } of HEX_EDGES) {
-                const nk = tileKey(cq + dq, cr + dr);
-                if (vis.has(nk)) continue;
-                const nt = workingTileMap.get(nk);
-                if (!nt || nt.terrain === "mountain") continue;
-                vis.add(nk);
-                prev.set(nk, curr);
-                if (nk === targetKey) {
-                  let step = nk;
-                  while (prev.get(step) !== fromKey) {
-                    const p = prev.get(step);
-                    if (!p) break;
-                    step = p;
-                  }
-                  return validMoves.has(step) ? step : null;
-                }
-                q.push(nk);
-              }
-            }
-            return null;
-          };
-
-          // Is there at least one non-lake, conquerable land tile reachable from a lake tile?
-          // unitStrength must be > ZoC on any enemy/neutral land tile for it to count as a valid target.
-          const dtLakeHasLandTarget = (lakeKey: string, unitStrength: number): boolean => {
-            const vis = new Set<string>([lakeKey]);
-            const q = [lakeKey];
-            while (q.length > 0) {
-              const curr = q.shift()!;
-              const [cq, cr] = curr.split(",").map(Number);
-              for (const { dir: [dq, dr] } of HEX_EDGES) {
-                const nk = tileKey(cq + dq, cr + dr);
-                if (vis.has(nk)) continue;
-                vis.add(nk);
-                const nt = workingTileMap.get(nk);
-                if (!nt || nt.terrain === "mountain") continue;
-                if (nt.terrain !== "lake") {
-                  if (nt.owner === aiOwner) {
-                    // Friendly land tile — always a safe landing spot
-                    if (!workingEntities.has(nk)) return true;
-                  } else {
-                    // Enemy/neutral tile — only valid if we can actually conquer it
-                    const zoc = getMaxEnemyZoC(nk, aiOwner, workingEntities, workingTileMap);
-                    if (unitStrength > zoc) return true;
-                  }
-                } else {
-                  q.push(nk);
-                }
-              }
-            }
-            return false;
-          };
-
-          // Only move onto a lake if there's a split opportunity reachable on the far side
-          const dtLakeHasSplitOpportunity = (lakeKey: string, unitStrength: number): boolean => {
-            const vis = new Set<string>([lakeKey]);
-            const q = [lakeKey];
-            while (q.length > 0) {
-              const curr = q.shift()!;
-              const [cq, cr] = curr.split(",").map(Number);
-              for (const { dir: [dq, dr] } of HEX_EDGES) {
-                const nk = tileKey(cq + dq, cr + dr);
-                if (vis.has(nk)) continue;
-                vis.add(nk);
-                const nt = workingTileMap.get(nk);
-                if (!nt || nt.terrain === "mountain") continue;
-                if (nt.terrain !== "lake") {
-                  if (nt.owner === aiOwner || nt.owner === "neutral") continue;
-                  const zoc = getMaxEnemyZoC(nk, aiOwner, workingEntities, workingTileMap);
-                  if (unitStrength > zoc) {
-                    const eOwner2 = nt.owner as TerritoryOwner;
-                    if (dtSplitScore(nk, eOwner2) > 0 || dtCaptureNegatesIncome(nk, eOwner2) || dtCaptureCreatesOneHex(nk, eOwner2)) {
-                      return true;
-                    }
-                  }
-                } else {
-                  q.push(nk);
-                }
-              }
-            }
-            return false;
-          };
-
-          // Min distance from a tile to any owned defense building (tower/castle) in this AI
-          const dtDefenseMinDist = (tk: string): number => {
-            const [tq, tr] = tk.split(",").map(Number);
-            let minD = Infinity;
-            for (const [bk, be] of workingEntities) {
-              if (be !== "tower" && be !== "castle") continue;
-              const bt = workingTileMap.get(bk);
-              if (!bt || bt.owner !== aiOwner) continue;
-              const [bq2, br2] = bk.split(",").map(Number);
-              const d = hexDistance(tq, tr, bq2, br2);
-              if (d < minD) minD = d;
-            }
-            return minD;
-          };
-
-          // Filter placement candidates by spacing from existing defenses.
-          // Prefer ≥3 tiles away; fallback to ≥2; never adjacent (≤1).
-          const dtSpacedPlacements = (candidates: HexTile[]): HexTile[] => {
-            const best = candidates.filter((t) => dtDefenseMinDist(t.key) >= 3);
-            if (best.length > 0) return best;
-            return candidates.filter((t) => dtDefenseMinDist(t.key) >= 2);
-          };
-
-          // Find a merge move (from → to) that creates a unit of requiredStr able to reach any targetKey.
+          const dtCountClusters = (owner: TerritoryOwner, simMap: Map<string, HexTile>) =>
+            _dtCountClusters(owner, simMap);
+          const dtSplitScore = (captureKey: string, enemyOwner: TerritoryOwner) =>
+            _dtSplitScore(captureKey, enemyOwner, aiCtx);
+          const dtCaptureNegatesIncome = (captureKey: string, enemyOwner: TerritoryOwner) =>
+            _dtCaptureNegatesIncome(captureKey, enemyOwner, aiCtx);
+          const dtCaptureCreatesOneHex = (captureKey: string, enemyOwner: TerritoryOwner) =>
+            _dtCaptureCreatesOneHex(captureKey, enemyOwner, aiCtx);
+          const dtBfsStep = (fromKey: string, targetKey: string, validMoves: Set<string>) =>
+            _dtBfsStep(fromKey, targetKey, validMoves, aiCtx);
+          const dtLakeHasLandTarget = (lakeKey: string, unitStrength: number) =>
+            _dtLakeHasLandTarget(lakeKey, unitStrength, aiCtx);
+          const dtLakeHasSplitOpportunity = (lakeKey: string, unitStrength: number) =>
+            _dtLakeHasSplitOpportunity(lakeKey, unitStrength, aiCtx);
+          const dtDefenseMinDist = (tk: string) => _dtDefenseMinDist(tk, aiCtx);
+          const dtSpacedPlacements = (candidates: HexTile[]) =>
+            _dtSpacedPlacements(candidates, aiCtx);
           const dtFindMergeMove = (
             requiredStr: number,
             targetKeys: Set<string>,
             units: [string, EntityType][],
-          ): { from: string; to: string } | null => {
-            if (units.length < 2 || targetKeys.size === 0) return null;
-            for (let i = 0; i < units.length; i++) {
-              for (let j = 0; j < units.length; j++) {
-                if (i === j) continue;
-                const [uk1, ue1] = units[i];
-                const [uk2, ue2] = units[j];
-                const str1 = ENTITY_META[ue1].strength;
-                const str2 = ENTITY_META[ue2].strength;
-                const mergedStr = str1 + str2;
-                if (mergedStr > 3 || mergedStr < requiredStr) continue;
-                const range1 = workingPartialMoves.get(uk1) ?? 3;
-                const vm1 = getValidMoves(uk1, aiOwner, workingEntities, workingTileMap, workingSpentUnits, range1);
-                if (!vm1.has(uk2)) continue;
-                // Simulate the merged unit's remaining range
-                const stepsUsed = getMoveCost(uk1, uk2, workingTileMap);
-                const remainingAfterMerge = Math.max(0, range1 - stepsUsed);
-                const destRemaining = workingPartialMoves.get(uk2) ?? 3;
-                const mergedRemaining = Math.min(remainingAfterMerge, destRemaining);
-                const tempEntities = new Map(workingEntities);
-                tempEntities.delete(uk1);
-                tempEntities.set(uk2, mergedUnitType(str1, str2));
-                const vmMerged = getValidMoves(uk2, aiOwner, tempEntities, workingTileMap, new Set(), mergedRemaining);
-                for (const tk of targetKeys) {
-                  if (vmMerged.has(tk)) return { from: uk1, to: uk2 };
-                }
-              }
-            }
-            return null;
-          };
+          ) => _dtFindMergeMove(requiredStr, targetKeys, units, aiCtx);
 
           // Consolidated awaitStep call for the decision tree
           const dtAwait = async (): Promise<void> => {
@@ -4320,22 +3995,18 @@ export default function GameScreen() {
               {tileData.map(({ tile, cx, cy }) => {
                 const liveTile = activeTileMap.get(tile.key) ?? tile;
                 const isCityZone = tile.cityBuffer || cities.has(tile.key);
-                const fill =
-                  tile.terrain === "lake"
-                    ? "#5BAFD6"
-                    : hasSelection
-                      ? (TERRAIN_FILLS[tile.terrain] ?? TERRAIN_FILLS.grass)
-                      : tile.terrain === "mountain"
-                        ? TERRAIN_FILLS.mountain
-                        : isCityZone && liveTile.owner === "neutral"
-                          ? CITY_NEUTRAL_FILL
-                          : (TERRITORY_FILLS[liveTile.owner] ??
-                            TERRITORY_FILLS.neutral);
                 return (
-                  <Polygon
+                  <HexCell
                     key={tile.key}
-                    points={hexCornersString(cx, cy, HEX_SIZE)}
-                    fill={fill}
+                    tileKey={tile.key}
+                    terrain={tile.terrain}
+                    cx={cx}
+                    cy={cy}
+                    hexSize={HEX_SIZE}
+                    liveOwner={liveTile.owner}
+                    hasSelection={hasSelection}
+                    isCityZone={isCityZone}
+                    cityBuffer={tile.cityBuffer ?? false}
                   />
                 );
               })}
@@ -4861,117 +4532,21 @@ export default function GameScreen() {
         </View>
       </GestureDetector>
 
-      <Animated.View
-        style={[
-          styles.ribbon,
-          {
-            bottom:
-              BOTTOM_BAR_H +
-              botInset +
-              (selectedEntityKey ? ENTITY_PANEL_H : 0),
-          },
-          ribbonStyle,
-        ]}
-      >
-        <ScrollView
-          ref={ribbonScrollRef}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.ribbonContent}
-        >
-          {(ribbonMode === "units"
-            ? UNIT_PURCHASABLES
-            : BUILDING_PURCHASABLES
-          ).map((item) => {
-            const isArmed = armedEntityId === item.id;
-            const isTower = item.id === "tower";
-            const isCastle = item.id === "castle";
-            const round1Locked = turn === 1 && !isTower;
-            const cityAlreadyBuilt = item.id === "city" && territoryHasCity;
-            const cityTooSmall =
-              item.id === "city" && selectedTerritory.length < 6;
-            const cityLocked = cityAlreadyBuilt || cityTooSmall;
-            const playerUsedTilesSet =
-              freeTowerUsedTiles.get("player") ?? new Set<string>();
-            const playerTowerFree =
-              isTower &&
-              turn === 1 &&
-              selectedTerritory.length >= 2 &&
-              !selectedTerritory.some((t) => playerUsedTilesSet.has(t.key));
-            const effectiveCost = playerTowerFree ? 0 : item.cost;
-            const affordable = effectiveCost <= selectedTerritoryBalance;
-            const enabled = affordable && !cityLocked && !round1Locked;
-            const costLabel = round1Locked
-              ? "Round 2+"
-              : cityAlreadyBuilt
-                ? "BUILT"
-                : cityTooSmall
-                  ? "<6 tiles"
-                  : playerTowerFree
-                    ? "FREE"
-                    : `${item.cost}g`;
-            const nextUpkeepLabel = (() => {
-              if (isTower) {
-                const cost = nextDefenseUpkeep("tower", selectedTerritoryDefenseCounts.tower);
-                return `${cost}/turn`;
-              }
-              if (isCastle) {
-                const cost = nextDefenseUpkeep("castle", selectedTerritoryDefenseCounts.castle);
-                return `${cost}/turn`;
-              }
-              return null;
-            })();
-            return (
-              <TouchableOpacity
-                key={item.id}
-                style={[
-                  styles.ribbonItem,
-                  !enabled && styles.ribbonItemDisabled,
-                  isArmed && styles.ribbonItemArmed,
-                ]}
-                activeOpacity={enabled ? 0.75 : 1}
-                onPress={() => {
-                  if (!enabled) return;
-                  setArmedEntityId(isArmed ? null : item.id);
-                }}
-              >
-                <Text style={styles.ribbonIcon}>{item.icon}</Text>
-                <Text
-                  style={[
-                    styles.ribbonName,
-                    !enabled && styles.ribbonDim,
-                    isArmed && styles.ribbonNameArmed,
-                  ]}
-                >
-                  {item.name}
-                </Text>
-                <Text
-                  style={[
-                    styles.ribbonCost,
-                    !enabled && styles.ribbonDim,
-                    isArmed && styles.ribbonNameArmed,
-                    playerTowerFree && styles.ribbonCostFree,
-                    cityAlreadyBuilt && styles.ribbonCostBuilt,
-                  ]}
-                >
-                  {costLabel}
-                </Text>
-                {nextUpkeepLabel && (
-                  <Text
-                    style={[
-                      styles.ribbonCost,
-                      !enabled && styles.ribbonDim,
-                      { fontSize: 10, marginTop: 1 },
-                    ]}
-                  >
-                    {nextUpkeepLabel}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </Animated.View>
+      <PurchaseRibbon
+        ribbonStyle={ribbonStyle}
+        ribbonScrollRef={ribbonScrollRef}
+        ribbonMode={ribbonMode}
+        botInset={botInset}
+        selectedEntityKey={selectedEntityKey}
+        turn={turn}
+        selectedTerritory={selectedTerritory}
+        selectedTerritoryBalance={selectedTerritoryBalance}
+        selectedTerritoryDefenseCounts={selectedTerritoryDefenseCounts}
+        territoryHasCity={territoryHasCity}
+        freeTowerUsedTiles={freeTowerUsedTiles}
+        armedEntityId={armedEntityId}
+        setArmedEntityId={setArmedEntityId}
+      />
 
       <TouchableOpacity
         style={[
@@ -5004,123 +4579,22 @@ export default function GameScreen() {
         </Text>
       </TouchableOpacity>
 
-      {selectedEntityKey &&
-        (() => {
-          const entityId = entities.get(selectedEntityKey);
-          const isUnit = entityId ? ENTITY_META[entityId].isUnit : false;
-          const upgradeTarget = entityId ? UNIT_UPGRADE[entityId] : undefined;
-          const canUpgrade = !!upgradeTarget;
-          const upgradeCost =
-            entityId && upgradeTarget
-              ? ENTITY_META[upgradeTarget].cost - ENTITY_META[entityId].cost
-              : 0;
-          const isSpent = spentUnits.has(selectedEntityKey);
-          const entityTile = activeTileMap.get(selectedEntityKey);
-          const entityTerritoryId = entityTile
-            ? getTerritoryId(
-                getContiguousTerritory(
-                  activeTileMap,
-                  selectedEntityKey,
-                  "player",
-                ),
-              )
-            : null;
-          const entityTerritoryBalance = entityTerritoryId
-            ? (territoryBalances.get(entityTerritoryId) ?? 0)
-            : 0;
-          const removeCost = 0;
-          const upgradeEnabled =
-            canUpgrade &&
-            entityTerritoryBalance >= upgradeCost &&
-            (!isUnit || !isSpent);
-          const removeEnabled = isUnit
-            ? !isSpent
-            : !!entityTerritoryId && entityTerritoryBalance >= removeCost;
-          return (
-            <View
-              style={[styles.entityPanel, { bottom: BOTTOM_BAR_H + botInset }]}
-            >
-              <TouchableOpacity
-                style={[
-                  styles.buildBtn,
-                  { borderColor: "#AA3A2A", backgroundColor: "#3A1A10" },
-                  !removeEnabled && styles.buildBtnDisabled,
-                ]}
-                activeOpacity={removeEnabled ? 0.75 : 1}
-                onPress={() => {
-                  if (isAiTurn || gameResult !== null) return;
-                  if (!removeEnabled || !entityTerritoryId) return;
-                  pushHistory();
-                  setEntities((prev) => {
-                    const next = new Map(prev);
-                    next.delete(selectedEntityKey);
-                    return next;
-                  });
-                  if (removeCost > 0) {
-                    setTerritoryBalances((prev) => {
-                      const next = new Map(prev);
-                      next.set(
-                        entityTerritoryId,
-                        entityTerritoryBalance - removeCost,
-                      );
-                      return next;
-                    });
-                  }
-                  setSelectedEntityKey(null);
-                }}
-              >
-                <Text
-                  style={[
-                    styles.buildBtnText,
-                    { color: removeEnabled ? "#F07060" : "#7A3020" },
-                  ]}
-                >
-                  ✕ Remove{removeCost > 0 ? ` (${removeCost}g)` : ""}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.buildBtn,
-                  !upgradeEnabled && styles.buildBtnDisabled,
-                ]}
-                activeOpacity={upgradeEnabled ? 0.75 : 1}
-                onPress={() => {
-                  if (isAiTurn || gameResult !== null) return;
-                  if (
-                    !upgradeEnabled ||
-                    !entityId ||
-                    !upgradeTarget ||
-                    !entityTerritoryId
-                  )
-                    return;
-                  pushHistory();
-                  setEntities((prev) => {
-                    const next = new Map(prev);
-                    next.set(selectedEntityKey, upgradeTarget);
-                    return next;
-                  });
-                  setTerritoryBalances((prev) => {
-                    const next = new Map(prev);
-                    next.set(
-                      entityTerritoryId,
-                      entityTerritoryBalance - upgradeCost,
-                    );
-                    return next;
-                  });
-                }}
-              >
-                <Text
-                  style={[
-                    styles.buildBtnText,
-                    !upgradeEnabled && styles.buildBtnTextDisabled,
-                  ]}
-                >
-                  ⬆ Upgrade {canUpgrade ? `(${upgradeCost}g)` : "(Max)"}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          );
-        })()}
+      {selectedEntityKey && (
+        <EntityPanel
+          selectedEntityKey={selectedEntityKey}
+          entities={entities}
+          activeTileMap={activeTileMap}
+          spentUnits={spentUnits}
+          territoryBalances={territoryBalances}
+          isAiTurn={isAiTurn}
+          gameResult={gameResult}
+          botInset={botInset}
+          pushHistory={pushHistory}
+          setEntities={setEntities}
+          setTerritoryBalances={setTerritoryBalances}
+          setSelectedEntityKey={setSelectedEntityKey}
+        />
+      )}
 
       <View style={[styles.bottomBar, { paddingBottom: botInset }]}>
         <View style={styles.bottomBarInner}>
@@ -5296,366 +4770,35 @@ export default function GameScreen() {
         </View>
       </View>
 
-      <Modal
-        visible={confirmLeave}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setConfirmLeave(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Leave Game?</Text>
-            <Text style={styles.modalBody}>
-              Return to the main menu? Your progress will be lost.
-            </Text>
-            <View style={styles.modalRow}>
-              <TouchableOpacity
-                style={styles.modalStayBtn}
-                onPress={() => setConfirmLeave(false)}
-              >
-                <Text style={styles.modalStayText}>Stay</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.modalLeaveBtn}
-                onPress={() => {
-                  setConfirmLeave(false);
-                  router.back();
-                }}
-              >
-                <Text style={styles.modalLeaveText}>Leave</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <GameModals
+        confirmLeave={confirmLeave}
+        setConfirmLeave={setConfirmLeave}
+        onLeaveConfirm={() => router.back()}
+        pendingLakeMove={pendingLakeMove}
+        setPendingLakeMove={setPendingLakeMove}
+        lakeTransferAmount={lakeTransferAmount}
+        setLakeTransferAmount={setLakeTransferAmount}
+        sliderTrackWidth={sliderTrackWidth}
+        setSliderTrackWidth={setSliderTrackWidth}
+        sliderTrackPageX={sliderTrackPageX}
+        commitPendingLakeMove={commitPendingLakeMove}
+        showEconModal={showEconModal}
+        setShowEconModal={setShowEconModal}
+        econBreakdown={econBreakdown as EconBreakdown | null}
+        selectedTerritoryBalance={selectedTerritoryBalance}
+        showDominancePopup={showDominancePopup}
+        setShowDominancePopup={setShowDominancePopup}
+        setGameResult={setGameResult}
+        gameResult={gameResult}
+        onReturnToMenu={() => {
+          setGameResult(null);
+          setIsDeveloperModeActive(false);
+          setIsAiPaused(false);
+          resumeAiRef.current = null;
+          router.back();
+        }}
+      />
 
-      {pendingLakeMove && (
-        <Modal
-          visible={true}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setPendingLakeMove(null)}
-        >
-          <View style={styles.lakeModalOverlay}>
-            <View style={styles.lakeModalBox}>
-              <Text style={styles.lakeModalTitle}>⚓ Naval Supply</Text>
-              <Text style={styles.lakeModalSubtitle}>
-                How many credits to provision this unit?{"\n"}
-                (min {pendingLakeMove.minAmount}, max{" "}
-                {pendingLakeMove.maxAmount})
-              </Text>
-
-              <Text style={styles.lakeModalAmount}>{lakeTransferAmount}</Text>
-
-              <View style={styles.lakeSliderRow}>
-                <TouchableOpacity
-                  style={styles.lakeStepBtn}
-                  onPress={() =>
-                    setLakeTransferAmount((prev) =>
-                      Math.max(pendingLakeMove.minAmount, prev - 1),
-                    )
-                  }
-                >
-                  <Text style={styles.lakeStepText}>−</Text>
-                </TouchableOpacity>
-
-                <View
-                  style={styles.lakeTrackHitZone}
-                  onLayout={(e) => {
-                    setSliderTrackWidth(e.nativeEvent.layout.width);
-                  }}
-                  onStartShouldSetResponder={() => true}
-                  onMoveShouldSetResponder={() => true}
-                  onMoveShouldSetResponderCapture={() => true}
-                  onResponderGrant={(e) => {
-                    sliderTrackPageX.current = e.nativeEvent.pageX - e.nativeEvent.locationX;
-                    const x = Math.max(0, Math.min(sliderTrackWidth, e.nativeEvent.pageX - sliderTrackPageX.current));
-                    const range = pendingLakeMove.maxAmount - pendingLakeMove.minAmount;
-                    if (range <= 0) return;
-                    setLakeTransferAmount(
-                      pendingLakeMove.minAmount + Math.round((x / sliderTrackWidth) * range),
-                    );
-                  }}
-                  onResponderMove={(e) => {
-                    const x = Math.max(0, Math.min(sliderTrackWidth, e.nativeEvent.pageX - sliderTrackPageX.current));
-                    const range = pendingLakeMove.maxAmount - pendingLakeMove.minAmount;
-                    if (range <= 0) return;
-                    setLakeTransferAmount(
-                      pendingLakeMove.minAmount + Math.round((x / sliderTrackWidth) * range),
-                    );
-                  }}
-                >
-                  <View style={styles.lakeTrack} pointerEvents="none">
-                    <View
-                      style={[
-                        styles.lakeTrackFill,
-                        {
-                          width: `${pendingLakeMove.maxAmount <= pendingLakeMove.minAmount ? 100 : Math.round(((lakeTransferAmount - pendingLakeMove.minAmount) / (pendingLakeMove.maxAmount - pendingLakeMove.minAmount)) * 100)}%`,
-                        },
-                      ]}
-                    />
-                    <View
-                      style={[
-                        styles.lakeThumb,
-                        {
-                          left:
-                            pendingLakeMove.maxAmount <= pendingLakeMove.minAmount
-                              ? sliderTrackWidth - 12
-                              : Math.round(
-                                  ((lakeTransferAmount - pendingLakeMove.minAmount) /
-                                    (pendingLakeMove.maxAmount - pendingLakeMove.minAmount)) *
-                                    (sliderTrackWidth - 24),
-                                ),
-                        },
-                      ]}
-                    />
-                  </View>
-                </View>
-
-                <TouchableOpacity
-                  style={styles.lakeStepBtn}
-                  onPress={() =>
-                    setLakeTransferAmount((prev) =>
-                      Math.min(pendingLakeMove.maxAmount, prev + 1),
-                    )
-                  }
-                >
-                  <Text style={styles.lakeStepText}>+</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.lakeModalButtons}>
-                <TouchableOpacity
-                  style={styles.lakeCancelBtn}
-                  onPress={() => setPendingLakeMove(null)}
-                >
-                  <Text style={styles.lakeCancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.lakeConfirmBtn}
-                  onPress={() => commitPendingLakeMove(lakeTransferAmount)}
-                >
-                  <Text style={styles.lakeConfirmText}>Dispatch ⚓</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
-      )}
-
-      <Modal
-        visible={showEconModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowEconModal(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowEconModal(false)}
-        >
-          <View style={styles.econCard} onStartShouldSetResponder={() => true}>
-            <Text style={styles.econTitle}>Economy Breakdown</Text>
-            <View style={styles.econSection}>
-              <Text style={styles.econSectionLabel}>INCOME / TURN</Text>
-              {econBreakdown && econBreakdown.grassCount > 0 && (
-                <View style={styles.econRow}>
-                  <Text style={styles.econRowLabel}>
-                    🌿 Grass ×{econBreakdown.grassCount}{" "}
-                    <Text style={styles.econPer}>(+2 each)</Text>
-                  </Text>
-                  <Text style={styles.econRowValue}>
-                    +{econBreakdown.grassIncome}
-                  </Text>
-                </View>
-              )}
-              {econBreakdown && econBreakdown.forestCount > 0 && (
-                <View style={styles.econRow}>
-                  <Text style={styles.econRowLabel}>
-                    🌲 Forest ×{econBreakdown.forestCount}{" "}
-                    <Text style={styles.econPer}>(+2 each)</Text>
-                  </Text>
-                  <Text style={styles.econRowValue}>
-                    +{econBreakdown.forestIncome}
-                  </Text>
-                </View>
-              )}
-              {econBreakdown && econBreakdown.desertCount > 0 && (
-                <View style={styles.econRow}>
-                  <Text style={styles.econRowLabel}>
-                    🏜️ Desert ×{econBreakdown.desertCount}{" "}
-                    <Text style={styles.econPer}>(+1 each)</Text>
-                  </Text>
-                  <Text style={styles.econRowValue}>
-                    +{econBreakdown.desertIncome}
-                  </Text>
-                </View>
-              )}
-              {econBreakdown && econBreakdown.cityCount > 0 && (
-                <View style={styles.econRow}>
-                  <Text style={styles.econRowLabel}>
-                    {ENTITY_META.city.icon} Cities ×{econBreakdown.cityCount}{" "}
-                    <Text style={styles.econPer}>(+{CITY_BONUS} each)</Text>
-                  </Text>
-                  <Text style={styles.econRowValue}>
-                    +{econBreakdown.cityIncome}
-                  </Text>
-                </View>
-              )}
-            </View>
-            {econBreakdown &&
-              (econBreakdown.upkeepGroups.length > 0 ||
-                econBreakdown.rebelTotalLoss > 0) && (
-                <View style={styles.econSection}>
-                  <Text style={styles.econSectionLabel}>UPKEEP / TURN</Text>
-                  {econBreakdown.upkeepGroups.map((g, i) => (
-                    <View key={i} style={styles.econRow}>
-                      <Text style={styles.econRowLabel}>
-                        {g.icon} {g.name} ×{g.count}{" "}
-                        {g.upkeepPerUnit !== null && (
-                          <Text style={styles.econPer}>
-                            (−{g.upkeepPerUnit} each)
-                          </Text>
-                        )}
-                      </Text>
-                      <Text style={[styles.econRowValue, { color: "#E07060" }]}>
-                        −{g.total}
-                      </Text>
-                    </View>
-                  ))}
-                  {econBreakdown.rebelTotalLoss > 0 && (
-                    <View style={styles.econRow}>
-                      <Text style={styles.econRowLabel}>
-                        ✊ Rebels ×{econBreakdown.rebelCount}
-                      </Text>
-                      <Text style={[styles.econRowValue, { color: "#E07060" }]}>
-                        −{econBreakdown.rebelTotalLoss}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              )}
-            <View style={styles.econDivider} />
-            <View style={styles.econRow}>
-              <Text style={styles.econNetLabel}>Net per turn</Text>
-              <Text
-                style={[
-                  styles.econNetValue,
-                  {
-                    color:
-                      econBreakdown && econBreakdown.net >= 0
-                        ? "#7EC87E"
-                        : "#E07060",
-                  },
-                ]}
-              >
-                {econBreakdown && econBreakdown.net >= 0 ? "+" : ""}
-                {econBreakdown?.net ?? 0}
-              </Text>
-            </View>
-            <View style={styles.econRow}>
-              <Text style={styles.econNetLabel}>Current balance</Text>
-              <Text style={styles.econNetValue}>
-                ⚜️ {selectedTerritoryBalance}
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={styles.econCloseBtn}
-              onPress={() => setShowEconModal(false)}
-            >
-              <Text style={styles.econCloseBtnText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* 70% Dominance popup */}
-      <Modal visible={showDominancePopup} transparent animationType="fade">
-        <View style={styles.gameResultOverlay}>
-          <View style={styles.gameResultCard}>
-            <Text style={styles.gameResultEmoji}>⚔️</Text>
-            <Text
-              style={[styles.gameResultTitle, styles.gameResultVictoryTitle]}
-            >
-              Dominance!
-            </Text>
-            <Text style={styles.gameResultBody}>
-              You control 70% of the realm. Claim victory now, or continue
-              your conquest and take it all?
-            </Text>
-            <TouchableOpacity
-              style={[styles.gameResultBtn, styles.dominanceContinueBtn]}
-              onPress={() => setShowDominancePopup(false)}
-            >
-              <Text
-                style={[
-                  styles.gameResultBtnText,
-                  styles.dominanceContinueBtnText,
-                ]}
-              >
-                Keep Playing
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.gameResultBtn, styles.gameResultMenuBtn]}
-              onPress={() => {
-                setShowDominancePopup(false);
-                setGameResult("victory");
-              }}
-            >
-              <Text
-                style={[
-                  styles.gameResultBtnText,
-                  styles.gameResultMenuBtnText,
-                ]}
-              >
-                Claim Victory
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={gameResult !== null} transparent animationType="fade">
-        <View style={styles.gameResultOverlay}>
-          <View style={styles.gameResultCard}>
-            <Text style={styles.gameResultEmoji}>
-              {gameResult === "victory" ? "🏆" : "💀"}
-            </Text>
-            <Text
-              style={[
-                styles.gameResultTitle,
-                gameResult === "victory"
-                  ? styles.gameResultVictoryTitle
-                  : styles.gameResultDefeatTitle,
-              ]}
-            >
-              {gameResult === "victory" ? "Victory!" : "Game Over"}
-            </Text>
-            <Text style={styles.gameResultBody}>
-              {gameResult === "victory"
-                ? "All opponents have been eliminated. The realm is yours!"
-                : "Your territory has been conquered. The campaign is lost."}
-            </Text>
-            <TouchableOpacity
-              style={[styles.gameResultBtn, styles.gameResultMenuBtn]}
-              onPress={() => {
-                setGameResult(null);
-                setIsDeveloperModeActive(false);
-                setIsAiPaused(false);
-                resumeAiRef.current = null;
-                router.back();
-              }}
-            >
-              <Text
-                style={[styles.gameResultBtnText, styles.gameResultMenuBtnText]}
-              >
-                Return to Main Menu
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
       {showSplash && (
         <Animated.View style={[styles.splashOverlay, splashAnimStyle]}>
           <Image
@@ -5677,700 +4820,3 @@ export default function GameScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: "#081828",
-    overflow: "hidden",
-  },
-  board: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-  },
-  boardElevated: {
-    ...Platform.select({
-      web: {
-        filter: "drop-shadow(0px 12px 32px rgba(0,10,30,0.85))",
-      } as any,
-      default: {
-        elevation: 24,
-        shadowColor: "#000A1E",
-        shadowOffset: { width: 0, height: 12 },
-        shadowOpacity: 0.85,
-        shadowRadius: 24,
-      },
-    }),
-  },
-  entityPanel: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    height: ENTITY_PANEL_H,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 8,
-    backgroundColor: "rgba(18, 12, 4, 0.97)",
-    borderTopWidth: 1,
-    borderTopColor: "#6A4A1C",
-    zIndex: 18,
-  },
-  ribbon: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    height: RIBBON_H,
-    overflow: "hidden",
-    backgroundColor: "rgba(58, 44, 18, 0.98)",
-    borderTopWidth: 1,
-    borderTopColor: "#8A6A2C",
-  },
-  ribbonContent: {
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 4,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  ribbonItem: {
-    width: 82,
-    height: RIBBON_H - 30,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#7A6030",
-    backgroundColor: "#3A2C12",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 3,
-  },
-  ribbonItemDisabled: {
-    borderColor: "#4A3A1A",
-    backgroundColor: "#2A200A",
-  },
-  ribbonItemArmed: {
-    borderColor: "#FFD700",
-    backgroundColor: "#2A2008",
-  },
-  ribbonIcon: {
-    fontSize: 22,
-  },
-  ribbonName: {
-    fontSize: 10,
-    fontFamily: "Cinzel_400Regular",
-    color: "#C8A24A",
-  },
-  ribbonNameArmed: {
-    color: "#FFD700",
-  },
-  ribbonCost: {
-    fontSize: 10,
-    fontFamily: "Inter_500Medium",
-    color: "#A08C68",
-  },
-  ribbonCostFree: {
-    color: "#44DD88",
-    fontFamily: "Cinzel_700Bold",
-  },
-  ribbonCostBuilt: {
-    color: "#E04040",
-    fontFamily: "Cinzel_700Bold",
-  },
-  ribbonDim: {
-    color: "#786848",
-  },
-  bottomBar: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "rgba(54, 40, 14, 0.98)",
-    borderTopWidth: 1,
-    borderTopColor: "#8A6A2C",
-  },
-  bottomBarInner: {
-    height: BOTTOM_BAR_H,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    gap: 6,
-  },
-  menuBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: "#7A6030",
-    backgroundColor: "#3A2A10",
-  },
-  menuBtnText: {
-    fontSize: 11,
-    fontFamily: "Cinzel_400Regular",
-    color: "#A08860",
-  },
-  buildBtn: {
-    height: BTN_H,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: "#9A7830",
-    backgroundColor: "#3A2A10",
-  },
-  buildBtnActive: {
-    backgroundColor: "#C8A24A",
-    borderColor: "#C8A24A",
-  },
-  buildBtnDisabled: {
-    borderColor: "#4A3A1A",
-    backgroundColor: "#2A1E08",
-  },
-  buildBtnText: {
-    fontSize: 11,
-    fontFamily: "Cinzel_400Regular",
-    color: "#C8A24A",
-  },
-  buildBtnTextActive: {
-    color: "#0D0A06",
-  },
-  buildBtnTextDisabled: {
-    color: "#5A4A22",
-  },
-  creditsDisplay: {
-    height: BTN_H,
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 1,
-    paddingHorizontal: 8,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: "#7A6030",
-    backgroundColor: "#3A2A10",
-  },
-  creditsTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  creditsIcon: {
-    fontSize: 12,
-  },
-  creditsAmount: {
-    fontSize: 14,
-    fontFamily: "Inter_700Bold",
-    color: "#C8A24A",
-  },
-  creditsNet: {
-    fontSize: 10,
-    fontFamily: "Inter_400Regular",
-  },
-  creditsNetPos: {
-    color: "#70C870",
-  },
-  creditsNetNeg: {
-    color: "#E07060",
-  },
-  lakeModalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.72)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  lakeModalBox: {
-    backgroundColor: "#1E1A10",
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: "#4A7FA5",
-    padding: 24,
-    width: 320,
-    alignItems: "center",
-  },
-  lakeModalTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#7EC8E3",
-    marginBottom: 6,
-  },
-  lakeModalSubtitle: {
-    fontSize: 12,
-    color: "#8C9BAB",
-    textAlign: "center",
-    marginBottom: 16,
-    lineHeight: 18,
-  },
-  lakeModalAmount: {
-    fontSize: 44,
-    fontWeight: "800",
-    color: "#C8D8E8",
-    marginBottom: 12,
-  },
-  lakeSliderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    width: "100%",
-    marginBottom: 20,
-    gap: 8,
-  },
-  lakeStepBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#2A3A4A",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#4A7FA5",
-  },
-  lakeStepText: {
-    fontSize: 20,
-    color: "#7EC8E3",
-    lineHeight: 24,
-  },
-  lakeTrackHitZone: {
-    flex: 1,
-    height: 44,
-    justifyContent: "center",
-  },
-  lakeTrack: {
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#2A3A4A",
-    position: "relative",
-    overflow: "visible",
-  },
-  lakeTrackFill: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    backgroundColor: "#4A7FA5",
-    borderRadius: 4,
-  },
-  lakeThumb: {
-    position: "absolute",
-    top: -8,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "#7EC8E3",
-    marginLeft: -12,
-    borderWidth: 2,
-    borderColor: "#1E1A10",
-  },
-  lakeModalButtons: {
-    flexDirection: "row",
-    gap: 12,
-    width: "100%",
-  },
-  lakeCancelBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: "#2A2218",
-    borderWidth: 1,
-    borderColor: "#5A4A2A",
-    alignItems: "center",
-  },
-  lakeCancelText: {
-    color: "#8A7A5A",
-    fontWeight: "600",
-    fontSize: 15,
-  },
-  lakeConfirmBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: "#1A3A5A",
-    borderWidth: 1,
-    borderColor: "#4A7FA5",
-    alignItems: "center",
-  },
-  lakeConfirmText: {
-    color: "#7EC8E3",
-    fontWeight: "700",
-    fontSize: 15,
-  },
-  spacer: {
-    flex: 1,
-  },
-  undoBtn: {
-    height: BTN_H,
-    width: BTN_H,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "column",
-    gap: 1,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: "#9A7830",
-    backgroundColor: "#3A2A10",
-  },
-  undoBtnDisabled: {
-    borderColor: "#6A5A28",
-    backgroundColor: "#2E2208",
-  },
-  undoBtnLabel: {
-    fontSize: 9,
-    fontFamily: "Cinzel_400Regular",
-    color: "#C8A24A",
-    letterSpacing: 0.5,
-  },
-  undoBtnLabelDisabled: {
-    color: "#6A5828",
-  },
-  undoBtnIcon: {
-    fontSize: 17,
-    color: "#C8A24A",
-  },
-  undoBtnIconDisabled: {
-    color: "#6A5828",
-  },
-  endTurnBtn: {
-    height: BTN_H,
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 1,
-    paddingHorizontal: 14,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: "#B08030",
-    backgroundColor: "#6A4014",
-  },
-  endTurnText: {
-    fontSize: 11,
-    fontFamily: "Cinzel_700Bold",
-    color: "#F0D080",
-    letterSpacing: 0.5,
-  },
-  endTurnArrow: {
-    fontSize: 13,
-    color: "#F0D080",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.65)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  modalCard: {
-    width: 300,
-    backgroundColor: "#3A2A10",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#9A7830",
-    padding: 28,
-    gap: 12,
-    alignItems: "center",
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontFamily: "Cinzel_700Bold",
-    color: "#F0D080",
-    letterSpacing: 0.5,
-  },
-  modalBody: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    color: "#C8A870",
-    textAlign: "center",
-    lineHeight: 20,
-  },
-  modalRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 8,
-  },
-  modalStayBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#7A6030",
-    backgroundColor: "#2A1E08",
-    alignItems: "center",
-  },
-  modalStayText: {
-    fontSize: 13,
-    fontFamily: "Cinzel_400Regular",
-    color: "#C8A24A",
-  },
-  modalLeaveBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#AA3A2A",
-    backgroundColor: "#4A1A10",
-    alignItems: "center",
-  },
-  modalLeaveText: {
-    fontSize: 13,
-    fontFamily: "Cinzel_700Bold",
-    color: "#F07060",
-  },
-  econCard: {
-    width: 320,
-    backgroundColor: "#3A2A10",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#9A7830",
-    padding: 24,
-    gap: 8,
-  },
-  econTitle: {
-    fontSize: 16,
-    fontFamily: "Cinzel_700Bold",
-    color: "#F0D080",
-    letterSpacing: 0.5,
-    marginBottom: 4,
-    textAlign: "center",
-  },
-  econSection: {
-    gap: 4,
-  },
-  econSectionLabel: {
-    fontSize: 10,
-    fontFamily: "Cinzel_400Regular",
-    color: "#786A54",
-    letterSpacing: 1,
-    marginBottom: 2,
-  },
-  econRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  econRowLabel: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    color: "#C8A870",
-    flex: 1,
-  },
-  econPer: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-    color: "#786A54",
-  },
-  econRowValue: {
-    fontSize: 13,
-    fontFamily: "Inter_700Bold",
-    color: "#7EC87E",
-  },
-  econEmpty: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: "#786A54",
-    fontStyle: "italic",
-  },
-  econDivider: {
-    height: 1,
-    backgroundColor: "#6A5020",
-    marginVertical: 4,
-  },
-  econNetLabel: {
-    fontSize: 14,
-    fontFamily: "Cinzel_400Regular",
-    color: "#D0B880",
-  },
-  econNetValue: {
-    fontSize: 14,
-    fontFamily: "Inter_700Bold",
-    color: "#C8A24A",
-  },
-  econCloseBtn: {
-    marginTop: 8,
-    paddingVertical: 10,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#7A6030",
-    backgroundColor: "#2A1E08",
-    alignItems: "center",
-  },
-  econCloseBtnText: {
-    fontSize: 13,
-    fontFamily: "Cinzel_400Regular",
-    color: "#C8A24A",
-  },
-  aiTurnBtn: {
-    backgroundColor: "#1A1A3A",
-    borderColor: "#4A4A8A",
-  },
-  aiTurnText: {
-    fontSize: 12,
-    fontFamily: "Cinzel_400Regular",
-    color: "#8888CC",
-    letterSpacing: 0.5,
-  },
-  devBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: "#7A6030",
-    backgroundColor: "#3A2A10",
-  },
-  devBtnInactive: {
-    borderColor: "#8A2222",
-    backgroundColor: "#3A0808",
-  },
-  devBtnActive: {
-    borderColor: "#00FF88",
-    backgroundColor: "#003322",
-  },
-  devBtnText: {
-    fontSize: 11,
-    fontFamily: "Cinzel_400Regular",
-    letterSpacing: 0.5,
-  },
-  devBtnTextInactive: {
-    color: "#CC4444",
-  },
-  devBtnTextActive: {
-    color: "#00FF88",
-  },
-  prevActionBtn: {
-    height: BTN_H,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 10,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: "#00BB66",
-    backgroundColor: "#002211",
-  },
-  nextActionBtn: {
-    height: BTN_H,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 12,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: "#00FF88",
-    backgroundColor: "#003322",
-  },
-  nextActionBtnText: {
-    fontSize: 11,
-    fontFamily: "Cinzel_700Bold",
-    color: "#00FF88",
-    letterSpacing: 0.5,
-  },
-  gameResultOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.80)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  gameResultCard: {
-    width: 320,
-    backgroundColor: "#1E1608",
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: "#9A7830",
-    padding: 36,
-    alignItems: "center",
-    gap: 16,
-  },
-  gameResultEmoji: {
-    fontSize: 56,
-  },
-  gameResultTitle: {
-    fontSize: 28,
-    fontFamily: "Cinzel_700Bold",
-    letterSpacing: 1,
-  },
-  gameResultVictoryTitle: {
-    color: "#F0D060",
-  },
-  gameResultDefeatTitle: {
-    color: "#E06050",
-  },
-  gameResultBody: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    color: "#C8A870",
-    textAlign: "center",
-    lineHeight: 22,
-  },
-  gameResultBtn: {
-    marginTop: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#9A7830",
-    backgroundColor: "#3A2A10",
-    alignItems: "center",
-  },
-  gameResultBtnText: {
-    fontSize: 14,
-    fontFamily: "Cinzel_700Bold",
-    color: "#F0D080",
-    letterSpacing: 0.5,
-  },
-  gameResultMenuBtn: {
-    backgroundColor: "#2A1E08",
-    borderColor: "#6A5020",
-  },
-  gameResultMenuBtnText: {
-    color: "#C8A24A",
-    fontSize: 12,
-  },
-  dominanceContinueBtn: {
-    backgroundColor: "#1A3A20",
-    borderColor: "#4A8A50",
-  },
-  dominanceContinueBtnText: {
-    color: "#80D090",
-  },
-  splashOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "#0D0A06",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 9999,
-  },
-  splashPreloadImg: {
-    position: "absolute",
-    width: 1,
-    height: 1,
-    opacity: 0,
-  },
-  splashTitle: {
-    fontFamily: "Cinzel_700Bold",
-    fontSize: 34,
-    color: "#C8A24A",
-    letterSpacing: 2,
-    textAlign: "center",
-  },
-  splashSeparator: {
-    width: 180,
-    height: 1.5,
-    backgroundColor: "#C8A24A",
-    marginVertical: 14,
-    opacity: 0.7,
-  },
-  splashSubtitle: {
-    fontFamily: "Cinzel_400Regular",
-    fontSize: 17,
-    color: "#D4BF96",
-    letterSpacing: 1,
-    textAlign: "center",
-  },
-});
