@@ -1,3 +1,4 @@
+import type { HexTile, TerritoryOwner, EntityType } from "@/types";
 import {
   getContiguousTerritory,
   getTerritoryId,
@@ -11,7 +12,6 @@ import {
   TERRAIN_INCOME,
   CITY_BONUS,
 } from "@/utils/hexGrid";
-import type { HexTile, TerritoryOwner, EntityType } from "@/utils/hexGrid";
 import { calcTerritoryUpkeep } from "@/logic/gameLogic";
 import {
   dtSplitScore,

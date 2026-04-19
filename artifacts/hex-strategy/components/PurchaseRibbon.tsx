@@ -1,7 +1,7 @@
 import React from "react";
 import { Animated, ScrollView, StyleProp, Text, TouchableOpacity, ViewStyle } from "react-native";
 import { nextDefenseUpkeep } from "@/utils/hexGrid";
-import type { HexTile, TerritoryOwner, EntityType } from "@/utils/hexGrid";
+import type { HexTile, TerritoryOwner, EntityType } from "@/types";
 import {
   UNIT_PURCHASABLES,
   BUILDING_PURCHASABLES,

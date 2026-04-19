@@ -6,7 +6,7 @@ import {
   getContiguousTerritory,
   getTerritoryId,
 } from "@/utils/hexGrid";
-import type { EntityType, HexTile } from "@/utils/hexGrid";
+import type { EntityType, HexTile } from "@/types";
 import { BOTTOM_BAR_H } from "@/constants/gameConstants";
 import styles from "@/app/gameStyles";
 

@@ -23,6 +23,7 @@ import Animated, {
   Easing,
   cancelAnimation,
   runOnJS,
+  SharedValue,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
@@ -50,14 +51,20 @@ import {
   CITY_BUFFER_BORDER,
   TERRITORY_BORDERS,
 } from "@/constants/colors";
+import type {
+  EntityType,
+  HexTile,
+  TerritoryOwner,
+  BorderEdge,
+  AiStepSnapshot,
+  Difficulty,
+  AiState,
+} from "@/types";
 import {
   CITY_BONUS,
   ENTITY_META,
-  EntityType,
   HEX_EDGES,
-  HexTile,
   TERRAIN_INCOME,
-  TerritoryOwner,
   UNIT_UPGRADE,
   calcDefenseUpkeep,
   nextDefenseUpkeep,
@@ -77,8 +84,6 @@ import {
   recalculateTerritoriesForCapture,
   tileKey,
 } from "@/utils/hexGrid";
-
-import type { BorderEdge, AiStepSnapshot, Difficulty, AiState } from "@/types";
 import {
   BTN_H,
   BOTTOM_BAR_H,
@@ -118,7 +123,7 @@ function AnimatedMovingUnit({
   entityId: EntityType;
   owner: TerritoryOwner;
   hexSize: number;
-  progress: Animated.SharedValue<number>;
+  progress: SharedValue<number>;
 }) {
   const meta = ENTITY_META[entityId];
   const r = hexSize * 0.5;

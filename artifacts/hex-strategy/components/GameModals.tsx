@@ -6,7 +6,7 @@ import {
   View,
 } from "react-native";
 import { ENTITY_META, CITY_BONUS } from "@/utils/hexGrid";
-import type { EntityType } from "@/utils/hexGrid";
+import type { EntityType } from "@/types";
 import styles from "@/app/gameStyles";
 
 export interface EconBreakdown {

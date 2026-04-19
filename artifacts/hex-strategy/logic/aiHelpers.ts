@@ -1,7 +1,5 @@
+import type { EntityType, HexTile, TerritoryOwner } from "@/types";
 import {
-  EntityType,
-  HexTile,
-  TerritoryOwner,
   ENTITY_META,
   HEX_EDGES,
   TERRAIN_INCOME,

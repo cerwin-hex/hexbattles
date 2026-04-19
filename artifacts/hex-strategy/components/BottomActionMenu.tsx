@@ -1,7 +1,7 @@
 import React from "react";
 import { Text, TouchableOpacity, View, StyleProp, ViewStyle } from "react-native";
 import Animated from "react-native-reanimated";
-import type { EntityType } from "@/utils/hexGrid";
+import type { EntityType } from "@/types";
 import styles from "@/app/gameStyles";
 import type { EconBreakdown } from "@/components/GameModals";
 

@@ -2,7 +2,7 @@ import React from "react";
 import { Polygon } from "react-native-svg";
 import { TERRAIN_FILLS, TERRITORY_FILLS, CITY_NEUTRAL_FILL } from "@/constants/colors";
 import { hexCornersString } from "@/utils/hexGrid";
-import type { HexTile, TerritoryOwner } from "@/utils/hexGrid";
+import type { HexTile, TerritoryOwner } from "@/types";
 
 interface HexCellProps {
   tileKey: string;
