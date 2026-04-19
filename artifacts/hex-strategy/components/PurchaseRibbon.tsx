@@ -1,5 +1,5 @@
 import React from "react";
-import { Animated, ScrollView, Text, TouchableOpacity } from "react-native";
+import { Animated, ScrollView, StyleProp, Text, TouchableOpacity, ViewStyle } from "react-native";
 import { nextDefenseUpkeep } from "@/utils/hexGrid";
 import type { HexTile, TerritoryOwner, EntityType } from "@/utils/hexGrid";
 import {
@@ -11,7 +11,7 @@ import {
 import styles from "@/app/gameStyles";
 
 interface PurchaseRibbonProps {
-  ribbonStyle: any;
+  ribbonStyle: StyleProp<ViewStyle>;
   ribbonScrollRef: React.RefObject<ScrollView | null>;
   ribbonMode: "units" | "buildings" | null;
   botInset: number;

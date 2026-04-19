@@ -1,5 +1,5 @@
 import React from "react";
-import { Text, TouchableOpacity, View } from "react-native";
+import { Text, TouchableOpacity, View, StyleProp, ViewStyle } from "react-native";
 import Animated from "react-native-reanimated";
 import type { EntityType } from "@/utils/hexGrid";
 import styles from "@/app/gameStyles";
@@ -33,7 +33,7 @@ interface BottomActionMenuProps {
   handleAiStepNext: () => void;
   handleEndAiTurn: () => void;
   handleEndTurn: () => void;
-  endTurnStyle: any;
+  endTurnStyle: StyleProp<ViewStyle>;
 }
 
 export default function BottomActionMenu({
