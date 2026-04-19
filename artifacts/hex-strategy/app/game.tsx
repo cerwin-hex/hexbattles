@@ -64,28 +64,30 @@ import type {
   AiState,
 } from "@/types";
 import {
+  HEX_EDGES,
+  getBoardBounds,
+  hexCornerPoint,
+  hexCornersString,
+  hexDistance,
+  hexToPixel,
+  tileKey,
+} from "@/utils/hexMath";
+import {
   CITY_BONUS,
   ENTITY_META,
-  HEX_EDGES,
   TERRAIN_INCOME,
   UNIT_UPGRADE,
   calcDefenseUpkeep,
   nextDefenseUpkeep,
   findCentralTile,
   generateHexGrid,
-  getBoardBounds,
   getContiguousTerritory,
   getMaxEnemyZoC,
   getTerritoryId,
   getValidMoves,
   getMoveCost,
-  hexCornerPoint,
-  hexCornersString,
-  hexDistance,
-  hexToPixel,
   recalculateTerritories,
   recalculateTerritoriesForCapture,
-  tileKey,
 } from "@/utils/hexGrid";
 import {
   BTN_H,

@@ -1,7 +1,7 @@
 import type { EntityType, HexTile, TerritoryOwner } from "@/types";
+import { HEX_EDGES, hexDistance, tileKey } from "@/utils/hexMath";
 import {
   ENTITY_META,
-  HEX_EDGES,
   TERRAIN_INCOME,
   CITY_BONUS,
   getContiguousTerritory,
@@ -9,8 +9,6 @@ import {
   getMaxEnemyZoC,
   getValidMoves,
   getMoveCost,
-  hexDistance,
-  tileKey,
 } from "@/utils/hexGrid";
 import { calcTerritoryUpkeep, mergedUnitType } from "@/logic/gameLogic";
 

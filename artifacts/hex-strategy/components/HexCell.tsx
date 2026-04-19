@@ -1,6 +1,6 @@
 import React from "react";
 import { Polygon } from "react-native-svg";
-import { hexCornersString } from "@/utils/hexGrid";
+import { hexCornersString } from "@/utils/hexMath";
 
 interface HexCellProps {
   tileKey: string;

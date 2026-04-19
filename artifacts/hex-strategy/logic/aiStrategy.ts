@@ -1,12 +1,10 @@
 import type { HexTile, TerritoryOwner, EntityType } from "@/types";
+import { hexDistance, tileKey, HEX_EDGES } from "@/utils/hexMath";
 import {
   getContiguousTerritory,
   getTerritoryId,
   getValidMoves,
   getMaxEnemyZoC,
-  hexDistance,
-  tileKey,
-  HEX_EDGES,
   ENTITY_META,
   UNIT_UPGRADE,
   TERRAIN_INCOME,
