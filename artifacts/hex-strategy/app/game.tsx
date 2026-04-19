@@ -103,8 +103,11 @@ import {
   initTerritoryBalances,
   mergedUnitType,
 } from "@/logic/gameLogic";
-import type { AiContext } from "@/logic/aiHelpers";
-import { runAiTerritoryDecisionLoop } from "@/logic/aiStrategy";
+import {
+  runAiTurn as runAiTurnOrchestration,
+  type AiWorkingState,
+  type AiTurnCallbacks,
+} from "@/logic/aiStrategy";
 import styles from "@/app/gameStyles";
 import PurchaseRibbon from "@/components/PurchaseRibbon";
 import EntityPanel from "@/components/EntityPanel";
@@ -943,574 +946,70 @@ export default function GameScreen() {
       initialRuins?: Set<string>,
       initialCities?: Set<string>,
     ) => {
-      let workingTileMap = new Map(currentTileMap);
-      let workingEntities = new Map(currentEntities);
-      let workingBalances = new Map(currentBalances);
-      let workingLiveOwnerMap = new Map<string, TerritoryOwner>();
-      let workingGraveyard = new Set(initialGraveyard ?? graveyardRef.current);
-      let workingRuins = new Set(initialRuins ?? ruinsRef.current);
-      let workingCities = new Set(initialCities ?? citiesRef.current);
-      let workingSpentUnits = new Set<string>();
-      let workingPartialMoves = new Map<string, number>(); // remaining move range for partially-moved units
-      let workingFreeTowerUsed = new Map(freeTowerUsedTilesRef.current);
-      let workingLakeFunds = new Map(
-        initialLakeFunds ?? lakeUnitFundsRef.current,
-      );
-
-      // Snapshot state BEFORE any AI action so the user can step back to the start of AI's turn
-      const preAiSnap: AiStepSnapshot = {
+      const ws: AiWorkingState = {
+        tileMap: new Map(currentTileMap),
         entities: new Map(currentEntities),
-        mutableTileMap: new Map(currentTileMap),
-        territoryBalances: new Map(currentBalances),
-        liveOwnerMap: new Map(),
-        graveyard: new Set(workingGraveyard),
-        freeTowerUsedTiles: new Map(
-          [...workingFreeTowerUsed.entries()].map(([k, v]) => [k, new Set(v)]),
-        ),
+        balances: new Map(currentBalances),
+        liveOwnerMap: new Map<string, TerritoryOwner>(),
+        graveyard: new Set(initialGraveyard ?? graveyardRef.current),
+        ruins: new Set(initialRuins ?? ruinsRef.current),
+        cities: new Set(initialCities ?? citiesRef.current),
+        spentUnits: new Set<string>(),
+        partialMoves: new Map<string, number>(),
+        freeTowerUsed: new Map(freeTowerUsedTilesRef.current),
+        lakeFunds: new Map(initialLakeFunds ?? lakeUnitFundsRef.current),
       };
-      aiStepHistoryRef.current = [preAiSnap];
-      setAiHistoryIndex(0);
-      setAiHistoryLen(1);
 
-      // Dev mode: pause at index 0 so user sees the pre-AI state before the first action runs
-      if (isDeveloperModeRef.current) {
-        setIsAiPaused(true);
-        await new Promise<void>((resolve) => {
-          resumeAiRef.current = resolve;
-        });
-        resumeAiRef.current = null;
-        setIsAiPaused(false);
-      }
-
-      for (const aiOwner of aiOwners) {
-        if (aiTurnRef.current === false) return;
-
-        const visited = new Set<string>();
-        const aiTiles = Array.from(workingTileMap.values()).filter(
-          (t) => t.owner === aiOwner,
-        );
-        if (aiTiles.length === 0) continue;
-
-        for (const startTile of aiTiles) {
-          if (visited.has(startTile.key)) continue;
-          const territory = getContiguousTerritory(
-            workingTileMap,
-            startTile.key,
-            aiOwner,
-          );
-          for (const t of territory) visited.add(t.key);
-          const territoryId = getTerritoryId(territory);
-          if (!territoryId) continue;
-
-          // Free tower: each territory with ≥2 tiles may build one free tower, round 1 only
-          if (territory.length >= 2 && currentTurn === 1) {
-            const aiUsedSet = workingFreeTowerUsed.get(aiOwner);
-            const hasUsedFreeTower =
-              !!aiUsedSet && territory.some((t) => aiUsedSet.has(t.key));
-            if (!hasUsedFreeTower) {
-              // Fix 5: Round 1 Tower Optimization — evaluate ALL valid owned tiles globally
-              // and place the tower on the tile whose ZoC covers the most owned tiles.
-              // No pre-filtering buckets; score is the true global argmax across the territory.
-              const allValidTowerCands: string[] = territory
-                .filter(
-                  (t) =>
-                    t.terrain !== "mountain" &&
-                    t.terrain !== "lake" &&
-                    !workingEntities.has(t.key) &&
-                    !workingGraveyard.has(t.key),
-                )
-                .map((t) => t.key);
-              if (allValidTowerCands.length > 0) {
-                const scoreCandidate = (candKey: string): number => {
-                  const [cq, cr] = candKey.split(",").map(Number);
-                  let ownedCovered = 0;
-                  for (const { dir: [dq, dr] } of HEX_EDGES) {
-                    const nk = tileKey(cq + dq, cr + dr);
-                    const nt = workingTileMap.get(nk);
-                    if (nt && nt.owner === aiOwner) ownedCovered++;
-                  }
-                  return ownedCovered;
-                };
-                const towerKey = allValidTowerCands.reduce((bestKey, candKey) => {
-                  return scoreCandidate(candKey) > scoreCandidate(bestKey) ? candKey : bestKey;
-                }, allValidTowerCands[0]);
-                workingEntities = new Map(workingEntities);
-                workingEntities.set(towerKey, "tower");
-                const newOwnerSet = new Set(
-                  workingFreeTowerUsed.get(aiOwner) ?? [],
-                );
-                for (const t of territory) newOwnerSet.add(t.key);
-                workingFreeTowerUsed = new Map(workingFreeTowerUsed);
-                workingFreeTowerUsed.set(aiOwner, newOwnerSet);
-                setFreeTowerUsedTiles(new Map(workingFreeTowerUsed));
-                setEntities(new Map(workingEntities));
-                setAiStateMap(new Map(aiStateMapRef.current));
-                await awaitStep({
-                  entities: new Map(workingEntities),
-                  mutableTileMap: new Map(workingTileMap),
-                  territoryBalances: new Map(workingBalances),
-                  liveOwnerMap: new Map(workingLiveOwnerMap),
-                  graveyard: new Set(workingGraveyard),
-                  freeTowerUsedTiles: new Map(
-                    [...workingFreeTowerUsed.entries()].map(([k, v]) => [
-                      k,
-                      new Set(v),
-                    ]),
-                  ),
-                });
-                if (!aiTurnRef.current) return;
-              }
-            }
+      const cbs: AiTurnCallbacks = {
+        setEntities,
+        setMutableTileMap,
+        setTerritoryBalances,
+        setGraveyard,
+        setRuins,
+        setLiveOwnerMap,
+        setCities,
+        setFreeTowerUsedTiles,
+        setAiStateMap,
+        setLakeUnitFunds,
+        initStepHistory: (snap) => {
+          aiStepHistoryRef.current = [snap];
+          setAiHistoryIndex(0);
+          setAiHistoryLen(1);
+        },
+        awaitStep,
+        awaitPreAiResume: async () => {
+          if (isDeveloperModeRef.current) {
+            setIsAiPaused(true);
+            await new Promise<void>((resolve) => {
+              resumeAiRef.current = resolve;
+            });
+            resumeAiRef.current = null;
+            setIsAiPaused(false);
           }
-
-          // Round 1: only the free tower is allowed — no other purchases
-          if (currentTurn === 1) continue;
-
-          // === STATE-DEPENDENT DECISION TREE AI ===
-          // Runs per territory, looping until no more valid actions exist.
-          // Priorities 1 & 2 are DEFENDING-only; A-H run in all states.
-
-          const difficulty = aiDifficultyRef.current;
-
-          // ─── Decision Tree Helpers (delegating to aiHelpers module) ────────
-          // aiCtx uses getters so it always reads the current `let` variable,
-          // even after reassignment (e.g. workingTileMap = new Map(...)).
-          const aiCtx: AiContext = {
-            get tileMap() { return workingTileMap; },
-            get entities() { return workingEntities; },
-            get balances() { return workingBalances; },
-            get cities() { return workingCities; },
-            get spentUnits() { return workingSpentUnits; },
-            get partialMoves() { return workingPartialMoves; },
-            get aiOwner() { return aiOwner; },
-          };
-
-          // Consolidated awaitStep call for the decision tree
-          const dtAwait = async (): Promise<void> => {
-            await awaitStep({
-              entities: new Map(workingEntities),
-              mutableTileMap: new Map(workingTileMap),
-              territoryBalances: new Map(workingBalances),
-              liveOwnerMap: new Map(workingLiveOwnerMap),
-              graveyard: new Set(workingGraveyard),
-              freeTowerUsedTiles: new Map(
-                [...workingFreeTowerUsed.entries()].map(([k, v]) => [k, new Set(v)]),
-              ),
+        },
+        awaitPostAiResume: async () => {
+          if (isDeveloperModeRef.current) {
+            setIsAiTurnDone(true);
+            await new Promise<void>((resolve) => {
+              resumeAfterAiRef.current = resolve;
             });
-          };
-
-          // Publish updated AI state label after a move
-          const dtPublishState = (anchorKey: string): void => {
-            const updTerr = getContiguousTerritory(workingTileMap, anchorKey, aiOwner);
-            const updId = getTerritoryId(updTerr);
-            if (!updId) return;
-            const updMaxStr = updTerr.reduce((best, t) => {
-              const e = workingEntities.get(t.key);
-              return e ? Math.max(best, ENTITY_META[e].strength) : best;
-            }, 0);
-            const updBorder = updTerr.filter((t) => {
-              const [tq, tr] = t.key.split(",").map(Number);
-              return HEX_EDGES.some(({ dir: [dq, dr] }) => {
-                const nk = tileKey(tq + dq, tr + dr);
-                const nb = workingTileMap.get(nk);
-                return !!nb && nb.owner !== aiOwner;
-              });
-            });
-            const updThreatened = updBorder.some((bt) => {
-              const [bq, br] = bt.key.split(",").map(Number);
-              for (const [ek, ee] of workingEntities) {
-                if (!ENTITY_META[ee].isUnit) continue;
-                const et = workingTileMap.get(ek);
-                if (!et || et.owner === aiOwner || et.owner === "neutral") continue;
-                const [eq2, er2] = ek.split(",").map(Number);
-                if (hexDistance(bq, br, eq2, er2) <= 3 && ENTITY_META[ee].strength > updMaxStr) return true;
-              }
-              return false;
-            });
-            aiStateMapRef.current = new Map(aiStateMapRef.current);
-            aiStateMapRef.current.set(updId, updThreatened ? "defending" : "attacking");
-            setAiStateMap(new Map(aiStateMapRef.current));
-          };
-
-          // Execute a unit move (fromKey → toKey); updates all working state and triggers animation
-          const dtExecMove = async (fromKey: string, toKey: string): Promise<boolean> => {
-            if (!aiTurnRef.current) return false;
-            const unitEntity = workingEntities.get(fromKey);
-            if (!unitEntity) return false;
-            const destTile = workingTileMap.get(toKey);
-            if (!destTile) return false;
-            const srcTile = workingTileMap.get(fromKey);
-            const movingFromLake = srcTile?.terrain === "lake";
-            const movingToLake = destTile.terrain === "lake";
-            const previousOwner = destTile.owner as TerritoryOwner;
-            const prevTileMapSnapshot = new Map(workingTileMap);
-
-            // Pre-check: ensure enough balance for lake transfer (2× upkeep) before mutating state
-            if (movingToLake && !movingFromLake) {
-              const srcTerrPre = getContiguousTerritory(prevTileMapSnapshot, fromKey, aiOwner);
-              const srcIdPre = getTerritoryId(srcTerrPre);
-              if (srcIdPre) {
-                const unitUpkPre = ENTITY_META[unitEntity].upkeep;
-                const srcBalPre = workingBalances.get(srcIdPre) ?? 0;
-                if (srcBalPre < unitUpkPre * 2) return false;
-              } else {
-                return false;
-              }
-            }
-
-            workingTileMap = new Map(workingTileMap);
-            workingTileMap.set(toKey, { ...destTile, owner: aiOwner });
-            workingEntities = new Map(workingEntities);
-
-            const destExisting = workingEntities.get(toKey);
-            const isAllyMerge =
-              destExisting &&
-              ENTITY_META[destExisting].isUnit &&
-              destTile.owner === aiOwner &&
-              ENTITY_META[unitEntity].strength + ENTITY_META[destExisting].strength <= 3;
-
-            // NOTE: cities are tracked in workingCities (not entities), so
-            // destExisting will never be "city" — no special branch needed.
-            if (isAllyMerge) {
-              const merged = mergedUnitType(
-                ENTITY_META[unitEntity].strength,
-                ENTITY_META[destExisting].strength,
-              );
-              workingEntities.delete(fromKey);
-              workingEntities.set(toKey, merged);
-            } else {
-              workingEntities.delete(toKey);
-              workingEntities.delete(fromKey);
-              workingEntities.set(toKey, unitEntity);
-            }
-
-            workingSpentUnits = new Set(workingSpentUnits);
-            // Merge: only mark the "from" unit spent — the merged result at toKey
-            // is a fresh unit and must be free to act in the next while-loop iteration.
-            if (isAllyMerge) {
-              workingSpentUnits.add(fromKey);
-            } else {
-              workingSpentUnits.add(toKey);
-            }
-
-            // Track partial movement: merged unit inherits the MIN remaining range of both units.
-            {
-              const stepsUsed = getMoveCost(fromKey, toKey, prevTileMapSnapshot);
-              const prevRemaining = workingPartialMoves.get(fromKey) ?? 3;
-              const remainingAfterMove = movingToLake ? 0 : Math.max(0, prevRemaining - stepsUsed);
-              workingPartialMoves = new Map(workingPartialMoves);
-              workingPartialMoves.delete(fromKey);
-              if (isAllyMerge) {
-                const destRemaining = workingPartialMoves.get(toKey) ?? 3;
-                const mergedRemaining = Math.min(remainingAfterMove, destRemaining);
-                workingPartialMoves.delete(toKey);
-                if (mergedRemaining < 3) {
-                  workingPartialMoves.set(toKey, mergedRemaining);
-                }
-              } else {
-                workingPartialMoves.delete(toKey);
-                if (remainingAfterMove < 3) {
-                  workingPartialMoves.set(toKey, remainingAfterMove);
-                }
-              }
-            }
-
-            workingLakeFunds = new Map(workingLakeFunds);
-            if (movingToLake && !movingFromLake) {
-              const srcTerrLake = getContiguousTerritory(prevTileMapSnapshot, fromKey, aiOwner);
-              const srcIdLake = getTerritoryId(srcTerrLake);
-              if (srcIdLake) {
-                const lakeAmount = ENTITY_META[unitEntity].upkeep * 2;
-                workingBalances = new Map(workingBalances);
-                workingBalances.set(srcIdLake, (workingBalances.get(srcIdLake) ?? 0) - lakeAmount);
-                workingLakeFunds.set(toKey, lakeAmount);
-              }
-            } else if (movingFromLake && movingToLake) {
-              const fund = workingLakeFunds.get(fromKey) ?? 0;
-              workingLakeFunds.delete(fromKey);
-              workingLakeFunds.set(toKey, fund);
-              workingTileMap.set(fromKey, { ...srcTile!, owner: "neutral" });
-              workingLiveOwnerMap = new Map(workingLiveOwnerMap);
-              workingLiveOwnerMap.delete(fromKey);
-            } else if (movingFromLake && !movingToLake) {
-              const fund = workingLakeFunds.get(fromKey) ?? 0;
-              workingLakeFunds.delete(fromKey);
-              workingTileMap.set(fromKey, { ...srcTile!, owner: "neutral" });
-              workingLiveOwnerMap = new Map(workingLiveOwnerMap);
-              workingLiveOwnerMap.delete(fromKey);
-              workingBalances = recalculateTerritoriesForCapture(
-                toKey, aiOwner, previousOwner, prevTileMapSnapshot, workingTileMap, workingBalances,
-              );
-              if (fund > 0) {
-                const newTerr = getContiguousTerritory(workingTileMap, toKey, aiOwner);
-                const newId = getTerritoryId(newTerr);
-                if (newId) {
-                  workingBalances = new Map(workingBalances);
-                  workingBalances.set(newId, (workingBalances.get(newId) ?? 0) + fund);
-                }
-              }
-            } else {
-              workingBalances = recalculateTerritoriesForCapture(
-                toKey, aiOwner, previousOwner, prevTileMapSnapshot, workingTileMap, workingBalances,
-              );
-            }
-
-            workingLiveOwnerMap = new Map(workingLiveOwnerMap);
-            workingLiveOwnerMap.set(toKey, aiOwner);
-            workingGraveyard = new Set(workingGraveyard);
-            workingGraveyard.delete(toKey);
-            applySingleHexPenalty(
-              prevTileMapSnapshot, workingTileMap, workingBalances, workingEntities,
-              workingGraveyard, workingRuins,
-              movingFromLake && !movingToLake ? toKey : undefined,
-            );
-            setRuins(new Set(workingRuins));
-
-            if (!isDeveloperModeRef.current) {
-              await new Promise<void>((resolve) => {
-                triggerUnitAnimation(fromKey, toKey, unitEntity, aiOwner as TerritoryOwner, true, () => {
-                  setMutableTileMap(new Map(workingTileMap));
-                  setLiveOwnerMap(new Map(workingLiveOwnerMap));
-                  setEntities(new Map(workingEntities));
-                  setTerritoryBalances(new Map(workingBalances));
-                  setGraveyard(new Set(workingGraveyard));
-                  resolve();
-                });
-              });
-            } else {
-              setMutableTileMap(new Map(workingTileMap));
-              setLiveOwnerMap(new Map(workingLiveOwnerMap));
-              setEntities(new Map(workingEntities));
-              setTerritoryBalances(new Map(workingBalances));
-              setGraveyard(new Set(workingGraveyard));
-            }
-
-            dtPublishState(toKey);
-            await dtAwait();
-            return true;
-          };
-
-          // Execute a buy action: place unitType at target
-          // outside=true means target is outside the territory (direct capture attack)
-          const dtExecBuy = async (
-            unitType: EntityType, target: string, cost: number, outside: boolean,
-          ): Promise<boolean> => {
-            if (!aiTurnRef.current) return false;
-            workingEntities = new Map(workingEntities);
-            workingBalances = new Map(workingBalances);
-
-            if (!outside) {
-              const wasRebel = workingEntities.get(target) === "rebel";
-              if (unitType === "city") {
-                workingCities = new Set(workingCities);
-                workingCities.add(target);
-              } else {
-                workingEntities.set(target, unitType);
-              }
-              const buyTerr = getContiguousTerritory(workingTileMap, startTile.key, aiOwner);
-              const buyTid = getTerritoryId(buyTerr);
-              if (buyTid) workingBalances.set(buyTid, (workingBalances.get(buyTid) ?? 0) - cost);
-              if (wasRebel) {
-                workingSpentUnits = new Set(workingSpentUnits);
-                workingSpentUnits.add(target);
-              }
-            } else {
-              const previousOwner = (workingTileMap.get(target)?.owner ?? "neutral") as TerritoryOwner;
-              const prevSnapshot = new Map(workingTileMap);
-              workingTileMap = new Map(workingTileMap);
-              const targetTile = workingTileMap.get(target);
-              if (targetTile && (targetTile.terrain === "mountain" || targetTile.terrain === "lake")) return false;
-              if (targetTile) workingTileMap.set(target, { ...targetTile, owner: aiOwner });
-              if (unitType === "city") {
-                workingCities = new Set(workingCities);
-                workingCities.add(target);
-              } else {
-                workingEntities.delete(target);
-                workingEntities.set(target, unitType);
-              }
-              workingBalances = recalculateTerritoriesForCapture(
-                target, aiOwner, previousOwner, prevSnapshot, workingTileMap, workingBalances,
-              );
-              const mergedTerr = getContiguousTerritory(workingTileMap, target, aiOwner);
-              const mergedId = getTerritoryId(mergedTerr);
-              if (mergedId) workingBalances.set(mergedId, (workingBalances.get(mergedId) ?? 0) - cost);
-              applySingleHexPenalty(prevSnapshot, workingTileMap, workingBalances, workingEntities, workingGraveyard, workingRuins);
-              setRuins(new Set(workingRuins));
-              workingLiveOwnerMap = new Map(workingLiveOwnerMap);
-              workingLiveOwnerMap.set(target, aiOwner);
-              workingSpentUnits = new Set(workingSpentUnits);
-              workingSpentUnits.add(target);
-              setMutableTileMap(new Map(workingTileMap));
-              setLiveOwnerMap(new Map(workingLiveOwnerMap));
-            }
-
-            setEntities(new Map(workingEntities));
-            setCities(new Set(workingCities));
-            setTerritoryBalances(new Map(workingBalances));
-            setAiStateMap(new Map(aiStateMapRef.current));
-            await dtAwait();
-            return true;
-          };
-
-          // Execute a building upgrade (change entity on tile in place)
-          const dtExecUpgrade = async (targetKey: string, to: EntityType, cost: number): Promise<boolean> => {
-            if (!aiTurnRef.current) return false;
-            workingEntities = new Map(workingEntities);
-            workingEntities.set(targetKey, to);
-            workingBalances = new Map(workingBalances);
-            const buyTerr = getContiguousTerritory(workingTileMap, startTile.key, aiOwner);
-            const buyTid = getTerritoryId(buyTerr);
-            if (buyTid) workingBalances.set(buyTid, (workingBalances.get(buyTid) ?? 0) - cost);
-            setEntities(new Map(workingEntities));
-            setTerritoryBalances(new Map(workingBalances));
-            await dtAwait();
-            return true;
-          };
-
-          // Build a building inside the territory (no ownership change)
-          const dtExecBuild = async (buildingType: EntityType, targetKey: string, cost: number): Promise<boolean> => {
-            if (!aiTurnRef.current) return false;
-            workingBalances = new Map(workingBalances);
-            if (buildingType === "city") {
-              workingCities = new Set(workingCities);
-              workingCities.add(targetKey);
-            } else {
-              workingEntities = new Map(workingEntities);
-              workingEntities.set(targetKey, buildingType);
-            }
-            const buyTerr = getContiguousTerritory(workingTileMap, startTile.key, aiOwner);
-            const buyTid = getTerritoryId(buyTerr);
-            if (buyTid) workingBalances.set(buyTid, (workingBalances.get(buyTid) ?? 0) - cost);
-            setEntities(new Map(workingEntities));
-            setCities(new Set(workingCities));
-            setTerritoryBalances(new Map(workingBalances));
-            await dtAwait();
-            return true;
-          };
-
-          // Remove a building (Priority H)
-          const dtExecRemove = async (targetKey: string): Promise<boolean> => {
-            if (!aiTurnRef.current) return false;
-            workingEntities = new Map(workingEntities);
-            workingEntities.delete(targetKey);
-            setEntities(new Map(workingEntities));
-            setTerritoryBalances(new Map(workingBalances));
-            await dtAwait();
-            return true;
-          };
-
-          // markSpent: direct working-state mutation (no React publish needed mid-loop)
-          const markSpent = (key: string): void => {
-            workingSpentUnits = new Set(workingSpentUnits);
-            workingSpentUnits.add(key);
-          };
-
-          // setTerritoryState: update the AI state label for dev-mode display
-          const setTerritoryState = (tid: string, state: AiState): void => {
-            aiStateMapRef.current = new Map(aiStateMapRef.current);
-            aiStateMapRef.current.set(tid, state);
-            setAiStateMap(new Map(aiStateMapRef.current));
-          };
-
-          // ─── Decision Tree Loop ────────────────────────────────────────────────────
-          await runAiTerritoryDecisionLoop(
-            startTile.key,
-            aiCtx,
-            {
-              move: dtExecMove,
-              buy: dtExecBuy,
-              upgrade: dtExecUpgrade,
-              build: dtExecBuild,
-              remove: dtExecRemove,
-              markSpent,
-              setTerritoryState,
-            },
-            () => aiTurnRef.current,
-            difficulty,
-          );
-        }
-      }
-
-      // ── Player bankruptcy check after all AI moves ────────────────────────
-      // When the AI splits or overruns a player territory, the resulting
-      // isolated sub-territory may have 0 balance + negative income delta.
-      // We kill those units now so the player sees graveyards immediately at
-      // the start of their turn (mirrors the same logic in handleEndTurn).
-      if (currentTurn !== 1) {
-        const playerVisited = new Set<string>();
-        let playerBankruptcyOccurred = false;
-        for (const tile of Array.from(workingTileMap.values())) {
-          if (tile.owner !== "player" || playerVisited.has(tile.key)) continue;
-          if (tile.terrain === "mountain" || tile.terrain === "lake") continue;
-          const territory = getContiguousTerritory(
-            workingTileMap,
-            tile.key,
-            "player",
-          );
-          for (const t of territory) playerVisited.add(t.key);
-          const territoryId = getTerritoryId(territory);
-          if (!territoryId) continue;
-          const income = territory.reduce((s, t) => {
-            if (workingEntities.get(t.key) === "rebel") return s;
-            return (
-              s +
-              TERRAIN_INCOME[t.terrain] +
-              (workingCities.has(t.key) ? CITY_BONUS : 0)
-            );
-          }, 0);
-          const upkeep = calcTerritoryUpkeep(territory, workingEntities);
-          const current = workingBalances.get(territoryId) ?? 0;
-          const delta = income - upkeep;
-          const newBalance = current + delta;
-          if (newBalance < 0) {
-            playerBankruptcyOccurred = true;
-            workingBalances = new Map(workingBalances);
-            workingBalances.set(territoryId, 0);
-            workingEntities = new Map(workingEntities);
-            let unitUpkeepSaved = 0;
-            for (const t of territory) {
-              const e = workingEntities.get(t.key);
-              if (e && ENTITY_META[e].isUnit) {
-                unitUpkeepSaved += ENTITY_META[e].upkeep;
-                workingEntities.delete(t.key);
-                workingGraveyard = new Set(workingGraveyard);
-                workingGraveyard.add(t.key);
-              }
-            }
-            if (delta + unitUpkeepSaved < 0) {
-              for (const t of territory) {
-                const e = workingEntities.get(t.key);
-                if (e && !ENTITY_META[e].isUnit && e !== "rebel" && e !== "city") {
-                  workingEntities.delete(t.key);
-                  workingRuins = new Set(workingRuins);
-                  workingRuins.add(t.key);
-                }
-              }
-            }
+            resumeAfterAiRef.current = null;
+            setIsAiTurnDone(false);
           }
-        }
-        if (playerBankruptcyOccurred) {
-          setEntities(new Map(workingEntities));
-          setTerritoryBalances(new Map(workingBalances));
-          setGraveyard(new Set(workingGraveyard));
-          setRuins(new Set(workingRuins));
-        }
-      }
-      // ─────────────────────────────────────────────────────────────────────
+        },
+        getAiStateMapRef: () => aiStateMapRef.current,
+        setAiStateMapRef: (v) => { aiStateMapRef.current = v; },
+        isTurnActive: () => aiTurnRef.current,
+        isDeveloperMode: () => isDeveloperModeRef.current,
+        triggerUnitAnimation,
+        recalculateTerritoriesForCapture,
+        applySingleHexPenalty,
+        setIsAiTurn,
+        setAiTurnRef: (v) => { aiTurnRef.current = v; },
+        checkWinLoss,
+      };
 
-      setLakeUnitFunds(new Map(workingLakeFunds));
-      // Dev mode: pause after all AI steps so user can review before player's turn begins
-      if (isDeveloperModeRef.current) {
-        setIsAiTurnDone(true);
-        await new Promise<void>((resolve) => {
-          resumeAfterAiRef.current = resolve;
-        });
-        resumeAfterAiRef.current = null;
-        setIsAiTurnDone(false);
-      }
-      setIsAiTurn(false);
-      aiTurnRef.current = false;
-      checkWinLoss(workingTileMap);
+      await runAiTurnOrchestration(ws, cbs, aiOwners, currentTurn ?? 0, aiDifficultyRef.current);
     },
     [aiOwners, checkWinLoss, awaitStep, triggerUnitAnimation],
   );
