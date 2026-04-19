@@ -188,7 +188,10 @@ export function getValidMoves(
         const allyIsRebel = allyEntity === 'rebel';
         const allyIsCity = allyEntity === 'city';
         const allyIsUnit = allyEntity ? ENTITY_META[allyEntity].isUnit : false;
-        if (!allyEntity || allyIsRebel || allyIsCity) {
+        if (!allyEntity || allyIsRebel) {
+          result.add(nk);
+          queue.push({ key: nk, cost: newCost });
+        } else if (allyIsCity) {
           result.add(nk);
           queue.push({ key: nk, cost: newCost });
         } else if (allyIsUnit) {

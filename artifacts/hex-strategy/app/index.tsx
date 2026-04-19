@@ -24,7 +24,7 @@ const TILE_MIN = 40;
 const TILE_MAX = 300;
 const THUMB_SIZE = 26;
 
-type Difficulty = 'easy' | 'medium' | 'hard';
+type Difficulty = 'super_easy' | 'easy' | 'medium' | 'hard' | 'super_hard';
 
 const UNIT_ROWS = [
   { icon: '⚔️', name: 'Basic Unit', cost: 10, upkeep: 3, strength: 1 },
@@ -107,7 +107,7 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
               </Text>
             </View>
 
-            <View style={[styles.ruleSection, { marginBottom: 8 }]}>
+            <View style={styles.ruleSection}>
               <Text style={styles.ruleSectionTitle}>Terrain</Text>
               <View style={styles.ruleDivider} />
               {[
@@ -120,6 +120,23 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
                 <View key={t.name} style={styles.terrainRow}>
                   <Text style={styles.terrainName}>{t.name}</Text>
                   <Text style={styles.terrainDesc}> — {t.desc}</Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={[styles.ruleSection, { marginBottom: 8 }]}>
+              <Text style={styles.ruleSectionTitle}>Difficulty</Text>
+              <View style={styles.ruleDivider} />
+              {[
+                { name: 'Super Easy', desc: 'The AI earns noticeably less income from its territories each round, giving you a big economic advantage.' },
+                { name: 'Easy', desc: 'The AI plays sloppily and skips many of its available moves, making it predictable and easy to outmanoeuvre.' },
+                { name: 'Medium', desc: 'The AI occasionally misses opportunities but still builds and expands steadily. A fair challenge for most players.' },
+                { name: 'Hard', desc: 'The AI uses a strategic decision tree and smart pathfinding to attack, defend, and expand as efficiently as possible.' },
+                { name: 'Super Hard', desc: 'The AI earns extra income from every hex it controls each round, giving it a significant economic edge over time.' },
+              ].map(d => (
+                <View key={d.name} style={[styles.terrainRow, { marginBottom: 4 }]}>
+                  <Text style={[styles.terrainName, { fontWeight: '700' }]}>{d.name}</Text>
+                  <Text style={[styles.terrainDesc, { flexShrink: 1 }]}> — {d.desc}</Text>
                 </View>
               ))}
             </View>
@@ -248,7 +265,13 @@ export default function MainMenuScreen() {
           <View style={styles.section}>
             <Text style={styles.label}>AI Difficulty</Text>
             <View style={styles.pills}>
-              {(['easy', 'medium', 'hard'] as Difficulty[]).map(d => (
+              {([
+                ['super_easy', 'S.Easy'],
+                ['easy', 'Easy'],
+                ['medium', 'Medium'],
+                ['hard', 'Hard'],
+                ['super_hard', 'S.Hard'],
+              ] as [Difficulty, string][]).map(([d, label]) => (
                 <TouchableOpacity
                   key={d}
                   style={[styles.diffPill, difficulty === d && styles.diffPillActive]}
@@ -256,7 +279,7 @@ export default function MainMenuScreen() {
                   activeOpacity={0.7}
                 >
                   <Text style={[styles.diffText, difficulty === d && styles.diffTextActive]}>
-                    {d.charAt(0).toUpperCase() + d.slice(1)}
+                    {label}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -385,7 +408,7 @@ const styles = StyleSheet.create({
   },
   pills: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 6,
   },
   pill: {
     flex: 1,
@@ -424,10 +447,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#3A2A10',
   },
   diffText: {
-    fontSize: 10,
+    fontSize: 9,
     fontFamily: 'Cinzel_400Regular',
     color: '#A08A60',
-    letterSpacing: 1.5,
+    letterSpacing: 0.5,
+    textAlign: 'center',
   },
   diffTextActive: {
     color: '#C8A24A',
