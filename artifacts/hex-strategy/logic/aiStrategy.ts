@@ -22,6 +22,12 @@ import {
 import type { AiContext } from "@/logic/aiHelpers";
 import type { AiState, Difficulty } from "@/types";
 
+/**
+ * Callbacks executed by the AI decision loop. The implementations live in
+ * game.tsx because each one must update React state and await animations.
+ * Keeping exec in the caller preserves the "no game-logic changes" invariant
+ * while separating the decision tree from the rendering layer.
+ */
 export interface AiDecisionExec {
   move(from: string, to: string): Promise<boolean>;
   buy(type: EntityType, target: string, cost: number, outside: boolean): Promise<boolean>;
@@ -32,6 +38,14 @@ export interface AiDecisionExec {
   setTerritoryState(tid: string, state: AiState): void;
 }
 
+/**
+ * Single entry point for one AI player's full turn. The AI evaluates and
+ * executes many sequential actions per territory (move, buy, upgrade, build,
+ * remove). A "single action returned" model is not compatible with this
+ * multi-step loop without rewriting the game's turn flow. Instead, this
+ * function is called once per AI turn and drives all decisions through the
+ * exec callbacks which update React state in game.tsx.
+ */
 export async function runAiTerritoryDecisionLoop(
   startTileKey: string,
   aiCtx: AiContext,
