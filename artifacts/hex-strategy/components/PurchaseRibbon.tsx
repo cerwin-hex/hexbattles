@@ -12,7 +12,7 @@ import styles from "@/app/gameStyles";
 
 interface PurchaseRibbonProps {
   ribbonStyle: any;
-  ribbonScrollRef: React.RefObject<ScrollView>;
+  ribbonScrollRef: React.RefObject<ScrollView | null>;
   ribbonMode: "units" | "buildings" | null;
   botInset: number;
   selectedEntityKey: string | null;
