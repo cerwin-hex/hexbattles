@@ -126,10 +126,10 @@ import { AffordableTerritoryLayer } from "@/components/AffordableTerritoryLayer"
 import {
   computeBorderEdges,
   computeOuterTerritoryEdges,
-  computeSelectionBorderEdges,
   type BorderEdgesCache,
   type OuterEdgesCache,
 } from "@/utils/borderEdges";
+import { useSelectionState } from "@/hooks/useSelectionState";
 
 export default function GameScreen() {
 
@@ -692,169 +692,39 @@ export default function GameScreen() {
     [aiOwners, checkWinLoss, awaitStep, triggerUnitAnimation],
   );
 
-  const selectedTerritory = useMemo<HexTile[]>(() => {
-    if (!selectedTileKey) return [];
-    const tile = activeTileMap.get(selectedTileKey);
-    if (!tile || tile.owner !== "player") return [];
-    return getContiguousTerritory(activeTileMap, selectedTileKey, "player");
-  }, [selectedTileKey, activeTileMap]);
-
-  const selectedTerritoryId = useMemo<string | null>(
-    () => getTerritoryId(selectedTerritory),
-    [selectedTerritory],
-  );
-
-  const selectedTerritoryBalance = useMemo<number>(() => {
-    if (selectedTerritoryId) {
-      return territoryBalances.get(selectedTerritoryId) ?? 0;
-    }
-    let max = 0;
-    for (const v of territoryBalances.values()) {
-      if (v > max) max = v;
-    }
-    return max;
-  }, [selectedTerritoryId, territoryBalances]);
-
-  const selectedTileKeys = useMemo<Set<string>>(
-    () => new Set(selectedTerritory.map((t) => t.key)),
-    [selectedTerritory],
-  );
-
-  const selectedTerritoryDefenseCounts = useMemo<{ tower: number; castle: number }>(() => {
-    let tower = 0, castle = 0;
-    for (const t of selectedTerritory) {
-      const e = entities.get(t.key);
-      if (e === "tower") tower++;
-      else if (e === "castle") castle++;
-    }
-    return { tower, castle };
-  }, [selectedTerritory, entities]);
-
-  const validMoveTiles = useMemo<Set<string>>(() => {
-    if (!selectedEntityKey) return new Set();
-    const tile = activeTileMap.get(selectedEntityKey);
-    if (!tile || tile.owner !== "player") return new Set();
-    const entityId = entities.get(selectedEntityKey);
-    if (!entityId || !ENTITY_META[entityId].isUnit) return new Set();
-    const movingStrength = ENTITY_META[entityId].strength;
-    const remaining = partialMoves.get(selectedEntityKey) ?? 3;
-    const raw = getValidMoves(
-      selectedEntityKey,
-      "player",
-      entities,
-      activeTileMap,
-      spentUnits,
-      remaining,
-    );
-    // Remove ally unit tiles where merge is invalid: combined strength > 3, or dest is combat-spent
-    for (const k of raw) {
-      const destTile = activeTileMap.get(k);
-      if (destTile?.owner !== "player") continue;
-      const destEntity = entities.get(k);
-      if (!destEntity || !ENTITY_META[destEntity].isUnit) continue;
-      if (movingStrength + ENTITY_META[destEntity].strength > 3) raw.delete(k);
-      else if (combatSpentUnits.has(k)) raw.delete(k);
-    }
-    return raw;
-  }, [
-    selectedEntityKey,
-    entities,
-    activeTileMap,
-    spentUnits,
-    partialMoves,
-    combatSpentUnits,
-  ]);
-
-  const fortificationDots = useMemo<Set<string>>(() => {
-    let territory: HexTile[];
-    if (selectedEntityKey) {
-      const selEntity = entities.get(selectedEntityKey);
-      if (!selEntity || ENTITY_META[selEntity].isUnit || selEntity === "city")
-        return new Set();
-      territory = getContiguousTerritory(
-        activeTileMap,
-        selectedEntityKey,
-        "player",
-      );
-    } else if (
-      armedEntityId &&
-      !ENTITY_META[armedEntityId].isUnit &&
-      armedEntityId !== "city"
-    ) {
-      territory = selectedTerritory;
-    } else {
-      return new Set();
-    }
-    const territoryKeys = new Set(territory.map((t) => t.key));
-    const dots = new Set<string>();
-    for (const t of territory) {
-      const e = entities.get(t.key);
-      if (!e || ENTITY_META[e].isUnit || e === "city" || e === "rebel")
-        continue;
-      dots.add(t.key);
-      const [q, r] = t.key.split(",").map(Number);
-      for (const {
-        dir: [dq, dr],
-      } of HEX_EDGES) {
-        const nk = tileKey(q + dq, r + dr);
-        if (territoryKeys.has(nk)) dots.add(nk);
-      }
-    }
-    return dots;
-  }, [
-    selectedEntityKey,
-    armedEntityId,
+  const {
     selectedTerritory,
-    entities,
-    activeTileMap,
-  ]);
-
-  const validPlacementAttackTiles = useMemo<Set<string>>(() => {
-    if (!armedEntityId) return new Set();
-    const meta = ENTITY_META[armedEntityId];
-    if (!meta.isUnit) return new Set();
-    const result = new Set<string>();
-    for (const tile of selectedTerritory) {
-      if (tile.terrain === "mountain" || tile.terrain === "lake") continue;
-      const [q, r] = tile.key.split(",").map(Number);
-      for (const {
-        dir: [dq, dr],
-      } of HEX_EDGES) {
-        const nk = tileKey(q + dq, r + dr);
-        if (selectedTileKeys.has(nk)) continue;
-        const neighbor = activeTileMap.get(nk);
-        if (!neighbor) continue;
-        if (neighbor.terrain === "mountain" || neighbor.terrain === "lake")
-          continue;
-        const existingEntity = entities.get(nk);
-        if (existingEntity && existingEntity !== "rebel") {
-          // buildings with higher strength can't be captured
-          if (
-            !ENTITY_META[existingEntity].isUnit &&
-            meta.strength < ENTITY_META[existingEntity].strength
-          )
-            continue;
-        }
-        const enemyZoC = getMaxEnemyZoC(nk, "player", entities, activeTileMap);
-        if (meta.strength > enemyZoC) result.add(nk);
-      }
-    }
-    return result;
-  }, [
-    armedEntityId,
-    selectedTerritory,
+    selectedTerritoryId,
+    selectedTerritoryBalance,
     selectedTileKeys,
+    selectedTerritoryDefenseCounts,
+    validMoveTiles,
+    fortificationDots,
+    validPlacementAttackTiles,
+    minUnitCost,
+    territoryHasCity,
+    selectionBorderEdges,
+    affordableTerritoryTileKeys,
+  } = useSelectionState({
+    selectedTileKey,
+    selectedEntityKey,
+    armedEntityId,
     activeTileMap,
     entities,
-  ]);
-
-  const minUnitCost = useMemo(() => {
-    return Math.min(
-      ...Object.values(ENTITY_META)
-        .filter((m) => m.isUnit)
-        .map((m) => m.cost),
-    );
-  }, []);
+    spentUnits,
+    combatSpentUnits,
+    partialMoves,
+    territoryBalances,
+    cities,
+    freeTowerUsedTiles,
+    isAiTurn,
+    gameResult,
+    turn,
+    tileDataMap,
+    tileMap,
+    INNER_SIZE,
+    BORDER_W,
+  });
 
   const [, startPulseTransition] = useTransition();
   const [shouldPulseEndTurn, setShouldPulseEndTurn] = useState(false);
@@ -974,11 +844,6 @@ export default function GameScreen() {
 
   const canBuild = selectedTerritory.length > 0;
 
-  const territoryHasCity = useMemo(
-    () => selectedTerritory.some((t) => cities.has(t.key)),
-    [selectedTerritory, cities],
-  );
-
   const econBreakdown = useMemo(() => {
     if (selectedTerritory.length === 0) return null;
     let grassCount = 0;
@@ -1070,77 +935,6 @@ export default function GameScreen() {
       net,
     };
   }, [selectedTerritory, entities, cities]);
-
-  const selectionBorderEdges = useMemo<BorderEdge[]>(
-    () => computeSelectionBorderEdges(selectedTileKeys, tileDataMap, tileMap, INNER_SIZE, BORDER_W),
-    [selectedTileKeys, tileDataMap, tileMap, INNER_SIZE],
-  );
-
-  const affordableTerritoryCache = useRef<{
-    activeTileMap: Map<string, HexTile>;
-    territoryBalances: Map<string, number>;
-    freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
-    isAiTurn: boolean;
-    gameResult: unknown;
-    turn: number;
-    result: Set<string>;
-  } | null>(null);
-
-  const affordableTerritoryTileKeys = useMemo<Set<string>>(() => {
-    if (isAiTurn || gameResult !== null) return new Set();
-    const cached = affordableTerritoryCache.current;
-    if (
-      cached &&
-      cached.activeTileMap === activeTileMap &&
-      cached.territoryBalances === territoryBalances &&
-      cached.freeTowerUsedTiles === freeTowerUsedTiles &&
-      cached.isAiTurn === isAiTurn &&
-      cached.gameResult === gameResult &&
-      cached.turn === turn
-    )
-      return cached.result;
-    const keys = new Set<string>();
-    const visited = new Set<string>();
-    const playerFreeTowerUsed =
-      freeTowerUsedTiles.get("player") ?? new Set<string>();
-    for (const tile of Array.from(activeTileMap.values())) {
-      if (tile.owner !== "player" || visited.has(tile.key)) continue;
-      const territory = getContiguousTerritory(
-        activeTileMap,
-        tile.key,
-        "player",
-      );
-      for (const t of territory) visited.add(t.key);
-      const id = getTerritoryId(territory);
-      if (!id) continue;
-      const balance = territoryBalances.get(id) ?? 0;
-      const towerFree =
-        territory.length >= 2 &&
-        !territory.some((t) => playerFreeTowerUsed.has(t.key));
-      // In round 1, only the free tower can be placed — balance spending is locked
-      const canAfford = turn === 1 ? towerFree : balance >= minUnitCost;
-      if (!canAfford) continue;
-      for (const t of territory) keys.add(t.key);
-    }
-    affordableTerritoryCache.current = {
-      activeTileMap,
-      territoryBalances,
-      freeTowerUsedTiles,
-      isAiTurn,
-      gameResult,
-      turn,
-      result: keys,
-    };
-    return keys;
-  }, [
-    activeTileMap,
-    territoryBalances,
-    minUnitCost,
-    freeTowerUsedTiles,
-    isAiTurn,
-    gameResult,
-    turn,
-  ]);
 
   const hasAffordableTerritories = affordableTerritoryTileKeys.size > 0;
   useEffect(() => {
