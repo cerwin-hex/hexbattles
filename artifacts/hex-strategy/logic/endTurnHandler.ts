@@ -1,5 +1,12 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { EntityType, HexTile, TerritoryOwner, Difficulty } from "@/types";
+import type {
+  EntityType,
+  HexTile,
+  TerritoryOwner,
+  Difficulty,
+  MoveHistorySnapshot,
+  GameResult,
+} from "@/types";
 import { HEX_EDGES, tileKey } from "@/utils/hexMath";
 import {
   ENTITY_META,
@@ -12,7 +19,7 @@ import { calcTerritoryUpkeep } from "@/logic/gameLogic";
 
 export interface EndTurnParams {
   isAiTurn: boolean;
-  gameResult: unknown;
+  gameResult: GameResult;
   territoryBalances: Map<string, number>;
   entities: Map<string, EntityType>;
   turn: number;
@@ -26,7 +33,7 @@ export interface EndTurnParams {
   liveOwnerMap: Map<string, TerritoryOwner>;
   lakeUnitFunds: Map<string, number>;
   aiTurnRef: { current: boolean };
-  setMoveHistory: (h: never[]) => void;
+  setMoveHistory: Dispatch<SetStateAction<MoveHistorySnapshot[]>>;
   setTerritoryBalances: (m: Map<string, number>) => void;
   setEntities: (m: Map<string, EntityType>) => void;
   setGraveyard: (s: Set<string>) => void;

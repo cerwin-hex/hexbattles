@@ -42,6 +42,22 @@ export interface BorderEdge {
   width: number;
 }
 
+export type MoveHistorySnapshot = {
+  entities: Map<string, EntityType>;
+  cities: Set<string>;
+  mutableTileMap: Map<string, HexTile>;
+  territoryBalances: Map<string, number>;
+  spentUnits: Set<string>;
+  combatSpentUnits: Set<string>;
+  liveOwnerMap: Map<string, TerritoryOwner>;
+  partialMoves: Map<string, number>;
+  freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
+  lakeUnitFunds: Map<string, number>;
+  selectedTileKey: string | null;
+};
+
+export type GameResult = "victory" | "defeat" | null;
+
 export type AiStepSnapshot = {
   entities: Map<string, EntityType>;
   mutableTileMap: Map<string, HexTile>;

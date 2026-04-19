@@ -61,6 +61,8 @@ import type {
   AiStepSnapshot,
   Difficulty,
   AiState,
+  MoveHistorySnapshot,
+  GameResult,
 } from "@/types";
 import {
   HEX_EDGES,
@@ -301,25 +303,9 @@ export default function GameScreen() {
   const [combatSpentUnits, setCombatSpentUnits] = useState<Set<string>>(
     new Set(),
   );
-  const [moveHistory, setMoveHistory] = useState<
-    Array<{
-      entities: Map<string, EntityType>;
-      cities: Set<string>;
-      mutableTileMap: Map<string, HexTile>;
-      territoryBalances: Map<string, number>;
-      spentUnits: Set<string>;
-      combatSpentUnits: Set<string>;
-      liveOwnerMap: Map<string, TerritoryOwner>;
-      partialMoves: Map<string, number>;
-      freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
-      lakeUnitFunds: Map<string, number>;
-      selectedTileKey: string | null;
-    }>
-  >([]);
+  const [moveHistory, setMoveHistory] = useState<MoveHistorySnapshot[]>([]);
   const [isAiTurn, setIsAiTurn] = useState(false);
-  const [gameResult, setGameResult] = useState<"victory" | "defeat" | null>(
-    null,
-  );
+  const [gameResult, setGameResult] = useState<GameResult>(null);
   const [showDominancePopup, setShowDominancePopup] = useState(false);
   const dominanceShownRef = useRef(false);
   const aiTurnRef = useRef<boolean>(false);
