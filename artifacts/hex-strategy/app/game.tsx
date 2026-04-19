@@ -434,7 +434,7 @@ export default function GameScreen() {
         tile.terrain === "lake" ||
         liveOwner === "neutral"
       ) {
-        if (tile.cityBuffer && liveOwner === "neutral") {
+        if ((tile.cityBuffer || tile.isCity) && liveOwner === "neutral") {
           for (const {
             dir: [dq, dr],
             verts: [va, vb],
@@ -447,7 +447,7 @@ export default function GameScreen() {
             const neighborIsNeutralCity =
               neighborBase !== undefined &&
               neighborLiveOwner === "neutral" &&
-              neighborBase.cityBuffer;
+              (neighborBase.cityBuffer || neighborBase.isCity);
             if (neighborIsNeutralCity) continue;
             const ptA = hexCornerPoint(cx, cy, INNER_SIZE, va);
             const ptB = hexCornerPoint(cx, cy, INNER_SIZE, vb);
@@ -955,11 +955,9 @@ export default function GameScreen() {
       setLakeTransferAmount(6);
 
       const initialEntities = new Map<string, EntityType>();
-      // Pre-placed cities: isCity tiles become city entities (cities are buildings,
-      // not a special tile type — they start in the centre of neutral areas).
-      for (const tile of tiles) {
-        if (tile.isCity) initialEntities.set(tile.key, "city");
-      }
+      // Cities are now tracked purely via tile.isCity (permanent flag on HexTile).
+      // No "city" entity is stored in the entities map — cities can never be
+      // removed, and units can occupy city tiles without erasing the city.
       const owners: TerritoryOwner[] = [
         "player",
         "ai1",
@@ -1249,7 +1247,7 @@ export default function GameScreen() {
             const remTerr = getContiguousTerritory(simMap, anyRemaining.key, enemyOwner);
             const remIncome = remTerr.reduce((s, t) => {
               if (simEntities.get(t.key) === "rebel") return s;
-              return s + (TERRAIN_INCOME[t.terrain] ?? 0) + (simEntities.get(t.key) === "city" ? CITY_BONUS : 0);
+              return s + (TERRAIN_INCOME[t.terrain] ?? 0) + (t.isCity || simEntities.get(t.key) === "city" ? CITY_BONUS : 0);
             }, 0);
             const remUpkeep = calcTerritoryUpkeep(remTerr, simEntities);
             return enemyBal + (remIncome - remUpkeep) < 0;
@@ -1777,7 +1775,7 @@ export default function GameScreen() {
 
             const currIncome = currTerr.reduce((s, t) => {
               if (workingEntities.get(t.key) === "rebel") return s;
-              return s + (TERRAIN_INCOME[t.terrain] ?? 0) + (workingEntities.get(t.key) === "city" ? CITY_BONUS : 0);
+              return s + (TERRAIN_INCOME[t.terrain] ?? 0) + (t.isCity || workingEntities.get(t.key) === "city" ? CITY_BONUS : 0);
             }, 0);
             const currUpkeep = calcTerritoryUpkeep(currTerr, workingEntities);
 
@@ -2269,7 +2267,7 @@ export default function GameScreen() {
             // ══ PRIORITY D: Build a city ══
             if (!actionTaken) {
               const cityCost = ENTITY_META.city.cost;
-              const alreadyHasCity = currTerr.some((t) => workingEntities.get(t.key) === "city");
+              const alreadyHasCity = currTerr.some((t) => t.isCity || workingEntities.get(t.key) === "city");
               if (canAfford(cityCost, 0) && currTerr.length >= 6 && !alreadyHasCity) {
                 const bldgZoC = new Set<string>();
                 for (const [bk, be] of workingEntities) {
@@ -2292,7 +2290,7 @@ export default function GameScreen() {
                 }
                 const [lEq, lEr] = largestEnemyKey ? largestEnemyKey.split(",").map(Number) : [0, 0];
                 const cityCands = currTerr.filter((t) => {
-                  if (t.terrain === "mountain" || t.terrain === "lake" || workingEntities.get(t.key) === "city") return false;
+                  if (t.terrain === "mountain" || t.terrain === "lake" || t.isCity || workingEntities.get(t.key) === "city") return false;
                   if (workingEntities.has(t.key)) return false;
                   return bldgZoC.has(t.key);
                 }).sort((a, b) => {
@@ -2450,7 +2448,7 @@ export default function GameScreen() {
 
               // E3: Conquer neutral tile (city first, then grass/forest, then desert)
               if (!actionTaken) {
-                const neutralPrio = (t: HexTile): number => workingEntities.get(t.key) === "city" ? 3 : (t.terrain === "grass" || t.terrain === "forest") ? 2 : 1;
+                const neutralPrio = (t: HexTile): number => (t.isCity || workingEntities.get(t.key) === "city") ? 3 : (t.terrain === "grass" || t.terrain === "forest") ? 2 : 1;
                 const neutralMoves: { fk: string; tk: string; prio: number }[] = [];
                 for (const [uk, ue] of availUnits) {
                   const vm = getValidMoves(uk, aiOwner, workingEntities, workingTileMap, workingSpentUnits, workingPartialMoves.get(uk) ?? 3);
@@ -2572,7 +2570,7 @@ export default function GameScreen() {
                   if (actionTaken) break;
                   const cost = ENTITY_META.simple_unit.cost;
                   const upk = ENTITY_META.simple_unit.upkeep;
-                  const rtIncome = (TERRAIN_INCOME[rt.terrain] ?? 0) + (workingEntities.get(rt.key) === "city" ? CITY_BONUS : 0);
+                  const rtIncome = (TERRAIN_INCOME[rt.terrain] ?? 0) + (rt.isCity || workingEntities.get(rt.key) === "city" ? CITY_BONUS : 0);
                   if (currBal >= cost && currIncome + rtIncome - (currUpkeep + upk) >= 0) {
                     actionTaken = await dtExecBuy("simple_unit", rt.key, cost, false);
                   }
@@ -2627,7 +2625,7 @@ export default function GameScreen() {
             return (
               s +
               TERRAIN_INCOME[t.terrain] +
-              (workingEntities.get(t.key) === "city" ? CITY_BONUS : 0)
+              (t.isCity || workingEntities.get(t.key) === "city" ? CITY_BONUS : 0)
             );
           }, 0);
           const upkeep = calcTerritoryUpkeep(territory, workingEntities);
@@ -2970,8 +2968,7 @@ export default function GameScreen() {
   const canBuild = selectedTerritory.length > 0;
 
   const territoryHasCity = useMemo(
-    () =>
-      selectedTerritory.some((t) => entities.get(t.key) === "city"),
+    () => selectedTerritory.some((t) => t.isCity || entities.get(t.key) === "city"),
     [selectedTerritory, entities],
   );
 
@@ -2994,10 +2991,11 @@ export default function GameScreen() {
       else if (t.terrain === "lake") lakeCount++;
       const entityId = entities.get(t.key);
       const hasRebel = entityId === "rebel";
-      if (entityId === "city") cityCount++;
+      const isCity = t.isCity || entityId === "city";
+      if (isCity) cityCount++;
       if (!hasRebel) {
         if (t.terrain === "grass") activeGrassCount++;
-        if (entityId === "city") activeCityCount++;
+        if (isCity) activeCityCount++;
       }
       if (entityId && entityId !== "city" && entityId !== "rebel") {
         const meta = ENTITY_META[entityId];
@@ -3045,9 +3043,7 @@ export default function GameScreen() {
     for (const t of selectedTerritory) {
       if (entities.get(t.key) !== "rebel") continue;
       rebelCount++;
-      if (entities.get(t.key) === "city")
-        rebelTotalLoss += CITY_BONUS;
-      else rebelTotalLoss += TERRAIN_INCOME[t.terrain];
+      rebelTotalLoss += TERRAIN_INCOME[t.terrain];
     }
     const net = totalIncome - totalUpkeep - rebelTotalLoss;
     return {
@@ -3223,7 +3219,7 @@ export default function GameScreen() {
           return (
             s +
             TERRAIN_INCOME[t.terrain] +
-            (entities.get(t.key) === "city" ? CITY_BONUS : 0)
+            (t.isCity || entities.get(t.key) === "city" ? CITY_BONUS : 0)
           );
         }, 0);
         const upkeep = calcTerritoryUpkeep(territory, entities);
@@ -3893,7 +3889,7 @@ export default function GameScreen() {
           return (
             s +
             TERRAIN_INCOME[t.terrain] +
-            (nextEntities.get(t.key) === "city" ? CITY_BONUS : 0)
+            (t.isCity || nextEntities.get(t.key) === "city" ? CITY_BONUS : 0)
           );
         }, 0);
         const upkeep = calcTerritoryUpkeep(territory, nextEntities);
@@ -3950,7 +3946,7 @@ export default function GameScreen() {
             return (
               s +
               TERRAIN_INCOME[t.terrain] +
-              (nextEntities.get(t.key) === "city" ? CITY_BONUS : 0)
+              (t.isCity || nextEntities.get(t.key) === "city" ? CITY_BONUS : 0)
             );
           }, 0);
           const incomeModifier =
@@ -4328,7 +4324,7 @@ export default function GameScreen() {
               />
               {tileData.map(({ tile, cx, cy }) => {
                 const liveTile = activeTileMap.get(tile.key) ?? tile;
-                const isCityZone = tile.cityBuffer;
+                const isCityZone = tile.cityBuffer || tile.isCity;
                 const fill =
                   tile.terrain === "lake"
                     ? "#5BAFD6"
@@ -4386,10 +4382,7 @@ export default function GameScreen() {
                 })}
 
               {tileData
-                .filter(
-                  ({ tile }) =>
-                    entities.get(tile.key) === "city",
-                )
+                .filter(({ tile }) => tile.isCity || entities.get(tile.key) === "city")
                 .map(({ tile, cx, cy }) => {
                   const liveTile = activeTileMap.get(tile.key) ?? tile;
                   const cityBorderColor =
