@@ -123,6 +123,8 @@ import { FortificationDotLayer } from "@/components/FortificationDotLayer";
 import { CityOverlayLayer } from "@/components/CityOverlayLayer";
 import { GraveyardLayer } from "@/components/GraveyardLayer";
 import { AffordableTerritoryLayer } from "@/components/AffordableTerritoryLayer";
+import { LakeImageLayer } from "@/components/LakeImageLayer";
+import { MountainImageLayer } from "@/components/MountainImageLayer";
 import {
   computeBorderEdges,
   computeOuterTerritoryEdges,
@@ -2078,28 +2080,6 @@ export default function GameScreen() {
             style={[styles.board, boardStyle, styles.boardElevated]}
           >
             <Svg width={boardW} height={boardH}>
-              <Defs>
-                {tileData
-                  .filter(({ tile }) => tile.terrain === "lake")
-                  .map(({ tile, cx, cy }) => (
-                    <ClipPath
-                      key={`clip-def-${tile.key}`}
-                      id={`lclip-${tile.key}`}
-                    >
-                      <Polygon points={hexCornersString(cx, cy, HEX_SIZE)} />
-                    </ClipPath>
-                  ))}
-                {tileData
-                  .filter(({ tile }) => tile.terrain === "mountain")
-                  .map(({ tile, cx, cy }) => (
-                    <ClipPath
-                      key={`mclip-def-${tile.key}`}
-                      id={`mclip-${tile.key}`}
-                    >
-                      <Polygon points={hexCornersString(cx, cy, HEX_SIZE)} />
-                    </ClipPath>
-                  ))}
-              </Defs>
               <Rect
                 x={0}
                 y={0}
@@ -2134,41 +2114,9 @@ export default function GameScreen() {
                 );
               })}
 
-              {tileData
-                .filter(({ tile }) => tile.terrain === "lake")
-                .map(({ tile, cx, cy }) => {
-                  const s = HEX_SIZE * 2;
-                  return (
-                    <SvgImage
-                      key={`lake-img-${tile.key}`}
-                      href={WATER_IMG}
-                      x={cx - HEX_SIZE}
-                      y={cy - HEX_SIZE}
-                      width={s}
-                      height={s}
-                      preserveAspectRatio="xMidYMid slice"
-                      clipPath={`url(#lclip-${tile.key})`}
-                    />
-                  );
-                })}
+              <LakeImageLayer tileData={tileData} HEX_SIZE={HEX_SIZE} />
 
-              {tileData
-                .filter(({ tile }) => tile.terrain === "mountain")
-                .map(({ tile, cx, cy }) => {
-                  const s = HEX_SIZE * 2;
-                  return (
-                    <SvgImage
-                      key={`mtn-${tile.key}`}
-                      href={MOUNTAIN_IMG}
-                      x={cx - HEX_SIZE}
-                      y={cy - HEX_SIZE}
-                      width={s}
-                      height={s}
-                      preserveAspectRatio="xMidYMid slice"
-                      clipPath={`url(#mclip-${tile.key})`}
-                    />
-                  );
-                })}
+              <MountainImageLayer tileData={tileData} HEX_SIZE={HEX_SIZE} />
 
               <CityOverlayLayer
                 cities={cities}
