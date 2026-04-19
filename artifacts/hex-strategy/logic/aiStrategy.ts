@@ -876,16 +876,28 @@ export interface AiWorkingState {
  * value in game.tsx.
  */
 export interface AiTurnCallbacks {
-  setEntities(v: Map<string, EntityType>): void;
-  setMutableTileMap(v: Map<string, HexTile>): void;
-  setTerritoryBalances(v: Map<string, number>): void;
-  setGraveyard(v: Set<string>): void;
-  setRuins(v: Set<string>): void;
-  setLiveOwnerMap(v: Map<string, TerritoryOwner>): void;
-  setCities(v: Set<string>): void;
-  setFreeTowerUsedTiles(v: Map<TerritoryOwner, Set<string>>): void;
-  setAiStateMap(v: Map<string, AiState>): void;
-  setLakeUnitFunds(v: Map<string, number>): void;
+  /** React state setters — each one triggers a re-render in game.tsx. */
+  state: {
+    setEntities(v: Map<string, EntityType>): void;
+    setMutableTileMap(v: Map<string, HexTile>): void;
+    setTerritoryBalances(v: Map<string, number>): void;
+    setGraveyard(v: Set<string>): void;
+    setRuins(v: Set<string>): void;
+    setLiveOwnerMap(v: Map<string, TerritoryOwner>): void;
+    setCities(v: Set<string>): void;
+    setFreeTowerUsedTiles(v: Map<TerritoryOwner, Set<string>>): void;
+    setAiStateMap(v: Map<string, AiState>): void;
+    setLakeUnitFunds(v: Map<string, number>): void;
+    setIsAiTurn(v: boolean): void;
+  };
+  /** Synchronous ref accessors — read/write mutable refs without triggering a re-render. */
+  refs: {
+    getAiStateMap(): Map<string, AiState>;
+    setAiStateMap(v: Map<string, AiState>): void;
+    isTurnActive(): boolean;
+    isDeveloperMode(): boolean;
+    setAiTurn(v: boolean): void;
+  };
   /** Push the initial pre-AI snapshot and reset history index to 0. */
   initStepHistory(snap: AiStepSnapshot): void;
   /** Append a step snapshot, then pause in dev-mode or wait the animation delay. */
@@ -894,10 +906,6 @@ export interface AiTurnCallbacks {
   awaitPreAiResume(): Promise<void>;
   /** Dev-mode pause after all AI actions; no-op in normal play. */
   awaitPostAiResume(): Promise<void>;
-  getAiStateMapRef(): Map<string, AiState>;
-  setAiStateMapRef(v: Map<string, AiState>): void;
-  isTurnActive(): boolean;
-  isDeveloperMode(): boolean;
   triggerUnitAnimation(
     fromKey: string,
     toKey: string,
@@ -923,8 +931,6 @@ export interface AiTurnCallbacks {
     ruins: Set<string>,
     exemptKey?: string,
   ): void;
-  setIsAiTurn(v: boolean): void;
-  setAiTurnRef(v: boolean): void;
   checkWinLoss(map: Map<string, HexTile>): void;
 }
 
@@ -964,7 +970,7 @@ export async function runAiTurn(
   await cbs.awaitPreAiResume();
 
   for (const aiOwner of aiOwners) {
-    if (!cbs.isTurnActive()) return;
+    if (!cbs.refs.isTurnActive()) return;
 
     const visited = new Set<string>();
     const aiTiles = Array.from(ws.tileMap.values()).filter(
@@ -1014,11 +1020,11 @@ export async function runAiTurn(
             for (const t of territory) newOwnerSet.add(t.key);
             ws.freeTowerUsed = new Map(ws.freeTowerUsed);
             ws.freeTowerUsed.set(aiOwner, newOwnerSet);
-            cbs.setFreeTowerUsedTiles(new Map(ws.freeTowerUsed));
-            cbs.setEntities(new Map(ws.entities));
-            cbs.setAiStateMap(new Map(cbs.getAiStateMapRef()));
+            cbs.state.setFreeTowerUsedTiles(new Map(ws.freeTowerUsed));
+            cbs.state.setEntities(new Map(ws.entities));
+            cbs.state.setAiStateMap(new Map(cbs.refs.getAiStateMap()));
             await cbs.awaitStep(snapFromWs(ws));
-            if (!cbs.isTurnActive()) return;
+            if (!cbs.refs.isTurnActive()) return;
           }
         }
       }
@@ -1070,15 +1076,15 @@ export async function runAiTurn(
           }
           return false;
         });
-        const nextStateMap = new Map(cbs.getAiStateMapRef());
+        const nextStateMap = new Map(cbs.refs.getAiStateMap());
         nextStateMap.set(updId, updThreatened ? "defending" : "attacking");
-        cbs.setAiStateMapRef(nextStateMap);
-        cbs.setAiStateMap(new Map(nextStateMap));
+        cbs.refs.setAiStateMap(nextStateMap);
+        cbs.state.setAiStateMap(new Map(nextStateMap));
       };
 
       // Execute a unit move (fromKey → toKey); updates all working state and triggers animation
       const dtExecMove = async (fromKey: string, toKey: string): Promise<boolean> => {
-        if (!cbs.isTurnActive()) return false;
+        if (!cbs.refs.isTurnActive()) return false;
         const unitEntity = ws.entities.get(fromKey);
         if (!unitEntity) return false;
         const destTile = ws.tileMap.get(toKey);
@@ -1200,25 +1206,25 @@ export async function runAiTurn(
           ws.graveyard, ws.ruins,
           movingFromLake && !movingToLake ? toKey : undefined,
         );
-        cbs.setRuins(new Set(ws.ruins));
+        cbs.state.setRuins(new Set(ws.ruins));
 
-        if (!cbs.isDeveloperMode()) {
+        if (!cbs.refs.isDeveloperMode()) {
           await new Promise<void>((resolve) => {
             cbs.triggerUnitAnimation(fromKey, toKey, unitEntity, aiOwner as TerritoryOwner, true, () => {
-              cbs.setMutableTileMap(new Map(ws.tileMap));
-              cbs.setLiveOwnerMap(new Map(ws.liveOwnerMap));
-              cbs.setEntities(new Map(ws.entities));
-              cbs.setTerritoryBalances(new Map(ws.balances));
-              cbs.setGraveyard(new Set(ws.graveyard));
+              cbs.state.setMutableTileMap(new Map(ws.tileMap));
+              cbs.state.setLiveOwnerMap(new Map(ws.liveOwnerMap));
+              cbs.state.setEntities(new Map(ws.entities));
+              cbs.state.setTerritoryBalances(new Map(ws.balances));
+              cbs.state.setGraveyard(new Set(ws.graveyard));
               resolve();
             });
           });
         } else {
-          cbs.setMutableTileMap(new Map(ws.tileMap));
-          cbs.setLiveOwnerMap(new Map(ws.liveOwnerMap));
-          cbs.setEntities(new Map(ws.entities));
-          cbs.setTerritoryBalances(new Map(ws.balances));
-          cbs.setGraveyard(new Set(ws.graveyard));
+          cbs.state.setMutableTileMap(new Map(ws.tileMap));
+          cbs.state.setLiveOwnerMap(new Map(ws.liveOwnerMap));
+          cbs.state.setEntities(new Map(ws.entities));
+          cbs.state.setTerritoryBalances(new Map(ws.balances));
+          cbs.state.setGraveyard(new Set(ws.graveyard));
         }
 
         dtPublishState(toKey);
@@ -1231,7 +1237,7 @@ export async function runAiTurn(
       const dtExecBuy = async (
         unitType: EntityType, target: string, cost: number, outside: boolean,
       ): Promise<boolean> => {
-        if (!cbs.isTurnActive()) return false;
+        if (!cbs.refs.isTurnActive()) return false;
         ws.entities = new Map(ws.entities);
         ws.balances = new Map(ws.balances);
 
@@ -1271,41 +1277,41 @@ export async function runAiTurn(
           const mergedId = getTerritoryId(mergedTerr);
           if (mergedId) ws.balances.set(mergedId, (ws.balances.get(mergedId) ?? 0) - cost);
           cbs.applySingleHexPenalty(prevSnapshot, ws.tileMap, ws.balances, ws.entities, ws.graveyard, ws.ruins);
-          cbs.setRuins(new Set(ws.ruins));
+          cbs.state.setRuins(new Set(ws.ruins));
           ws.liveOwnerMap = new Map(ws.liveOwnerMap);
           ws.liveOwnerMap.set(target, aiOwner);
           ws.spentUnits = new Set(ws.spentUnits);
           ws.spentUnits.add(target);
-          cbs.setMutableTileMap(new Map(ws.tileMap));
-          cbs.setLiveOwnerMap(new Map(ws.liveOwnerMap));
+          cbs.state.setMutableTileMap(new Map(ws.tileMap));
+          cbs.state.setLiveOwnerMap(new Map(ws.liveOwnerMap));
         }
 
-        cbs.setEntities(new Map(ws.entities));
-        cbs.setCities(new Set(ws.cities));
-        cbs.setTerritoryBalances(new Map(ws.balances));
-        cbs.setAiStateMap(new Map(cbs.getAiStateMapRef()));
+        cbs.state.setEntities(new Map(ws.entities));
+        cbs.state.setCities(new Set(ws.cities));
+        cbs.state.setTerritoryBalances(new Map(ws.balances));
+        cbs.state.setAiStateMap(new Map(cbs.refs.getAiStateMap()));
         await dtAwait();
         return true;
       };
 
       // Execute a building upgrade (change entity on tile in place)
       const dtExecUpgrade = async (targetKey: string, to: EntityType, cost: number): Promise<boolean> => {
-        if (!cbs.isTurnActive()) return false;
+        if (!cbs.refs.isTurnActive()) return false;
         ws.entities = new Map(ws.entities);
         ws.entities.set(targetKey, to);
         ws.balances = new Map(ws.balances);
         const buyTerr = getContiguousTerritory(ws.tileMap, startTile.key, aiOwner);
         const buyTid = getTerritoryId(buyTerr);
         if (buyTid) ws.balances.set(buyTid, (ws.balances.get(buyTid) ?? 0) - cost);
-        cbs.setEntities(new Map(ws.entities));
-        cbs.setTerritoryBalances(new Map(ws.balances));
+        cbs.state.setEntities(new Map(ws.entities));
+        cbs.state.setTerritoryBalances(new Map(ws.balances));
         await dtAwait();
         return true;
       };
 
       // Build a building inside the territory (no ownership change)
       const dtExecBuild = async (buildingType: EntityType, targetKey: string, cost: number): Promise<boolean> => {
-        if (!cbs.isTurnActive()) return false;
+        if (!cbs.refs.isTurnActive()) return false;
         ws.balances = new Map(ws.balances);
         if (buildingType === "city") {
           ws.cities = new Set(ws.cities);
@@ -1317,20 +1323,20 @@ export async function runAiTurn(
         const buyTerr = getContiguousTerritory(ws.tileMap, startTile.key, aiOwner);
         const buyTid = getTerritoryId(buyTerr);
         if (buyTid) ws.balances.set(buyTid, (ws.balances.get(buyTid) ?? 0) - cost);
-        cbs.setEntities(new Map(ws.entities));
-        cbs.setCities(new Set(ws.cities));
-        cbs.setTerritoryBalances(new Map(ws.balances));
+        cbs.state.setEntities(new Map(ws.entities));
+        cbs.state.setCities(new Set(ws.cities));
+        cbs.state.setTerritoryBalances(new Map(ws.balances));
         await dtAwait();
         return true;
       };
 
       // Remove a building (Priority H)
       const dtExecRemove = async (targetKey: string): Promise<boolean> => {
-        if (!cbs.isTurnActive()) return false;
+        if (!cbs.refs.isTurnActive()) return false;
         ws.entities = new Map(ws.entities);
         ws.entities.delete(targetKey);
-        cbs.setEntities(new Map(ws.entities));
-        cbs.setTerritoryBalances(new Map(ws.balances));
+        cbs.state.setEntities(new Map(ws.entities));
+        cbs.state.setTerritoryBalances(new Map(ws.balances));
         await dtAwait();
         return true;
       };
@@ -1341,10 +1347,10 @@ export async function runAiTurn(
       };
 
       const setTerritoryState = (tid: string, state: AiState): void => {
-        const next = new Map(cbs.getAiStateMapRef());
+        const next = new Map(cbs.refs.getAiStateMap());
         next.set(tid, state);
-        cbs.setAiStateMapRef(next);
-        cbs.setAiStateMap(new Map(next));
+        cbs.refs.setAiStateMap(next);
+        cbs.state.setAiStateMap(new Map(next));
       };
 
       // ─── Decision Tree Loop ────────────────────────────────────────────────
@@ -1360,7 +1366,7 @@ export async function runAiTurn(
           markSpent,
           setTerritoryState,
         },
-        () => cbs.isTurnActive(),
+        () => cbs.refs.isTurnActive(),
         difficulty,
       );
     }
@@ -1417,16 +1423,16 @@ export async function runAiTurn(
       }
     }
     if (playerBankruptcyOccurred) {
-      cbs.setEntities(new Map(ws.entities));
-      cbs.setTerritoryBalances(new Map(ws.balances));
-      cbs.setGraveyard(new Set(ws.graveyard));
-      cbs.setRuins(new Set(ws.ruins));
+      cbs.state.setEntities(new Map(ws.entities));
+      cbs.state.setTerritoryBalances(new Map(ws.balances));
+      cbs.state.setGraveyard(new Set(ws.graveyard));
+      cbs.state.setRuins(new Set(ws.ruins));
     }
   }
 
-  cbs.setLakeUnitFunds(new Map(ws.lakeFunds));
+  cbs.state.setLakeUnitFunds(new Map(ws.lakeFunds));
   await cbs.awaitPostAiResume();
-  cbs.setIsAiTurn(false);
-  cbs.setAiTurnRef(false);
+  cbs.state.setIsAiTurn(false);
+  cbs.refs.setAiTurn(false);
   cbs.checkWinLoss(ws.tileMap);
 }

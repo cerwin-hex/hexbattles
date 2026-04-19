@@ -32,29 +32,33 @@ function makeEmptyWs(tileMap: Map<string, HexTile>): AiWorkingState {
 function makeCbs(overrides: Partial<AiTurnCallbacks> = {}): AiTurnCallbacks {
   const aiStateMapRef: Map<string, import("@/types").AiState> = new Map();
   return {
-    setEntities: vi.fn(),
-    setMutableTileMap: vi.fn(),
-    setTerritoryBalances: vi.fn(),
-    setGraveyard: vi.fn(),
-    setRuins: vi.fn(),
-    setLiveOwnerMap: vi.fn(),
-    setCities: vi.fn(),
-    setFreeTowerUsedTiles: vi.fn(),
-    setAiStateMap: vi.fn(),
-    setLakeUnitFunds: vi.fn(),
+    state: {
+      setEntities: vi.fn(),
+      setMutableTileMap: vi.fn(),
+      setTerritoryBalances: vi.fn(),
+      setGraveyard: vi.fn(),
+      setRuins: vi.fn(),
+      setLiveOwnerMap: vi.fn(),
+      setCities: vi.fn(),
+      setFreeTowerUsedTiles: vi.fn(),
+      setAiStateMap: vi.fn(),
+      setLakeUnitFunds: vi.fn(),
+      setIsAiTurn: vi.fn(),
+    },
+    refs: {
+      getAiStateMap: vi.fn(() => aiStateMapRef),
+      setAiStateMap: vi.fn((v) => { aiStateMapRef.clear(); v.forEach((val, k) => aiStateMapRef.set(k, val)); }),
+      isTurnActive: vi.fn().mockReturnValue(true),
+      isDeveloperMode: vi.fn().mockReturnValue(false),
+      setAiTurn: vi.fn(),
+    },
     initStepHistory: vi.fn(),
     awaitStep: vi.fn().mockResolvedValue(undefined),
     awaitPreAiResume: vi.fn().mockResolvedValue(undefined),
     awaitPostAiResume: vi.fn().mockResolvedValue(undefined),
-    getAiStateMapRef: vi.fn(() => aiStateMapRef),
-    setAiStateMapRef: vi.fn((v) => { aiStateMapRef.clear(); v.forEach((val, k) => aiStateMapRef.set(k, val)); }),
-    isTurnActive: vi.fn().mockReturnValue(true),
-    isDeveloperMode: vi.fn().mockReturnValue(false),
     triggerUnitAnimation: vi.fn(),
     recalculateTerritoriesForCapture: vi.fn().mockReturnValue(new Map()),
     applySingleHexPenalty: vi.fn(),
-    setIsAiTurn: vi.fn(),
-    setAiTurnRef: vi.fn(),
     checkWinLoss: vi.fn(),
     ...overrides,
   };
@@ -73,7 +77,7 @@ describe("runAiTurn", () => {
 
       const entityValues = Array.from(ws.entities.values());
       expect(entityValues).toContain("tower");
-      expect(cbs.setFreeTowerUsedTiles).toHaveBeenCalled();
+      expect(cbs.state.setFreeTowerUsedTiles).toHaveBeenCalled();
     });
 
     it("places the tower on a non-mountain, non-lake tile without an existing entity", async () => {

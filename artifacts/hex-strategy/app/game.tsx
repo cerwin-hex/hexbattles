@@ -1356,16 +1356,26 @@ export default function GameScreen() {
       };
 
       const cbs: AiTurnCallbacks = {
-        setEntities,
-        setMutableTileMap,
-        setTerritoryBalances,
-        setGraveyard,
-        setRuins,
-        setLiveOwnerMap,
-        setCities,
-        setFreeTowerUsedTiles,
-        setAiStateMap,
-        setLakeUnitFunds,
+        state: {
+          setEntities,
+          setMutableTileMap,
+          setTerritoryBalances,
+          setGraveyard,
+          setRuins,
+          setLiveOwnerMap,
+          setCities,
+          setFreeTowerUsedTiles,
+          setAiStateMap,
+          setLakeUnitFunds,
+          setIsAiTurn,
+        },
+        refs: {
+          getAiStateMap: () => aiStateMapRef.current,
+          setAiStateMap: (v) => { aiStateMapRef.current = v; },
+          isTurnActive: () => aiTurnRef.current,
+          isDeveloperMode: () => isDeveloperModeRef.current,
+          setAiTurn: (v) => { aiTurnRef.current = v; },
+        },
         initStepHistory: (snap) => {
           aiStepHistoryRef.current = [snap];
           setAiHistoryIndex(0);
@@ -1392,15 +1402,9 @@ export default function GameScreen() {
             setIsAiTurnDone(false);
           }
         },
-        getAiStateMapRef: () => aiStateMapRef.current,
-        setAiStateMapRef: (v) => { aiStateMapRef.current = v; },
-        isTurnActive: () => aiTurnRef.current,
-        isDeveloperMode: () => isDeveloperModeRef.current,
         triggerUnitAnimation,
         recalculateTerritoriesForCapture,
         applySingleHexPenalty,
-        setIsAiTurn,
-        setAiTurnRef: (v) => { aiTurnRef.current = v; },
         checkWinLoss,
       };
 
