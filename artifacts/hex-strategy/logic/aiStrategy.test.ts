@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { runAiTurn } from "@/logic/aiStrategy";
-import type { AiWorkingState, AiTurnCallbacks } from "@/logic/aiStrategy";
+import { runAiTurn, runAiTerritoryDecisionLoop } from "@/logic/aiStrategy";
+import type { AiWorkingState, AiTurnCallbacks, AiDecisionExec } from "@/logic/aiStrategy";
 import type { HexTile, EntityType, TerritoryOwner, AiStepSnapshot } from "@/types";
+import type { AiContext } from "@/logic/aiHelpers";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -226,5 +227,111 @@ describe("runAiTurn", () => {
 
       expect(cbs.checkWinLoss).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+// ─── runAiTerritoryDecisionLoop tests ────────────────────────────────────────
+
+function makeAiCtx(
+  tiles: HexTile[],
+  aiOwner: TerritoryOwner,
+  entities: Map<string, EntityType> = new Map(),
+  balances: Map<string, number> = new Map(),
+): AiContext {
+  return {
+    tileMap: makeTileMap(tiles),
+    entities,
+    balances,
+    cities: new Set(),
+    spentUnits: new Set(),
+    partialMoves: new Map(),
+    aiOwner,
+  };
+}
+
+function makeExec(overrides: Partial<AiDecisionExec> = {}): AiDecisionExec {
+  return {
+    move: vi.fn(async () => false),
+    buy: vi.fn(async () => false),
+    upgrade: vi.fn(async () => false),
+    build: vi.fn(async () => false),
+    remove: vi.fn(async () => false),
+    markSpent: vi.fn(),
+    setTerritoryState: vi.fn(),
+    ...overrides,
+  };
+}
+
+describe("runAiTerritoryDecisionLoop", () => {
+  it("moves a unit to capture an adjacent empty enemy tile", async () => {
+    // AI owns (0,0) and (1,0); simple_unit at (0,0).
+    // Enemy owns (2,0) with no entity — the unit can reach it in 2 steps.
+    // Priority A: capturing (2,0) eliminates the only enemy tile (neg=true) → move fires.
+    const tiles = [
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai1"),
+      makeTile(2, 0, "player"),
+    ];
+    const entities = new Map<string, EntityType>([["0,0", "simple_unit"]]);
+    // Territory ID = lexicographically smallest key = "0,0"
+    const balances = new Map([["0,0", 10]]);
+    const aiCtx = makeAiCtx(tiles, "ai1", entities, balances);
+
+    let moved = false;
+    const exec = makeExec({
+      move: vi.fn(async () => { moved = true; return true; }),
+    });
+
+    await runAiTerritoryDecisionLoop("0,0", aiCtx, exec, () => !moved, "hard");
+
+    expect(exec.move).toHaveBeenCalledTimes(1);
+    expect(exec.move).toHaveBeenCalledWith("0,0", "2,0");
+  });
+
+  it("buys a unit when the territory income can cover its upkeep", async () => {
+    // AI owns (0,0) and (1,0) — income = 4 (2 grass tiles × 2), upkeep = 0, balance = 50.
+    // Enemy owns (2,0) with no entity, adjacent to (1,0).
+    // canAfford(simple_unit cost=10, upkeep=3): 4 - 3 = 1 ≥ 0 → affordable.
+    // No AI units to move, so Priority E fires a buy directly onto the enemy tile.
+    const tiles = [
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai1"),
+      makeTile(2, 0, "player"),
+    ];
+    const balances = new Map([["0,0", 50]]);
+    const aiCtx = makeAiCtx(tiles, "ai1", new Map(), balances);
+
+    let bought = false;
+    const exec = makeExec({
+      buy: vi.fn(async () => { bought = true; return true; }),
+    });
+
+    await runAiTerritoryDecisionLoop("0,0", aiCtx, exec, () => !bought, "hard");
+
+    expect(exec.buy).toHaveBeenCalledTimes(1);
+    const [unitType, targetKey, , outside] = (exec.buy as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(unitType).toBe("simple_unit");
+    expect(targetKey).toBe("2,0");
+    expect(outside).toBe(true);
+  });
+
+  it("skips all purchases when income would go negative", async () => {
+    // AI owns only (0,0) — income = 2, upkeep = 0, balance = 50.
+    // Enemy owns (1,0) with no entity, adjacent to (0,0).
+    // canAfford(simple_unit cost=10, upkeep=3): income(2) - upkeep(0) - 3 = -1 < 0 → blocked.
+    // Upkeep for advanced/expert units is even higher, so all buy paths are skipped.
+    const tiles = [
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "player"),
+    ];
+    const balances = new Map([["0,0", 50]]);
+    const aiCtx = makeAiCtx(tiles, "ai1", new Map(), balances);
+    const exec = makeExec();
+
+    await runAiTerritoryDecisionLoop("0,0", aiCtx, exec, () => true, "hard");
+
+    expect(exec.buy).not.toHaveBeenCalled();
+    expect(exec.move).not.toHaveBeenCalled();
+    expect(exec.build).not.toHaveBeenCalled();
   });
 });
