@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
+import { unstable_batchedUpdates } from "react-native";
 import type { EntityType, HexTile, TerritoryOwner } from "@/types";
 import { ENTITY_META, getContiguousTerritory, getTerritoryId, getMoveCost } from "@/utils/hexGrid";
 import {
@@ -391,34 +392,39 @@ export function handleTileTapLogic(params: TileTapParams): void {
           } else if (mergedRemaining < 3) {
             newPartialMoves.set(key, mergedRemaining);
           }
-        } else if (armedEntityId === "city") {
-          setCities((prev) => new Set([...prev, key]));
-        } else {
-          newEntities.set(key, armedEntityId);
-          if (canOverwriteRebel) {
-            newSpentUnits.add(key);
-          }
         }
-        setEntities(newEntities);
-        setTerritoryBalances((prev) => {
-          const next = new Map(prev);
-          next.set(selectedTerritoryId, balance - effectiveCost);
-          return next;
-        });
-        if (towerIsFree) {
-          setFreeTowerUsedTiles((prev) => {
+        unstable_batchedUpdates(() => {
+          if (armedEntityId === "city" && !canMerge) {
+            setCities((prev) => new Set([...prev, key]));
+          } else {
+            if (!canMerge) {
+              newEntities.set(key, armedEntityId);
+              if (canOverwriteRebel) {
+                newSpentUnits.add(key);
+              }
+            }
+          }
+          setEntities(newEntities);
+          setTerritoryBalances((prev) => {
             const next = new Map(prev);
-            const ownerSet = new Set(prev.get("player") ?? []);
-            for (const t of selectedTerritory) ownerSet.add(t.key);
-            next.set("player", ownerSet);
+            next.set(selectedTerritoryId, balance - effectiveCost);
             return next;
           });
-        }
-        setSpentUnits(newSpentUnits);
-        setPartialMoves(newPartialMoves);
-        setArmedEntityId(null);
-        setSelectedEntityKey(null);
-        closeRibbon();
+          if (towerIsFree) {
+            setFreeTowerUsedTiles((prev) => {
+              const next = new Map(prev);
+              const ownerSet = new Set(prev.get("player") ?? []);
+              for (const t of selectedTerritory) ownerSet.add(t.key);
+              next.set("player", ownerSet);
+              return next;
+            });
+          }
+          setSpentUnits(newSpentUnits);
+          setPartialMoves(newPartialMoves);
+          setArmedEntityId(null);
+          setSelectedEntityKey(null);
+          closeRibbon();
+        });
         return;
       } else {
         triggerErrorFlash(key);
@@ -521,13 +527,17 @@ export function handleTileTapLogic(params: TileTapParams): void {
     tile?.owner === "player";
   if (isSelectableEntity) {
     if (selectedEntityKey === key) {
-      setSelectedEntityKey(null);
-      setSelectedTileKey(key);
+      unstable_batchedUpdates(() => {
+        setSelectedEntityKey(null);
+        setSelectedTileKey(key);
+      });
     } else {
-      setSelectedEntityKey(key);
-      setSelectedTileKey(key);
-      setArmedEntityId(null);
-      if (ribbonOpen) closeRibbon();
+      unstable_batchedUpdates(() => {
+        setSelectedEntityKey(key);
+        setSelectedTileKey(key);
+        setArmedEntityId(null);
+        if (ribbonOpen) closeRibbon();
+      });
     }
     return;
   }
@@ -542,14 +552,18 @@ export function handleTileTapLogic(params: TileTapParams): void {
   }
 
   if (selectedTileKeys.has(key) && !selectedEntityKey) {
-    setSelectedTileKey(null);
-    setArmedEntityId(null);
-    if (ribbonOpen) closeRibbon();
+    unstable_batchedUpdates(() => {
+      setSelectedTileKey(null);
+      setArmedEntityId(null);
+      if (ribbonOpen) closeRibbon();
+    });
     return;
   }
 
-  setSelectedTileKey(key);
-  setSelectedEntityKey(null);
-  setArmedEntityId(null);
-  if (ribbonOpen) closeRibbon();
+  unstable_batchedUpdates(() => {
+    setSelectedTileKey(key);
+    setSelectedEntityKey(null);
+    setArmedEntityId(null);
+    if (ribbonOpen) closeRibbon();
+  });
 }
