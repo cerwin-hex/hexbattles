@@ -258,19 +258,20 @@ export function handleTileTapLogic(params: TileTapParams): void {
 
     // Phase 1: immediate visual feedback — show unit at destination, clear
     // selection, and start movement animation. No BFS yet.
-    // React 18 automatic batching handles these as a single render.
-    setMutableTileMap(new Map(newTileMap));
-    setEntities(new Map(newEntities));
-    setSpentUnits(newSpentUnits);
-    setCombatSpentUnits(newCombatSpentUnits);
-    setPartialMoves(newPartialMoves);
-    setLakeUnitFunds(newLakeFunds);
-    setSelectedEntityKey(null);
-    setSelectedTileKey(key);
-    if (ribbonOpen) closeRibbon();
-    if (movingEntityId) {
-      triggerUnitAnimation(fromKeyForAnim, key, movingEntityId);
-    }
+    unstable_batchedUpdates(() => {
+      setMutableTileMap(new Map(newTileMap));
+      setEntities(new Map(newEntities));
+      setSpentUnits(newSpentUnits);
+      setCombatSpentUnits(newCombatSpentUnits);
+      setPartialMoves(newPartialMoves);
+      setLakeUnitFunds(newLakeFunds);
+      setSelectedEntityKey(null);
+      setSelectedTileKey(key);
+      if (ribbonOpen) closeRibbon();
+      if (movingEntityId) {
+        triggerUnitAnimation(fromKeyForAnim, key, movingEntityId);
+      }
+    });
 
     // Phase 2 (deferred): run the BFS territory recalculation and apply
     // isolation penalties — these are expensive and do not affect the
@@ -461,15 +462,16 @@ export function handleTileTapLogic(params: TileTapParams): void {
 
       // Phase 1: immediate visual feedback — show unit at destination and
       // clear selection state before the expensive BFS runs.
-      // React 18 automatic batching handles these as a single render.
-      setMutableTileMap(new Map(newTileMap));
-      setEntities(new Map(newEntities));
-      setCombatSpentUnits(newCombatSpent2);
-      setSpentUnits(newSpentUnits2);
-      setArmedEntityId(null);
-      setSelectedEntityKey(null);
-      setSelectedTileKey(key);
-      closeRibbon();
+      unstable_batchedUpdates(() => {
+        setMutableTileMap(new Map(newTileMap));
+        setEntities(new Map(newEntities));
+        setCombatSpentUnits(newCombatSpent2);
+        setSpentUnits(newSpentUnits2);
+        setArmedEntityId(null);
+        setSelectedEntityKey(null);
+        setSelectedTileKey(key);
+        closeRibbon();
+      });
 
       // Phase 2 (deferred): BFS territory recalculation, penalty, and
       // balance/ownership state updates in the next event-loop tick.
