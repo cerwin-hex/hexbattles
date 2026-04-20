@@ -5,7 +5,6 @@ import React, {
   useMemo,
   useRef,
   useState,
-  useTransition,
 } from "react";
 import {
   Image,
@@ -18,7 +17,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   Easing,
   cancelAnimation,
@@ -31,17 +30,11 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, {
-  Circle,
-  ClipPath,
   Defs,
-  G,
-  Image as SvgImage,
-  Line,
   LinearGradient,
   Polygon,
   Rect,
   Stop,
-  Text as SvgText,
 } from "react-native-svg";
 
 const MOUNTAIN_IMG = require("../assets/images/mountain.webp");
@@ -56,31 +49,17 @@ import type {
   AiStepSnapshot,
   Difficulty,
   AiState,
-  MoveHistorySnapshot,
   GameResult,
 } from "@/types";
 import {
-  HEX_EDGES,
   getBoardBounds,
   hexCornersString,
-  hexDistance,
   hexToPixel,
   tileKey,
 } from "@/utils/hexMath";
 import {
-  CITY_BONUS,
   ENTITY_META,
-  TERRAIN_INCOME,
-  UNIT_UPGRADE,
-  calcDefenseUpkeep,
-  nextDefenseUpkeep,
-  findCentralTile,
   generateHexGrid,
-  getContiguousTerritory,
-  getMaxEnemyZoC,
-  getTerritoryId,
-  getValidMoves,
-  getMoveCost,
   recalculateTerritories,
   recalculateTerritoriesForCapture,
 } from "@/utils/hexGrid";
@@ -89,13 +68,10 @@ import {
   BOTTOM_BAR_H,
   RIBBON_H,
   ENTITY_PANEL_H,
-  EXTRA_PAN,
 } from "@/constants/gameConstants";
 import {
-  calcTerritoryUpkeep,
   applySingleHexPenalty,
   initTerritoryBalances,
-  mergedUnitType,
 } from "@/logic/gameLogic";
 import {
   runAiTurn as runAiTurnOrchestration,
@@ -129,8 +105,14 @@ import {
   type OuterEdgesCache,
 } from "@/utils/borderEdges";
 import { useSelectionState } from "@/hooks/useSelectionState";
+import { usePanZoomGesture } from "@/hooks/usePanZoomGesture";
+import { useMoveHistory } from "@/hooks/useMoveHistory";
+import { useEconBreakdown } from "@/hooks/useEconBreakdown";
+import { useDevEconomicOverlays } from "@/hooks/useDevEconomicOverlays";
+import { useEndTurnPulse } from "@/hooks/useEndTurnPulse";
 import { handleTileTapLogic } from "@/logic/tileTapHandler";
 import { handleEndTurnLogic } from "@/logic/endTurnHandler";
+import { checkWinLossLogic } from "@/logic/winLossChecker";
 
 export default function GameScreen() {
 
@@ -244,23 +226,6 @@ export default function GameScreen() {
   const initX = (SW - boardW) / 2;
   const initY = topInset + (availH - boardH) / 2;
 
-  const scale = useSharedValue(fitScale);
-  const savedScale = useSharedValue(fitScale);
-  const translateX = useSharedValue(initX);
-  const translateY = useSharedValue(initY);
-  const savedX = useSharedValue(initX);
-  const savedY = useSharedValue(initY);
-
-  useEffect(() => {
-    translateX.value = initX;
-    translateY.value = initY;
-    savedX.value = initX;
-    savedY.value = initY;
-    scale.value = fitScale;
-    savedScale.value = fitScale;
-  }, [initX, initY, fitScale]);
-
-  const pulseVal = useSharedValue(1);
   const territoryPulseVal = useSharedValue(0);
 
   const [confirmLeave, setConfirmLeave] = useState(false);
@@ -298,7 +263,7 @@ export default function GameScreen() {
   const [combatSpentUnits, setCombatSpentUnits] = useState<Set<string>>(
     new Set(),
   );
-  const [moveHistory, setMoveHistory] = useState<MoveHistorySnapshot[]>([]);
+  
   const [isAiTurn, setIsAiTurn] = useState(false);
   const [gameResult, setGameResult] = useState<GameResult>(null);
   const [showDominancePopup, setShowDominancePopup] = useState(false);
@@ -536,38 +501,14 @@ export default function GameScreen() {
 
   const checkWinLoss = useCallback(
     (currentTileMap: Map<string, HexTile>) => {
-      const playerTiles = Array.from(currentTileMap.values()).filter(
-        (t) => t.owner === "player",
-      );
-      if (playerTiles.length === 0) {
-        setGameResult("defeat");
+      const outcome = checkWinLossLogic(currentTileMap, aiOwners, dominanceShownRef);
+      if (!outcome) return false;
+      if (outcome.result) {
+        setGameResult(outcome.result);
         return true;
       }
-      const allAiEliminated = aiOwners.every(
-        (ai) =>
-          !Array.from(currentTileMap.values()).some(
-            (t) => t.owner === ai && t.terrain !== "lake",
-          ),
-      );
-      if (allAiEliminated) {
-        setGameResult("victory");
-        return true;
-      }
-      // 70% dominance check — show once per game
-      if (!dominanceShownRef.current) {
-        const playableTiles = Array.from(currentTileMap.values()).filter(
-          (t) => t.terrain !== "mountain" && t.terrain !== "lake",
-        );
-        const playerPlayable = playableTiles.filter(
-          (t) => t.owner === "player",
-        ).length;
-        if (
-          playableTiles.length > 0 &&
-          playerPlayable / playableTiles.length >= 0.7
-        ) {
-          dominanceShownRef.current = true;
-          setShowDominancePopup(true);
-        }
+      if (outcome.showDominance) {
+        setShowDominancePopup(true);
       }
       return false;
     },
@@ -711,92 +652,7 @@ export default function GameScreen() {
     BORDER_W,
   });
 
-  const [, startPulseTransition] = useTransition();
-  const [shouldPulseEndTurn, setShouldPulseEndTurn] = useState(false);
-  const prevPulseInputs = useRef<{
-    entities: Map<string, EntityType>;
-    activeTileMap: Map<string, HexTile>;
-    spentUnits: Set<string>;
-    territoryBalances: Map<string, number>;
-    freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
-    isAiTurn: boolean;
-    turn: number;
-  } | null>(null);
-
-  useEffect(() => {
-    const prev = prevPulseInputs.current;
-    if (
-      prev &&
-      prev.entities === entities &&
-      prev.activeTileMap === activeTileMap &&
-      prev.spentUnits === spentUnits &&
-      prev.territoryBalances === territoryBalances &&
-      prev.freeTowerUsedTiles === freeTowerUsedTiles &&
-      prev.isAiTurn === isAiTurn &&
-      prev.turn === turn
-    )
-      return;
-    prevPulseInputs.current = {
-      entities,
-      activeTileMap,
-      spentUnits,
-      territoryBalances,
-      freeTowerUsedTiles,
-      isAiTurn,
-      turn,
-    };
-    startPulseTransition(() => {
-      if (isAiTurn) {
-        setShouldPulseEndTurn(false);
-        return;
-      }
-      const hasValidMove = Array.from(entities.entries()).some(
-        ([key, entityId]) => {
-          const meta = ENTITY_META[entityId];
-          if (!meta.isUnit) return false;
-          const tile = activeTileMap.get(key);
-          if (tile?.owner !== "player") return false;
-          if (spentUnits.has(key)) return false;
-          const moves = getValidMoves(
-            key,
-            "player",
-            entities,
-            activeTileMap,
-            spentUnits,
-          );
-          return moves.size > 0;
-        },
-      );
-      if (hasValidMove) {
-        setShouldPulseEndTurn(false);
-        return;
-      }
-      const playerFreeTowerUsed =
-        freeTowerUsedTiles.get("player") ?? new Set<string>();
-      const visited = new Set<string>();
-      for (const tile of Array.from(activeTileMap.values())) {
-        if (tile.owner !== "player" || visited.has(tile.key)) continue;
-        const territory = getContiguousTerritory(
-          activeTileMap,
-          tile.key,
-          "player",
-        );
-        for (const t of territory) visited.add(t.key);
-        const id = getTerritoryId(territory);
-        if (!id) continue;
-        const balance = territoryBalances.get(id) ?? 0;
-        const towerFree =
-          territory.length >= 2 &&
-          !territory.some((t) => playerFreeTowerUsed.has(t.key));
-        const canAfford = turn === 1 ? towerFree : balance >= minUnitCost;
-        if (canAfford) {
-          setShouldPulseEndTurn(false);
-          return;
-        }
-      }
-      setShouldPulseEndTurn(true);
-    });
-  }, [
+  const { endTurnStyle } = useEndTurnPulse({
     entities,
     activeTileMap,
     spentUnits,
@@ -805,121 +661,13 @@ export default function GameScreen() {
     isAiTurn,
     freeTowerUsedTiles,
     turn,
-  ]);
-
-  useEffect(() => {
-    const shouldPulse = shouldPulseEndTurn && !armedEntityId && !ribbonOpen;
-    if (shouldPulse) {
-      pulseVal.value = withRepeat(
-        withSequence(
-          withTiming(0.25, { duration: 600 }),
-          withTiming(1.0, { duration: 600 }),
-        ),
-        -1,
-        false,
-      );
-    } else {
-      cancelAnimation(pulseVal);
-      pulseVal.value = withTiming(1.0, { duration: 200 });
-    }
-    return () => {
-      cancelAnimation(pulseVal);
-    };
-  }, [shouldPulseEndTurn, armedEntityId, ribbonOpen]);
+    armedEntityId,
+    ribbonOpen,
+  });
 
   const canBuild = selectedTerritory.length > 0;
 
-  const econBreakdown = useMemo(() => {
-    if (selectedTerritory.length === 0) return null;
-    let grassCount = 0;
-    let forestCount = 0;
-    let desertCount = 0;
-    let mountainCount = 0;
-    let lakeCount = 0;
-    let cityCount = 0;
-    const upkeepGroupMap = new Map<EntityType, number>();
-    let activeGrassCount = 0;
-    let activeCityCount = 0;
-    for (const t of selectedTerritory) {
-      if (t.terrain === "grass") grassCount++;
-      else if (t.terrain === "forest") forestCount++;
-      else if (t.terrain === "desert") desertCount++;
-      else if (t.terrain === "mountain") mountainCount++;
-      else if (t.terrain === "lake") lakeCount++;
-      const entityId = entities.get(t.key);
-      const hasRebel = entityId === "rebel";
-      const isCity = cities.has(t.key);
-      if (isCity) cityCount++;
-      if (!hasRebel) {
-        if (t.terrain === "grass") activeGrassCount++;
-        if (isCity) activeCityCount++;
-      }
-      if (entityId && entityId !== "rebel") {
-        const meta = ENTITY_META[entityId];
-        if (meta.upkeep > 0) {
-          upkeepGroupMap.set(entityId, (upkeepGroupMap.get(entityId) ?? 0) + 1);
-        }
-      }
-    }
-    const UPKEEP_ORDER: EntityType[] = [
-      "simple_unit",
-      "advanced_unit",
-      "expert_unit",
-      "tower",
-      "castle",
-    ];
-    const upkeepGroups = UPKEEP_ORDER.filter((type) =>
-      upkeepGroupMap.has(type),
-    ).map((type) => {
-      const count = upkeepGroupMap.get(type)!;
-      const meta = ENTITY_META[type];
-      const isDefense = type === "tower" || type === "castle";
-      const total = isDefense
-        ? calcDefenseUpkeep(type as "tower" | "castle", count)
-        : meta.upkeep * count;
-      const mostExpensiveCost = isDefense
-        ? nextDefenseUpkeep(type as "tower" | "castle", count - 1)
-        : null;
-      return {
-        icon: meta.icon,
-        name: meta.name,
-        count,
-        upkeepPerUnit: isDefense ? null : meta.upkeep,
-        mostExpensiveCost,
-        total,
-      };
-    });
-    const grassIncome = grassCount * 2;
-    const forestIncome = forestCount * 2;
-    const desertIncome = desertCount * 1;
-    const cityIncome = cityCount * CITY_BONUS;
-    const totalIncome = grassIncome + forestIncome + desertIncome + cityIncome;
-    const totalUpkeep = upkeepGroups.reduce((s, g) => s + g.total, 0);
-    let rebelCount = 0;
-    let rebelTotalLoss = 0;
-    for (const t of selectedTerritory) {
-      if (entities.get(t.key) !== "rebel") continue;
-      rebelCount++;
-      rebelTotalLoss += TERRAIN_INCOME[t.terrain];
-    }
-    const net = totalIncome - totalUpkeep - rebelTotalLoss;
-    return {
-      grassCount,
-      forestCount,
-      desertCount,
-      cityCount,
-      grassIncome,
-      forestIncome,
-      desertIncome,
-      cityIncome,
-      upkeepGroups,
-      totalIncome,
-      totalUpkeep,
-      rebelCount,
-      rebelTotalLoss,
-      net,
-    };
-  }, [selectedTerritory, entities, cities]);
+  const econBreakdown = useEconBreakdown({ selectedTerritory, entities, cities });
 
   const hasAffordableTerritories = affordableTerritoryTileKeys.size > 0;
   useEffect(() => {
@@ -943,127 +691,20 @@ export default function GameScreen() {
     };
   }, [hasAffordableTerritories, armedEntityId, isAiTurn, gameResult]);
 
-  const devEconomicOverlays = useMemo<
-    Array<{ cx: number; cy: number; label: string; aiLabel?: string }>
-  >(() => {
-    if (!isDeveloperModeActive) return [];
-    const result: Array<{
-      cx: number;
-      cy: number;
-      label: string;
-      aiLabel?: string;
-    }> = [];
-    const visited = new Set<string>();
-    const diffLabel =
-      aiDifficulty === "super_hard"
-        ? "S.Hrd"
-        : aiDifficulty === "hard"
-          ? "Hrd"
-          : aiDifficulty === "medium"
-            ? "Med"
-            : aiDifficulty === "easy"
-              ? "Esy"
-              : "S.Esy";
-    for (const aiOwner of aiOwners) {
-      for (const tile of Array.from(activeTileMap.values())) {
-        if (tile.owner !== aiOwner || visited.has(tile.key)) continue;
-        const territory = getContiguousTerritory(
-          activeTileMap,
-          tile.key,
-          aiOwner,
-        );
-        for (const t of territory) visited.add(t.key);
-        const territoryId = getTerritoryId(territory);
-        if (!territoryId) continue;
-        const balance = territoryBalances.get(territoryId) ?? 0;
-        const income = territory.reduce((s, t) => {
-          if (entities.get(t.key) === "rebel") return s;
-          return (
-            s +
-            TERRAIN_INCOME[t.terrain] +
-            (cities.has(t.key) ? CITY_BONUS : 0)
-          );
-        }, 0);
-        const upkeep = calcTerritoryUpkeep(territory, entities);
-        const net = income - upkeep;
-        const label = net >= 0 ? `${balance}(+${net})` : `${balance}(${net})`;
-        const stateVal = aiStateMap.get(territoryId);
-        const stateLabel = stateVal === "attacking" ? "Atk" : "Def";
-        const aiLabel = `${diffLabel}·${stateLabel}`;
-        const central = findCentralTile(territory);
-        if (!central) continue;
-        // Pick label position: vacant tile closest to center → tower tile → central tile
-        const [centQ, centR] = central.key.split(",").map(Number);
-        const vacantTiles = territory.filter(
-          (t) =>
-            t.terrain !== "mountain" &&
-            t.terrain !== "lake" &&
-            !entities.has(t.key),
-        );
-        const towerTiles = territory.filter(
-          (t) => entities.get(t.key) === "tower",
-        );
-        const labelCandidates =
-          vacantTiles.length > 0
-            ? vacantTiles
-            : towerTiles.length > 0
-              ? towerTiles
-              : [central];
-        let labelTile = labelCandidates[0];
-        let labelDist = hexDistance(centQ, centR, labelTile.q, labelTile.r);
-        for (const t of labelCandidates) {
-          const d = hexDistance(centQ, centR, t.q, t.r);
-          if (d < labelDist) {
-            labelDist = d;
-            labelTile = t;
-          }
-        }
-        const pos = tileDataMap.get(labelTile.key);
-        if (!pos) continue;
-        result.push({ cx: pos.cx, cy: pos.cy, label, aiLabel });
-      }
-    }
-    for (const [lakeKey, fund] of lakeUnitFunds) {
-      const pos = tileDataMap.get(lakeKey);
-      const entity = entities.get(lakeKey);
-      if (!pos || !entity || !ENTITY_META[entity].isUnit) continue;
-      const upkeep = ENTITY_META[entity].upkeep;
-      const label = `⚓${fund} (-${upkeep}/t)`;
-      result.push({ cx: pos.cx, cy: pos.cy, label });
-    }
-    return result;
-  }, [
+  const devEconomicOverlays = useDevEconomicOverlays({
     isDeveloperModeActive,
     aiOwners,
     activeTileMap,
     territoryBalances,
     entities,
+    cities,
     tileDataMap,
     lakeUnitFunds,
     aiDifficulty,
     aiStateMap,
-  ]);
+  });
 
-  const pushHistory = useCallback(() => {
-    setMoveHistory((prev) => [
-      ...prev,
-      {
-        entities: new Map(entities),
-        cities: new Set(cities),
-        mutableTileMap: new Map(mutableTileMap),
-        territoryBalances: new Map(territoryBalances),
-        spentUnits: new Set(spentUnits),
-        combatSpentUnits: new Set(combatSpentUnits),
-        liveOwnerMap: new Map(liveOwnerMap),
-        partialMoves: new Map(partialMoves),
-        freeTowerUsedTiles: new Map(
-          [...freeTowerUsedTiles.entries()].map(([k, v]) => [k, new Set(v)]),
-        ),
-        lakeUnitFunds: new Map(lakeUnitFunds),
-        selectedTileKey,
-      },
-    ]);
-  }, [
+  const { moveHistory, setMoveHistory, pushHistory, handleUndo } = useMoveHistory({
     entities,
     cities,
     mutableTileMap,
@@ -1075,7 +716,24 @@ export default function GameScreen() {
     freeTowerUsedTiles,
     lakeUnitFunds,
     selectedTileKey,
-  ]);
+    isAiTurn,
+    gameResult,
+    ribbonOpen,
+    closeRibbon,
+    setEntities,
+    setCities,
+    setMutableTileMap,
+    setTerritoryBalances,
+    setSpentUnits,
+    setCombatSpentUnits,
+    setLiveOwnerMap,
+    setPartialMoves,
+    setFreeTowerUsedTiles,
+    setLakeUnitFunds,
+    setSelectedTileKey,
+    setSelectedEntityKey,
+    setArmedEntityId,
+  });
 
   const handleDeselect = useCallback(() => {
     if (Date.now() - lastTileTapMs.current < 150) return;
@@ -1247,29 +905,6 @@ export default function GameScreen() {
     ],
   );
 
-  const handleUndo = useCallback(() => {
-    if (isAiTurn || gameResult !== null) return;
-    setMoveHistory((prev) => {
-      if (prev.length === 0) return prev;
-      const snapshot = prev[prev.length - 1];
-      setEntities(snapshot.entities);
-      setCities(snapshot.cities ?? new Set());
-      setMutableTileMap(snapshot.mutableTileMap);
-      setTerritoryBalances(snapshot.territoryBalances);
-      setSpentUnits(snapshot.spentUnits);
-      setCombatSpentUnits(snapshot.combatSpentUnits ?? new Set());
-      setLiveOwnerMap(snapshot.liveOwnerMap);
-      setPartialMoves(snapshot.partialMoves);
-      setFreeTowerUsedTiles(snapshot.freeTowerUsedTiles);
-      setLakeUnitFunds(snapshot.lakeUnitFunds);
-      setSelectedTileKey(snapshot.selectedTileKey);
-      setSelectedEntityKey(null);
-      setArmedEntityId(null);
-      if (ribbonOpen) closeRibbon();
-      return prev.slice(0, -1);
-    });
-  }, [isAiTurn, gameResult, ribbonOpen]);
-
   const handleEndTurn = useCallback(() => {
     handleEndTurnLogic({
       isAiTurn,
@@ -1327,139 +962,21 @@ export default function GameScreen() {
     closeRibbon,
   ]);
 
-  // React Native scales around the element's centre, so the board's screen edges are:
-  //   left  = tx + boardW/2 - scaledW/2
-  //   right = tx + boardW/2 + scaledW/2
-  //   top   = ty + boardH/2 - scaledH/2
-  //   bottom= ty + boardH/2 + scaledH/2
-  // Solving for tx/ty that keeps each edge inside the viewport gives the ranges below.
-  const clampXY = (x: number, y: number, s: number) => {
-    "worklet";
-    const scaledW = boardW * s;
-    const scaledH = boardH * s;
-    // centred position keeps board centre aligned with viewport centre (independent of scale)
-    const centeredX = (SW - boardW) / 2;
-    const centeredY = topInset + (availH - boardH) / 2;
-    let clampedX: number;
-    let clampedY: number;
-    if (scaledW <= SW) {
-      clampedX = Math.max(
-        centeredX - EXTRA_PAN,
-        Math.min(centeredX + EXTRA_PAN, x),
-      );
-    } else {
-      clampedX = Math.max(
-        SW - (boardW + scaledW) / 2 - EXTRA_PAN,
-        Math.min((scaledW - boardW) / 2 + EXTRA_PAN, x),
-      );
-    }
-    if (scaledH <= availH) {
-      clampedY = Math.max(
-        centeredY - EXTRA_PAN,
-        Math.min(centeredY + EXTRA_PAN, y),
-      );
-    } else {
-      clampedY = Math.max(
-        topInset + availH - (boardH + scaledH) / 2 - EXTRA_PAN,
-        Math.min(topInset + (scaledH - boardH) / 2 + EXTRA_PAN, y),
-      );
-    }
-    return { x: clampedX, y: clampedY };
-  };
-
-  const panGesture = Gesture.Pan()
-    .minDistance(10)
-    .onUpdate((e) => {
-      const raw = {
-        x: savedX.value + e.translationX,
-        y: savedY.value + e.translationY,
-      };
-      const clamped = clampXY(raw.x, raw.y, scale.value);
-      translateX.value = clamped.x;
-      translateY.value = clamped.y;
-    })
-    .onEnd(() => {
-      savedX.value = translateX.value;
-      savedY.value = translateY.value;
-    });
-
-  const pinchGesture = Gesture.Pinch()
-    .onUpdate((e) => {
-      const newScale = Math.max(0.3, Math.min(3, savedScale.value * e.scale));
-      scale.value = newScale;
-      const clamped = clampXY(translateX.value, translateY.value, newScale);
-      translateX.value = clamped.x;
-      translateY.value = clamped.y;
-    })
-    .onEnd(() => {
-      savedScale.value = scale.value;
-      const clamped = clampXY(translateX.value, translateY.value, scale.value);
-      translateX.value = clamped.x;
-      translateY.value = clamped.y;
-      savedX.value = clamped.x;
-      savedY.value = clamped.y;
-    });
-
-  const handleBoardTap = useCallback(
-    (touchX: number, touchY: number, tx: number, ty: number, s: number) => {
-      const boardX = boardW / 2 + (touchX - tx - boardW / 2) / s;
-      const boardY = boardH / 2 + (touchY - ty - boardH / 2) / s;
-      const hx = boardX + bounds.minX;
-      const hy = boardY + bounds.minY;
-      const fq = ((2 / 3) * hx) / HEX_SIZE;
-      const fr = hy / (HEX_SIZE * Math.sqrt(3)) - fq / 2;
-      const fs = -fq - fr;
-      let rq = Math.round(fq);
-      let rr = Math.round(fr);
-      let rs = Math.round(fs);
-      const qd = Math.abs(rq - fq),
-        rd = Math.abs(rr - fr),
-        sd = Math.abs(rs - fs);
-      if (qd > rd && qd > sd) rq = -rr - rs;
-      else if (rd > sd) rr = -rq - rs;
-      const key = tileKey(rq, rr);
-      if (activeTileMap.has(key)) handleTileTap(key);
-      else handleDeselect();
-    },
-    [
-      boardW,
-      boardH,
-      bounds,
-      HEX_SIZE,
-      activeTileMap,
-      handleTileTap,
-      handleDeselect,
-    ],
-  );
-
-  const tapGesture = Gesture.Tap()
-    .maxDistance(5)
-    .onEnd((e) => {
-      runOnJS(handleBoardTap)(
-        e.x,
-        e.y,
-        translateX.value,
-        translateY.value,
-        scale.value,
-      );
-    });
-
-  const gesture = Gesture.Race(
-    tapGesture,
-    Gesture.Simultaneous(panGesture, pinchGesture),
-  );
-
-  const boardStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-      { scale: scale.value },
-    ],
-  }));
-
-  const endTurnStyle = useAnimatedStyle(() => ({
-    opacity: pulseVal.value,
-  }));
+  const { gesture, boardStyle } = usePanZoomGesture({
+    boardW,
+    boardH,
+    bounds,
+    HEX_SIZE,
+    SW,
+    availH,
+    topInset,
+    initX,
+    initY,
+    fitScale,
+    activeTileMap,
+    handleTileTap,
+    handleDeselect,
+  });
 
   const territoryPulseStyle = useAnimatedStyle(() => ({
     opacity: territoryPulseVal.value,
