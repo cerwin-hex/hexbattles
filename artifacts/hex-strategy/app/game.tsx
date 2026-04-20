@@ -1583,18 +1583,6 @@ export default function GameScreen() {
                 HEX_SIZE={HEX_SIZE}
               />
 
-              {errorTileKey &&
-                (() => {
-                  const pos = tileDataMap.get(errorTileKey);
-                  if (!pos) return null;
-                  return (
-                    <Polygon
-                      key={`err-${errorTileKey}`}
-                      points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
-                      fill="rgba(0,0,0,0.55)"
-                    />
-                  );
-                })()}
             </Svg>
 
             <AffordableTerritoryLayer
@@ -1606,6 +1594,21 @@ export default function GameScreen() {
               HEX_SIZE={HEX_SIZE}
               territoryPulseStyle={territoryPulseStyle}
             />
+
+            {errorTileKey && (() => {
+              const pos = tileDataMap.get(errorTileKey);
+              if (!pos) return null;
+              return (
+                <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+                  <Svg width={boardW} height={boardH}>
+                    <Polygon
+                      points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
+                      fill="rgba(0,0,0,0.55)"
+                    />
+                  </Svg>
+                </View>
+              );
+            })()}
 
             <EntityLayer
               entities={entities}
