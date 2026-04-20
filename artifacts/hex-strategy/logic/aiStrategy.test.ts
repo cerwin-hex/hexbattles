@@ -347,4 +347,172 @@ describe("runAiTerritoryDecisionLoop", () => {
     expect(exec.move).not.toHaveBeenCalled();
     expect(exec.build).not.toHaveBeenCalled();
   });
+
+  describe("defending mode — upgrades and defensive builds", () => {
+    // ── Shared helper ──────────────────────────────────────────────────────────
+    // Produces a minimal "defending" map:
+    //   AI "ai1" owns a linear strip: (-1,0)–(0,0)–(1,0)–(2,0)–(3,0)  [income 10]
+    //   Enemy "player" owns (4,0) adjacent to the AI border at (3,0).
+    // Any unit placed at (4,0) with strength > currMaxStr puts the AI into
+    // "defending" state.  currMaxStr is determined by AI entities in the map.
+    function makeDefendingSetup(
+      aiEntities: Map<string, EntityType> = new Map(),
+      enemyEntity: EntityType = "advanced_unit",
+      aiBalance = 50,
+    ) {
+      const tiles = [
+        makeTile(-1, 0, "ai1"),
+        makeTile(0, 0, "ai1"),
+        makeTile(1, 0, "ai1"),
+        makeTile(2, 0, "ai1"),
+        makeTile(3, 0, "ai1"),
+        makeTile(4, 0, "player"),
+      ];
+      const entities = new Map(aiEntities);
+      entities.set("4,0", enemyEntity);
+      // Territory ID is the lexicographically smallest key in the territory.
+      const balances = new Map([["-1,0", aiBalance]]);
+      const aiCtx = makeAiCtx(tiles, "ai1", entities, balances);
+      return { aiCtx, tiles, entities, balances };
+    }
+
+    it("sets territory state to 'defending' when a stronger enemy unit is adjacent", async () => {
+      // Enemy advanced_unit (str=2) is adjacent to the AI border tile (3,0).
+      // AI has no units → currMaxStr=0 → 2 > 0 → defending state.
+      const { aiCtx } = makeDefendingSetup();
+      const exec = makeExec();
+
+      await runAiTerritoryDecisionLoop("-1,0", aiCtx, exec, () => true, "hard");
+
+      expect(exec.setTerritoryState).toHaveBeenCalledWith("-1,0", "defending");
+    });
+
+    it("Priority 1: exec.move is called to split the stronger enemy's territory", async () => {
+      // Set up a deeper enemy strip so capturing the first tile leaves the
+      // enemy alive but split — dtCaptureNegatesIncome fires because the
+      // remaining 2-tile territory cannot pay upkeep for the expert_unit.
+      //
+      // AI "ai1": (0,0)–(1,0)–(2,0)–(3,0)  [income=8, balance=50]
+      // AI entity: advanced_unit (str=2) at (3,0)
+      // Enemy "player": (4,0), (5,0), (6,0) — expert_unit (str=3) at (6,0)
+      //
+      // currMaxStr=2, expert_unit str=3 > 2 → defending.
+      // Priority 1 candidates:
+      //   (3,0)→(4,0): ZoC at (4,0) = 0 (no entity at (5,0)), str 2 > 0 ✓
+      //   dtCaptureNegatesIncome: remaining income (4) − upkeep (27) < 0 → true
+      //   oneHex=false but neg=true → qualifies → exec.move fired.
+      // exec.move returns true → actionTaken=true → Priority 2 is skipped.
+      const tiles = [
+        makeTile(0, 0, "ai1"),
+        makeTile(1, 0, "ai1"),
+        makeTile(2, 0, "ai1"),
+        makeTile(3, 0, "ai1"),
+        makeTile(4, 0, "player"),
+        makeTile(5, 0, "player"),
+        makeTile(6, 0, "player"),
+      ];
+      const entities = new Map<string, EntityType>([
+        ["3,0", "advanced_unit"],
+        ["6,0", "expert_unit"],
+      ]);
+      const balances = new Map([["0,0", 50]]);
+      const aiCtx = makeAiCtx(tiles, "ai1", entities, balances);
+
+      let moved = false;
+      const exec = makeExec({
+        move: vi.fn(async () => { moved = true; return true; }),
+      });
+
+      await runAiTerritoryDecisionLoop("0,0", aiCtx, exec, () => !moved, "hard");
+
+      expect(exec.move).toHaveBeenCalledTimes(1);
+      expect(exec.move).toHaveBeenCalledWith("3,0", "4,0");
+      // Priority 2 must NOT have run (move already satisfied actionTaken).
+      expect(exec.upgrade).not.toHaveBeenCalled();
+      expect(exec.buy).not.toHaveBeenCalled();
+    });
+
+    it("Priority 2: upgrades a tower to castle when the upgrade counters the stronger enemy", async () => {
+      // AI has a tower (str=1) at (1,0).  Enemy has advanced_unit (str=2) at (4,0).
+      // currMaxStr=0 (tower is not a unit) → str 2 > 0 → defending.
+      // Priority 1: no availUnits → no split candidates.
+      // Priority 2 first loop (non-unit upgrades):
+      //   tower → castle: castle str (2) ≥ eStr (2) ✓
+      //   upgCost = 30−15 = 15, dUpk = 5−1 = 4
+      //   canAfford(15, 4): 50≥15 && income(8) − (upkeep(1)+4)=3≥0 ✓
+      //   → exec.upgrade("1,0", "castle", 15)
+      const { aiCtx } = makeDefendingSetup(
+        new Map<string, EntityType>([["1,0", "tower"]]),
+        "advanced_unit",
+      );
+      let upgraded = false;
+      const exec = makeExec({
+        upgrade: vi.fn(async () => { upgraded = true; return true; }),
+      });
+
+      await runAiTerritoryDecisionLoop("-1,0", aiCtx, exec, () => !upgraded, "hard");
+
+      expect(exec.upgrade).toHaveBeenCalledTimes(1);
+      expect(exec.upgrade).toHaveBeenCalledWith("1,0", "castle", 15);
+    });
+
+    it("Priority 2: upgrades a nearby unit when the upgrade meets the threat threshold", async () => {
+      // AI has a simple_unit (str=1) at (0,0).  Enemy has advanced_unit (str=2) at (4,0).
+      // currMaxStr=1 → str 2 > 1 → defending.
+      // Priority 1: simple_unit at (0,0), 3 movement points → can reach (3,0) but NOT (4,0)
+      //   (cost 4 steps along the strip) → no split candidates.
+      // Priority 2 first loop: no non-unit entities → skip.
+      // Priority 2 second loop (unit upgrades near the enemy):
+      //   simple_unit at (0,0): hexDistance(0,0, 4,0)=4 ≤ 5 ✓
+      //   UNIT_UPGRADE[simple_unit]=advanced_unit, str 2 ≥ eStr 2 ✓
+      //   upgCost=10, dUpk=6
+      //   canAfford(10, 6): 50≥10 && income(10) − (upkeep(3)+6)=1≥0 ✓
+      //   → exec.upgrade("0,0", "advanced_unit", 10)
+      const { aiCtx } = makeDefendingSetup(
+        new Map<string, EntityType>([["0,0", "simple_unit"]]),
+        "advanced_unit",
+      );
+      let upgraded = false;
+      const exec = makeExec({
+        upgrade: vi.fn(async () => { upgraded = true; return true; }),
+      });
+
+      await runAiTerritoryDecisionLoop("-1,0", aiCtx, exec, () => !upgraded, "hard");
+
+      expect(exec.upgrade).toHaveBeenCalledTimes(1);
+      expect(exec.upgrade).toHaveBeenCalledWith("0,0", "advanced_unit", 10);
+    });
+
+    it("Priority 2: buys a defensive unit at a border tile when no upgrades are available", async () => {
+      // AI has no entities.  Enemy has advanced_unit (str=2) at (4,0).
+      // currMaxStr=0 → str 2 > 0 → defending.
+      // Priority 1: no availUnits → no candidates.
+      // Priority 2 first/second loops: no entities → skip.
+      // Priority 2 third loop (buy unit):
+      //   simple_unit str 1 < eStr 2 → skip.
+      //   advanced_unit str 2 ≥ 2 ✓, cost=20, upkeep=9
+      //   canAfford(20, 9): 50≥20 && income(10) − (0+9)=1≥0 ✓
+      //   borderPlacements: (3,0) is border tile adjacent to (4,0), empty,
+      //     hexDistance(3,0, 4,0)=1 ≤ 5 ✓ → sorted closest first → (3,0)
+      //   → exec.buy("advanced_unit", "3,0", 20, false)
+      const { aiCtx } = makeDefendingSetup(
+        new Map<string, EntityType>(),
+        "advanced_unit",
+      );
+      let bought = false;
+      const exec = makeExec({
+        buy: vi.fn(async () => { bought = true; return true; }),
+      });
+
+      await runAiTerritoryDecisionLoop("-1,0", aiCtx, exec, () => !bought, "hard");
+
+      expect(exec.buy).toHaveBeenCalledTimes(1);
+      const [unitType, targetKey, cost, outside] =
+        (exec.buy as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(unitType).toBe("advanced_unit");
+      expect(targetKey).toBe("3,0");
+      expect(cost).toBe(20);
+      expect(outside).toBe(false);
+    });
+  });
 });
