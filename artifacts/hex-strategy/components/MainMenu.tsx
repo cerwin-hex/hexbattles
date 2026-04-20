@@ -1,7 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Modal,
   Platform,
@@ -152,7 +152,6 @@ export default function MainMenu() {
   const [tileCount, setTileCount] = useState(100);
   const [opponentCount, setOpponentCount] = useState(3);
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
-  const [trackW, setTrackW] = useState(0);
   const [rulesVisible, setRulesVisible] = useState(false);
 
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
@@ -160,24 +159,24 @@ export default function MainMenu() {
 
   const thumbX = useSharedValue(0);
   const startX = useSharedValue(0);
+  const trackWShared = useSharedValue(0);
 
   function countToX(count: number, width: number): number {
     const maxX = Math.max(0, width - THUMB_SIZE);
     return ((count - TILE_MIN) / (TILE_MAX - TILE_MIN)) * maxX;
   }
 
-  useEffect(() => {
-    if (trackW > 0) {
-      thumbX.value = countToX(tileCount, trackW);
-    }
-  }, [trackW]);
+  function handleTrackLayout(width: number) {
+    trackWShared.value = width;
+    thumbX.value = countToX(tileCount, width);
+  }
 
   const panGesture = Gesture.Pan()
     .onBegin(() => {
       startX.value = thumbX.value;
     })
     .onUpdate(e => {
-      const maxX = trackW - THUMB_SIZE;
+      const maxX = trackWShared.value - THUMB_SIZE;
       const newX = Math.max(0, Math.min(maxX, startX.value + e.translationX));
       thumbX.value = newX;
       const frac = maxX > 0 ? newX / maxX : 0;
@@ -190,7 +189,7 @@ export default function MainMenu() {
   }));
 
   const fillStyle = useAnimatedStyle(() => ({
-    width: thumbX.value + THUMB_SIZE / 2,
+    width: thumbX.value + THUMB_SIZE,
   }));
 
   function handleStart() {
@@ -231,7 +230,7 @@ export default function MainMenu() {
             <GestureDetector gesture={panGesture}>
               <View
                 style={styles.sliderTrack}
-                onLayout={e => setTrackW(e.nativeEvent.layout.width)}
+                onLayout={e => handleTrackLayout(e.nativeEvent.layout.width)}
               >
                 <Animated.View style={[styles.sliderFill, fillStyle]} />
                 <Animated.View style={[styles.sliderThumb, thumbStyle]} />
@@ -353,7 +352,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   label: {
-    fontSize: 10,
+    fontSize: 13,
     fontFamily: 'Cinzel_400Regular',
     color: '#786A54',
     letterSpacing: 2,
