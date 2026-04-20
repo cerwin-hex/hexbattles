@@ -80,6 +80,60 @@ function makeCbs(overrides: CbsOverrides = {}): AiTurnCallbacks {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
+describe("makeCbs helper — per-member overrides", () => {
+  it("overriding one state member leaves all other state mocks as vi.fn()", () => {
+    const customSetEntities = vi.fn();
+    const cbs = makeCbs({ state: { setEntities: customSetEntities } });
+
+    expect(cbs.state.setEntities).toBe(customSetEntities);
+
+    const siblingKeys: Array<keyof typeof cbs.state> = [
+      "setMutableTileMap",
+      "setTerritoryBalances",
+      "setGraveyard",
+      "setRuins",
+      "setLiveOwnerMap",
+      "setCities",
+      "setFreeTowerUsedTiles",
+      "setAiStateMap",
+      "setLakeUnitFunds",
+      "setIsAiTurn",
+    ];
+    for (const key of siblingKeys) {
+      expect(vi.isMockFunction(cbs.state[key]), `state.${key} should be vi.fn()`).toBe(true);
+      expect(cbs.state[key]).not.toBe(customSetEntities);
+    }
+  });
+
+  it("overriding one refs member leaves all other refs mocks as vi.fn()", () => {
+    const customIsTurnActive = vi.fn().mockReturnValue(false);
+    const cbs = makeCbs({ refs: { isTurnActive: customIsTurnActive } });
+
+    expect(cbs.refs.isTurnActive).toBe(customIsTurnActive);
+
+    const siblingKeys: Array<keyof typeof cbs.refs> = [
+      "getAiStateMap",
+      "setAiStateMap",
+      "isDeveloperMode",
+      "setAiTurn",
+    ];
+    for (const key of siblingKeys) {
+      expect(vi.isMockFunction(cbs.refs[key]), `refs.${key} should be vi.fn()`).toBe(true);
+      expect(cbs.refs[key]).not.toBe(customIsTurnActive);
+    }
+  });
+
+  it("overrides do not bleed between separate makeCbs calls", () => {
+    const custom = vi.fn();
+    const cbsA = makeCbs({ state: { setGraveyard: custom } });
+    const cbsB = makeCbs();
+
+    expect(cbsA.state.setGraveyard).toBe(custom);
+    expect(cbsB.state.setGraveyard).not.toBe(custom);
+    expect(vi.isMockFunction(cbsB.state.setGraveyard)).toBe(true);
+  });
+});
+
 describe("runAiTurn", () => {
   describe("round 1 — free tower placement", () => {
     it("places a tower in an AI territory with ≥2 tiles", async () => {
