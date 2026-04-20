@@ -515,4 +515,148 @@ describe("runAiTerritoryDecisionLoop", () => {
       expect(outside).toBe(false);
     });
   });
+
+  describe("Priority B — bridge-building", () => {
+    it("moves a unit across a neutral bridge tile to connect two disconnected AI territories", async () => {
+      // Layout (axial coords):
+      //   ai1 territory 1: (0,0)–(1,0)  [simple_unit at (1,0)]
+      //   neutral bridge:  (2,0)         [ZoC = 0 — neutral tiles never generate ZoC]
+      //   ai1 territory 2: (3,0)–(4,0)  [disconnected from territory 1]
+      //
+      // No enemy tiles → Priority 0/A are no-ops.
+      // Bridge detection: (1,0)'s neighbor (2,0) is neutral and (2,0) touches (3,0)
+      //   which is ai1 but NOT in currTerrKeys → directBridge = true.
+      // ZoC at (2,0) = 0; simple_unit str = 1 > 0 → exec.move("1,0", "2,0") fires.
+      const tiles = [
+        makeTile(0, 0, "ai1"),
+        makeTile(1, 0, "ai1"),
+        makeTile(2, 0, "neutral"),
+        makeTile(3, 0, "ai1"),
+        makeTile(4, 0, "ai1"),
+      ];
+      const entities = new Map<string, EntityType>([["1,0", "simple_unit"]]);
+      const balances = new Map([["0,0", 20]]);
+      const aiCtx = makeAiCtx(tiles, "ai1", entities, balances);
+
+      let moved = false;
+      const exec = makeExec({
+        move: vi.fn(async () => { moved = true; return true; }),
+      });
+
+      await runAiTerritoryDecisionLoop("0,0", aiCtx, exec, () => !moved, "hard");
+
+      expect(exec.move).toHaveBeenCalledTimes(1);
+      expect(exec.move).toHaveBeenCalledWith("1,0", "2,0");
+    });
+
+    it("prefers the larger disconnected territory when two bridges are available", async () => {
+      // Layout:
+      //   ai1 territory (processed): (0,0)–(1,0)           [simple_unit at (1,0)]
+      //   neutral bridge A: (0,-1) → ai1 fragment sz=1: (0,-2)  [isolated]
+      //   neutral bridge B: (2,0)  → ai1 fragment sz=2: (3,0)–(4,0)
+      //
+      // Both bridge tiles qualify as direct-bridges:
+      //   (0,-1): neighbor (0,-2) is ai1, not in currTerrKeys → sz=1
+      //   (2,0): neighbor (3,0) is ai1, not in currTerrKeys → sz=2
+      // (0,-2) and (3,0) are not adjacent (hexDistance > 1) — separate fragments.
+      // Bridges sorted by sz descending: (2,0) sz=2 first.
+      // simple_unit at (1,0) can reach (2,0) in 1 step with ZoC=0 → exec.move fires there.
+      const tiles = [
+        makeTile(0, 0, "ai1"),
+        makeTile(1, 0, "ai1"),
+        makeTile(0, -1, "neutral"),
+        makeTile(0, -2, "ai1"),
+        makeTile(2, 0, "neutral"),
+        makeTile(3, 0, "ai1"),
+        makeTile(4, 0, "ai1"),
+      ];
+      const entities = new Map<string, EntityType>([["1,0", "simple_unit"]]);
+      const balances = new Map([["0,0", 20]]);
+      const aiCtx = makeAiCtx(tiles, "ai1", entities, balances);
+
+      let moved = false;
+      const exec = makeExec({
+        move: vi.fn(async () => { moved = true; return true; }),
+      });
+
+      await runAiTerritoryDecisionLoop("0,0", aiCtx, exec, () => !moved, "hard");
+
+      expect(exec.move).toHaveBeenCalledTimes(1);
+      const firstCall = (exec.move as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(firstCall[1]).toBe("2,0");
+    });
+  });
+
+  describe("merge-move path", () => {
+    it("merges two weak units to overcome ZoC before crossing an enemy bridge tile", async () => {
+      // Layout:
+      //   ai1 territory 1: (0,0)–(1,0)  [simple_unit at each]
+      //   enemy bridge:    (2,0) player  [simple_unit at (2,0) → ZoC = 1]
+      //   ai1 territory 2: (3,0)–(4,0)  [disconnected]
+      //
+      // Neither simple_unit (str=1) can enter (2,0) because 1 ≤ ZoC(1).
+      // getValidMoves for each unit excludes (2,0) → Priority A candsA is empty.
+      //
+      // Priority A merge-move fallback:
+      //   allSplitTargets includes "2,0" (dtCaptureNegatesIncome = true: capturing the
+      //   sole enemy tile eliminates their territory).
+      //   dtFindMergeMove(1, {"2,0"}, units):
+      //     uk1="0,0" (str=1) → uk2="1,0" (str=1): mergedStr=2 ≥ 1, ≤ 3.
+      //     vm1 includes "1,0" (ally unit tile). stepsUsed=1, remainingAfterMerge=2.
+      //     tempEntities: advanced_unit (str=2) at "1,0".
+      //     vmMerged: advanced_unit str=2 > ZoC=1 → "2,0" reachable.
+      //   → exec.move("0,0", "1,0") (move uk1 onto uk2 to trigger the merge).
+      const tiles = [
+        makeTile(0, 0, "ai1"),
+        makeTile(1, 0, "ai1"),
+        makeTile(2, 0, "player"),
+        makeTile(3, 0, "ai1"),
+        makeTile(4, 0, "ai1"),
+      ];
+      const entities = new Map<string, EntityType>([
+        ["0,0", "simple_unit"],
+        ["1,0", "simple_unit"],
+        ["2,0", "simple_unit"],
+      ]);
+      const balances = new Map([["0,0", 50]]);
+      const aiCtx = makeAiCtx(tiles, "ai1", entities, balances);
+
+      let moved = false;
+      const exec = makeExec({
+        move: vi.fn(async () => { moved = true; return true; }),
+      });
+
+      await runAiTerritoryDecisionLoop("0,0", aiCtx, exec, () => !moved, "hard");
+
+      expect(exec.move).toHaveBeenCalledTimes(1);
+      expect(exec.move).toHaveBeenCalledWith("0,0", "1,0");
+    });
+
+    it("does not fire the merge when only one unit is available (cannot form a pair)", async () => {
+      // Only one simple_unit (str=1) at (1,0). ZoC=1 at (2,0) from the enemy
+      // simple_unit. A single unit cannot enter (2,0): 1 ≤ ZoC(1).
+      // dtFindMergeMove requires at least 2 units → returns null immediately.
+      // The unit at (1,0) is marked spent so availUnits is empty, preventing
+      // Priority E neutral-expand or Priority F approach-enemy from firing.
+      const tiles = [
+        makeTile(0, 0, "ai1"),
+        makeTile(1, 0, "ai1"),
+        makeTile(2, 0, "player"),
+        makeTile(3, 0, "ai1"),
+        makeTile(4, 0, "ai1"),
+      ];
+      const entities = new Map<string, EntityType>([
+        ["1,0", "simple_unit"],
+        ["2,0", "simple_unit"],
+      ]);
+      const balances = new Map([["0,0", 5]]);
+      const aiCtx = makeAiCtx(tiles, "ai1", entities, balances);
+      aiCtx.spentUnits.add("1,0");
+      const exec = makeExec();
+
+      await runAiTerritoryDecisionLoop("0,0", aiCtx, exec, () => true, "hard");
+
+      expect(exec.move).not.toHaveBeenCalled();
+    });
+  });
 });
