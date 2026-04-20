@@ -25,14 +25,12 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
-  withSequence,
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, {
   Defs,
   LinearGradient,
-  Polygon,
   Rect,
   Stop,
 } from "react-native-svg";
@@ -40,7 +38,7 @@ import Svg, {
 const MOUNTAIN_IMG = require("../assets/images/mountain.webp");
 const WATER_IMG = require("../assets/images/water.webp");
 
-import { TERRITORY_BORDERS } from "@/constants/colors";
+
 import type {
   EntityType,
   HexTile,
@@ -53,7 +51,6 @@ import type {
 } from "@/types";
 import {
   getBoardBounds,
-  hexCornersString,
   hexToPixel,
   tileKey,
 } from "@/utils/hexMath";
@@ -76,7 +73,6 @@ import {
 import {
   runAiTurn as runAiTurnOrchestration,
   type AiWorkingState,
-  type AiTurnCallbacks,
 } from "@/logic/aiStrategy";
 import styles from "@/app/gameStyles";
 import PurchaseRibbon from "@/components/PurchaseRibbon";
@@ -86,7 +82,6 @@ import type { EconBreakdown } from "@/components/GameModals";
 import BottomActionMenu from "@/components/BottomActionMenu";
 import { DevModeOverlay, DevEconomicSvgOverlays } from "@/components/DevModeOverlay";
 
-import AnimatedMovingUnit from "@/components/AnimatedMovingUnit";
 import { HexTileLayer } from "@/components/HexTileLayer";
 import { EntityLayer } from "@/components/EntityLayer";
 import { BorderEdgeLayer } from "@/components/BorderEdgeLayer";
@@ -98,6 +93,8 @@ import { GraveyardLayer } from "@/components/GraveyardLayer";
 import { AffordableTerritoryLayer } from "@/components/AffordableTerritoryLayer";
 import { LakeImageLayer } from "@/components/LakeImageLayer";
 import { MountainImageLayer } from "@/components/MountainImageLayer";
+import { IdleUnitLayer } from "@/components/IdleUnitLayer";
+import { ErrorTileFlash } from "@/components/ErrorTileFlash";
 import {
   computeBorderEdges,
   computeOuterTerritoryEdges,
@@ -105,6 +102,7 @@ import {
   type OuterEdgesCache,
 } from "@/utils/borderEdges";
 import { useSelectionState } from "@/hooks/useSelectionState";
+import { makeAiTurnCallbacks } from "@/hooks/useAiTurnCallbacks";
 import { usePanZoomGesture } from "@/hooks/usePanZoomGesture";
 import { useMoveHistory } from "@/hooks/useMoveHistory";
 import { useEconBreakdown } from "@/hooks/useEconBreakdown";
@@ -424,30 +422,6 @@ export default function GameScreen() {
     resumeAfterAiRef.current = null;
   }, []);
 
-  const idleBounceY = useSharedValue(0);
-  useEffect(() => {
-    if (isAiTurn) {
-      cancelAnimation(idleBounceY);
-      idleBounceY.value = withTiming(0, { duration: 150 });
-      return;
-    }
-    idleBounceY.value = withRepeat(
-      withSequence(
-        withTiming(-4, { duration: 550, easing: Easing.inOut(Easing.sin) }),
-        withTiming(0, { duration: 550, easing: Easing.inOut(Easing.sin) }),
-      ),
-      -1,
-      false,
-    );
-    return () => {
-      cancelAnimation(idleBounceY);
-    };
-  }, [isAiTurn]);
-
-  const idleBounceStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: idleBounceY.value }],
-  }));
-
   useEffect(() => {
     if (tiles.length > 0) {
       setTerritoryBalances(initTerritoryBalances(tiles, tileMap));
@@ -560,58 +534,34 @@ export default function GameScreen() {
         lakeFunds: new Map(initialLakeFunds ?? lakeUnitFundsRef.current),
       };
 
-      const cbs: AiTurnCallbacks = {
-        state: {
-          setEntities,
-          setMutableTileMap,
-          setTerritoryBalances,
-          setGraveyard,
-          setRuins,
-          setLiveOwnerMap,
-          setCities,
-          setFreeTowerUsedTiles,
-          setAiStateMap,
-          setLakeUnitFunds,
-          setIsAiTurn,
-        },
-        refs: {
-          getAiStateMap: () => aiStateMapRef.current,
-          setAiStateMap: (v) => { aiStateMapRef.current = v; },
-          isTurnActive: () => aiTurnRef.current,
-          isDeveloperMode: () => isDeveloperModeRef.current,
-          setAiTurn: (v) => { aiTurnRef.current = v; },
-        },
-        initStepHistory: (snap) => {
-          aiStepHistoryRef.current = [snap];
-          setAiHistoryIndex(0);
-          setAiHistoryLen(1);
-        },
+      const cbs = makeAiTurnCallbacks({
+        setEntities,
+        setMutableTileMap,
+        setTerritoryBalances,
+        setGraveyard,
+        setRuins,
+        setLiveOwnerMap,
+        setCities,
+        setFreeTowerUsedTiles,
+        setAiStateMap,
+        setLakeUnitFunds,
+        setIsAiTurn,
+        setIsAiPaused,
+        setIsAiTurnDone,
+        setAiHistoryIndex,
+        setAiHistoryLen,
+        aiStateMapRef,
+        aiTurnRef,
+        isDeveloperModeRef,
+        resumeAiRef,
+        resumeAfterAiRef,
+        aiStepHistoryRef,
         awaitStep,
-        awaitPreAiResume: async () => {
-          if (isDeveloperModeRef.current) {
-            setIsAiPaused(true);
-            await new Promise<void>((resolve) => {
-              resumeAiRef.current = resolve;
-            });
-            resumeAiRef.current = null;
-            setIsAiPaused(false);
-          }
-        },
-        awaitPostAiResume: async () => {
-          if (isDeveloperModeRef.current) {
-            setIsAiTurnDone(true);
-            await new Promise<void>((resolve) => {
-              resumeAfterAiRef.current = resolve;
-            });
-            resumeAfterAiRef.current = null;
-            setIsAiTurnDone(false);
-          }
-        },
         triggerUnitAnimation,
         recalculateTerritoriesForCapture,
         applySingleHexPenalty,
         checkWinLoss,
-      };
+      });
 
       await runAiTurnOrchestration(ws, cbs, aiOwners, currentTurn ?? 0, aiDifficultyRef.current);
     },
@@ -1088,20 +1038,13 @@ export default function GameScreen() {
               territoryPulseStyle={territoryPulseStyle}
             />
 
-            {errorTileKey && (() => {
-              const pos = tileDataMap.get(errorTileKey);
-              if (!pos) return null;
-              return (
-                <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-                  <Svg width={boardW} height={boardH}>
-                    <Polygon
-                      points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
-                      fill="rgba(0,0,0,0.55)"
-                    />
-                  </Svg>
-                </View>
-              );
-            })()}
+            <ErrorTileFlash
+              errorTileKey={errorTileKey}
+              tileDataMap={tileDataMap}
+              boardW={boardW}
+              boardH={boardH}
+              HEX_SIZE={HEX_SIZE}
+            />
 
             <EntityLayer
               entities={entities}
@@ -1115,68 +1058,17 @@ export default function GameScreen() {
               HEX_SIZE={HEX_SIZE}
             />
 
-            <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-              {animatingUnit &&
-                (() => {
-                  const fromPos = tileDataMap.get(animatingUnit.fromKey);
-                  const toPos = tileDataMap.get(animatingUnit.toKey);
-                  if (!fromPos || !toPos) return null;
-                  return (
-                    <AnimatedMovingUnit
-                      fromPos={fromPos}
-                      toPos={toPos}
-                      entityId={animatingUnit.entityId}
-                      owner={animatingUnit.owner}
-                      hexSize={HEX_SIZE}
-                      progress={animUnitProgress}
-                    />
-                  );
-                })()}
-              {Array.from(entities.entries()).map(([key, entityId]) => {
-                if (entityId === "city" || entityId === "rebel") return null;
-                if (animatingUnit && key === animatingUnit.fromKey) return null;
-                if (
-                  animatingUnit &&
-                  animatingUnit.hideDestination &&
-                  key === animatingUnit.toKey
-                )
-                  return null;
-                const meta = ENTITY_META[entityId];
-                if (!meta.isUnit) return null;
-                const liveTile = activeTileMap.get(key);
-                if (liveTile?.owner !== "player") return null;
-                if (spentUnits.has(key)) return null;
-                if (selectedEntityKey === key) return null;
-                const pos = tileDataMap.get(key);
-                if (!pos) return null;
-                const r = HEX_SIZE * 0.5;
-                return (
-                  <Animated.View
-                    key={`bounce-${key}`}
-                    style={[
-                      {
-                        position: "absolute",
-                        left: pos.cx - r,
-                        top: pos.cy - r,
-                        width: r * 2,
-                        height: r * 2,
-                        borderRadius: r,
-                        backgroundColor: "rgba(30,50,120,0.9)",
-                        borderWidth: 2.2,
-                        borderColor: TERRITORY_BORDERS["player"],
-                        alignItems: "center",
-                        justifyContent: "center",
-                      },
-                      idleBounceStyle,
-                    ]}
-                  >
-                    <Text style={{ fontSize: r * 1.1, lineHeight: r * 1.6 }}>
-                      {meta.icon}
-                    </Text>
-                  </Animated.View>
-                );
-              })}
-            </View>
+            <IdleUnitLayer
+              entities={entities}
+              activeTileMap={activeTileMap}
+              tileDataMap={tileDataMap}
+              spentUnits={spentUnits}
+              selectedEntityKey={selectedEntityKey}
+              animatingUnit={animatingUnit}
+              animUnitProgress={animUnitProgress}
+              HEX_SIZE={HEX_SIZE}
+              isAiTurn={isAiTurn}
+            />
 
             <FortificationDotLayer
               fortificationDots={fortificationDots}

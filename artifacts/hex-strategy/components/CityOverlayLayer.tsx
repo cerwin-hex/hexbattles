@@ -3,6 +3,7 @@ import { G, Rect, Text as SvgText } from "react-native-svg";
 import { ENTITY_META } from "@/utils/hexGrid";
 import { TERRITORY_BORDERS } from "@/constants/colors";
 import type { HexTile } from "@/types";
+import { areCityOverlayLayerEqual } from "@/components/layerEquality";
 
 export interface CityOverlayLayerProps {
   cities: Set<string>;
@@ -56,20 +57,7 @@ function CityOverlayLayerInner({
   );
 }
 
-// Reference equality is safe here because game state always replaces Set/Map
-// instances (never mutates in place), so a changed reference means changed data.
-function areCityOverlayLayerEqual(
-  prev: CityOverlayLayerProps,
-  next: CityOverlayLayerProps,
-): boolean {
-  return (
-    prev.cities === next.cities &&
-    prev.activeTileMap === next.activeTileMap &&
-    prev.tileDataMap === next.tileDataMap &&
-    prev.HEX_SIZE === next.HEX_SIZE
-  );
-}
-
+export { areCityOverlayLayerEqual };
 export const CityOverlayLayer = React.memo(
   CityOverlayLayerInner,
   areCityOverlayLayerEqual,

@@ -1,6 +1,7 @@
 import React from "react";
 import { G, Line } from "react-native-svg";
 import type { BorderEdge } from "@/types";
+import { areBorderEdgeLayerEqual } from "@/components/layerEquality";
 
 export interface BorderEdgeLayerProps {
   outerEdges: BorderEdge[];
@@ -59,18 +60,7 @@ function BorderEdgeLayerInner({
   );
 }
 
-function areBorderEdgeLayerEqual(
-  prev: BorderEdgeLayerProps,
-  next: BorderEdgeLayerProps,
-): boolean {
-  return (
-    prev.outerEdges === next.outerEdges &&
-    prev.innerEdges === next.innerEdges &&
-    prev.hasSelection === next.hasSelection &&
-    prev.selectionEdges === next.selectionEdges
-  );
-}
-
+export { areBorderEdgeLayerEqual };
 export const BorderEdgeLayer = React.memo(
   BorderEdgeLayerInner,
   areBorderEdgeLayerEqual,

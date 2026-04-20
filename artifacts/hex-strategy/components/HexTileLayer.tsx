@@ -6,6 +6,7 @@ import {
 } from "@/constants/colors";
 import type { HexTile } from "@/types";
 import { HexCell } from "@/components/HexCell";
+import { areHexTileLayerEqual } from "@/components/layerEquality";
 
 export interface HexTileLayerProps {
   tileData: Array<{ tile: HexTile; cx: number; cy: number }>;
@@ -54,20 +55,5 @@ function HexTileLayerInner({
   );
 }
 
-// Reference equality is safe for tileData, activeTileMap, and cities because
-// they are stable memoized values that are only replaced when the board layout
-// or game state actually changes, not on every incidental state update.
-function areHexTileLayerEqual(
-  prev: HexTileLayerProps,
-  next: HexTileLayerProps,
-): boolean {
-  return (
-    prev.tileData === next.tileData &&
-    prev.activeTileMap === next.activeTileMap &&
-    prev.cities === next.cities &&
-    prev.hasSelection === next.hasSelection &&
-    prev.HEX_SIZE === next.HEX_SIZE
-  );
-}
-
+export { areHexTileLayerEqual };
 export const HexTileLayer = React.memo(HexTileLayerInner, areHexTileLayerEqual);
