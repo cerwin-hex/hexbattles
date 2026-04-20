@@ -30,8 +30,19 @@ function makeEmptyWs(tileMap: Map<string, HexTile>): AiWorkingState {
   };
 }
 
-function makeCbs(overrides: Partial<AiTurnCallbacks> = {}): AiTurnCallbacks {
+/**
+ * Deep-partial override type for makeCbs — callers can override individual
+ * members of nested groups (state, refs) without losing the other mocks in
+ * that group.
+ */
+type CbsOverrides = Partial<Omit<AiTurnCallbacks, "state" | "refs">> & {
+  state?: Partial<AiTurnCallbacks["state"]>;
+  refs?: Partial<AiTurnCallbacks["refs"]>;
+};
+
+function makeCbs(overrides: CbsOverrides = {}): AiTurnCallbacks {
   const aiStateMapRef: Map<string, import("@/types").AiState> = new Map();
+  const { state: stateOverrides, refs: refsOverrides, ...topOverrides } = overrides;
   return {
     state: {
       setEntities: vi.fn(),
@@ -45,6 +56,7 @@ function makeCbs(overrides: Partial<AiTurnCallbacks> = {}): AiTurnCallbacks {
       setAiStateMap: vi.fn(),
       setLakeUnitFunds: vi.fn(),
       setIsAiTurn: vi.fn(),
+      ...stateOverrides,
     },
     refs: {
       getAiStateMap: vi.fn(() => aiStateMapRef),
@@ -52,6 +64,7 @@ function makeCbs(overrides: Partial<AiTurnCallbacks> = {}): AiTurnCallbacks {
       isTurnActive: vi.fn().mockReturnValue(true),
       isDeveloperMode: vi.fn().mockReturnValue(false),
       setAiTurn: vi.fn(),
+      ...refsOverrides,
     },
     initStepHistory: vi.fn(),
     awaitStep: vi.fn().mockResolvedValue(undefined),
@@ -61,7 +74,7 @@ function makeCbs(overrides: Partial<AiTurnCallbacks> = {}): AiTurnCallbacks {
     recalculateTerritoriesForCapture: vi.fn().mockReturnValue(new Map()),
     applySingleHexPenalty: vi.fn(),
     checkWinLoss: vi.fn(),
-    ...overrides,
+    ...topOverrides,
   };
 }
 
