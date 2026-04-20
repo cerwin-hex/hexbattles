@@ -686,7 +686,6 @@ export default function GameScreen() {
   });
 
   const handleDeselect = useCallback(() => {
-    if (Date.now() - lastTileTapMs.current < 150) return;
     setSelectedTileKey(null);
     setArmedEntityId(null);
     setSelectedEntityKey(null);

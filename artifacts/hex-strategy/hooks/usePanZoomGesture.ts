@@ -148,6 +148,7 @@ export function usePanZoomGesture({
 
   const tapGesture = Gesture.Tap()
     .maxDistance(5)
+    .maxDuration(150)
     .onEnd((e) => {
       runOnJS(handleBoardTap)(
         e.x,

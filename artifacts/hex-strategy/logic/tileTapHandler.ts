@@ -232,86 +232,96 @@ export function handleTileTapLogic(params: TileTapParams): void {
       ? new Set([...combatSpentUnits, key])
       : combatSpentUnits;
 
-    const { balances: newBalances } = recalculateTerritories(
-      key,
-      previousOwner as TerritoryOwner,
-      activeTileMap,
-      newTileMap,
-      territoryBalances,
-    );
-
-    const newGraveyard = new Set(graveyard);
-    const newRuins = new Set(ruins);
-    newGraveyard.delete(key);
-    // Exempt the destination tile when landing from a lake — the unit is
-    // intentionally establishing a new beachhead, not being cut off.
     const lakeLanding = fromLake && !movingToLake;
-    applySingleHexPenalty(
-      activeTileMap,
-      newTileMap,
-      newBalances,
-      newEntities,
-      newGraveyard,
-      newRuins,
-      lakeLanding ? key : undefined,
-    );
 
-    const newLiveOwnerMap = new Map(liveOwnerMap);
-    newLiveOwnerMap.set(key, "player");
-
+    // Pre-compute lake fund changes and apply visual lake-tile mutations to
+    // newTileMap so Phase 1 immediately shows the from-tile as unoccupied.
     const newLakeFunds = new Map(lakeUnitFunds);
+    let lakeFundToCredit = 0;
+    const fromLakeKey = selectedEntityKey;
     if (fromLake && movingToLake) {
-      const fund = newLakeFunds.get(selectedEntityKey) ?? 0;
-      newLakeFunds.delete(selectedEntityKey);
+      const fund = newLakeFunds.get(fromLakeKey) ?? 0;
+      newLakeFunds.delete(fromLakeKey);
       newLakeFunds.set(key, fund);
       if (fromTile) {
-        newTileMap.set(selectedEntityKey, {
-          ...fromTile,
-          owner: "neutral",
-        });
-        newLiveOwnerMap.delete(selectedEntityKey);
+        newTileMap.set(fromLakeKey, { ...fromTile, owner: "neutral" });
       }
     } else if (fromLake && !movingToLake) {
-      const fund = newLakeFunds.get(selectedEntityKey) ?? 0;
-      newLakeFunds.delete(selectedEntityKey);
-      const newTerritory = getContiguousTerritory(
-        newTileMap,
-        key,
-        "player",
-      );
-      const newTerrId = getTerritoryId(newTerritory);
-      if (newTerrId && fund > 0) {
-        newBalances.set(
-          newTerrId,
-          (newBalances.get(newTerrId) ?? 0) + fund,
-        );
-      }
+      const fund = newLakeFunds.get(fromLakeKey) ?? 0;
+      newLakeFunds.delete(fromLakeKey);
+      lakeFundToCredit = fund;
       if (fromTile) {
-        newTileMap.set(selectedEntityKey, {
-          ...fromTile,
-          owner: "neutral",
-        });
-        newLiveOwnerMap.delete(selectedEntityKey);
+        newTileMap.set(fromLakeKey, { ...fromTile, owner: "neutral" });
       }
     }
 
-    setMutableTileMap(newTileMap);
-    setLiveOwnerMap(newLiveOwnerMap);
-    setEntities(newEntities);
+    // Phase 1: immediate visual feedback — show unit at destination, clear
+    // selection, and start movement animation. No BFS yet.
+    // React 18 automatic batching handles these as a single render.
+    setMutableTileMap(new Map(newTileMap));
+    setEntities(new Map(newEntities));
     setSpentUnits(newSpentUnits);
     setCombatSpentUnits(newCombatSpentUnits);
     setPartialMoves(newPartialMoves);
-    setTerritoryBalances(newBalances);
     setLakeUnitFunds(newLakeFunds);
     setSelectedEntityKey(null);
     setSelectedTileKey(key);
-    setGraveyard(newGraveyard);
-    setRuins(newRuins);
-    checkWinLoss(newTileMap);
     if (ribbonOpen) closeRibbon();
     if (movingEntityId) {
       triggerUnitAnimation(fromKeyForAnim, key, movingEntityId);
     }
+
+    // Phase 2 (deferred): run the BFS territory recalculation and apply
+    // isolation penalties — these are expensive and do not affect the
+    // initial visual frame, so they run in the next event-loop tick.
+    setTimeout(() => {
+      const { balances: newBalances } = recalculateTerritories(
+        key,
+        previousOwner as TerritoryOwner,
+        activeTileMap,
+        newTileMap,
+        territoryBalances,
+      );
+
+      const newGraveyard = new Set(graveyard);
+      const newRuins = new Set(ruins);
+      newGraveyard.delete(key);
+      // Exempt the destination tile when landing from a lake — the unit is
+      // intentionally establishing a new beachhead, not being cut off.
+      applySingleHexPenalty(
+        activeTileMap,
+        newTileMap,
+        newBalances,
+        newEntities,
+        newGraveyard,
+        newRuins,
+        lakeLanding ? key : undefined,
+      );
+
+      const newLiveOwnerMap = new Map(liveOwnerMap);
+      newLiveOwnerMap.set(key, "player");
+      if (fromLake) {
+        newLiveOwnerMap.delete(fromLakeKey);
+      }
+
+      // Credit any lake funds to the destination territory now that BFS has
+      // computed the correct territory boundaries.
+      if (lakeFundToCredit > 0) {
+        const newTerritory = getContiguousTerritory(newTileMap, key, "player");
+        const newTerrId = getTerritoryId(newTerritory);
+        if (newTerrId) {
+          newBalances.set(newTerrId, (newBalances.get(newTerrId) ?? 0) + lakeFundToCredit);
+        }
+      }
+
+      setMutableTileMap(new Map(newTileMap));
+      setEntities(new Map(newEntities));
+      setTerritoryBalances(newBalances);
+      setGraveyard(newGraveyard);
+      setRuins(newRuins);
+      setLiveOwnerMap(newLiveOwnerMap);
+      checkWinLoss(newTileMap);
+    }, 0);
     return;
   }
 
@@ -432,62 +442,71 @@ export function handleTileTapLogic(params: TileTapParams): void {
       if (targetTile)
         newTileMap.set(key, { ...targetTile, owner: "player" });
       const newEntities = new Map(entities);
-      if (armedEntityId === "city") {
+      const isCity = armedEntityId === "city";
+      if (isCity) {
         setCities((prev) => new Set([...prev, key]));
       } else {
         newEntities.delete(key);
         newEntities.set(key, armedEntityId);
       }
-      const newBalances = recalculateTerritoriesForCapture(
-        key,
-        "player",
-        previousOwner,
-        activeTileMap,
-        newTileMap,
-        territoryBalances,
-      );
-      const mergedTerritory = getContiguousTerritory(
-        newTileMap,
-        key,
-        "player",
-      );
-      const mergedId = getTerritoryId(mergedTerritory);
-      if (mergedId)
-        newBalances.set(
-          mergedId,
-          (newBalances.get(mergedId) ?? 0) - meta.cost,
-        );
-      const newGraveyard2 = new Set(graveyard);
-      const newRuins2 = new Set(ruins);
-      applySingleHexPenalty(
-        activeTileMap,
-        newTileMap,
-        newBalances,
-        newEntities,
-        newGraveyard2,
-        newRuins2,
-      );
-      const newLiveOwnerMap = new Map(liveOwnerMap);
-      newLiveOwnerMap.set(key, "player");
-      // Placing a unit via attack counts as combat — it cannot be merged with this turn
       const newCombatSpent2 = new Set([...combatSpentUnits, key]);
-      setMutableTileMap(newTileMap);
-      setLiveOwnerMap(newLiveOwnerMap);
-      setEntities(newEntities);
-      setTerritoryBalances(newBalances);
-      setGraveyard(newGraveyard2);
-      setRuins(newRuins2);
+      const newSpentUnits2 = new Set(spentUnits);
+      newSpentUnits2.add(key);
+
+      // Phase 1: immediate visual feedback — show unit at destination and
+      // clear selection state before the expensive BFS runs.
+      // React 18 automatic batching handles these as a single render.
+      setMutableTileMap(new Map(newTileMap));
+      setEntities(new Map(newEntities));
       setCombatSpentUnits(newCombatSpent2);
-      setSpentUnits((prev) => {
-        const next = new Set(prev);
-        next.add(key);
-        return next;
-      });
+      setSpentUnits(newSpentUnits2);
       setArmedEntityId(null);
       setSelectedEntityKey(null);
-      closeRibbon();
       setSelectedTileKey(key);
-      checkWinLoss(newTileMap);
+      closeRibbon();
+
+      // Phase 2 (deferred): BFS territory recalculation, penalty, and
+      // balance/ownership state updates in the next event-loop tick.
+      setTimeout(() => {
+        const newBalances = recalculateTerritoriesForCapture(
+          key,
+          "player",
+          previousOwner,
+          activeTileMap,
+          newTileMap,
+          territoryBalances,
+        );
+        const mergedTerritory = getContiguousTerritory(
+          newTileMap,
+          key,
+          "player",
+        );
+        const mergedId = getTerritoryId(mergedTerritory);
+        if (mergedId)
+          newBalances.set(
+            mergedId,
+            (newBalances.get(mergedId) ?? 0) - meta.cost,
+          );
+        const newGraveyard2 = new Set(graveyard);
+        const newRuins2 = new Set(ruins);
+        applySingleHexPenalty(
+          activeTileMap,
+          newTileMap,
+          newBalances,
+          newEntities,
+          newGraveyard2,
+          newRuins2,
+        );
+        const newLiveOwnerMap = new Map(liveOwnerMap);
+        newLiveOwnerMap.set(key, "player");
+        setMutableTileMap(new Map(newTileMap));
+        setEntities(new Map(newEntities));
+        setTerritoryBalances(newBalances);
+        setGraveyard(newGraveyard2);
+        setRuins(newRuins2);
+        setLiveOwnerMap(newLiveOwnerMap);
+        checkWinLoss(newTileMap);
+      }, 0);
     } else {
       triggerErrorFlash(key);
     }
