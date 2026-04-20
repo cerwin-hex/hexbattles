@@ -208,8 +208,7 @@ export default function MainMenu() {
       <View style={[styles.content, { paddingTop: topPad + 24, paddingBottom: botPad + 24 }]}>
 
         <View style={styles.header}>
-          <View style={styles.titleRow}>
-            <Text style={styles.title}>{'HEX\nBATTLE'}</Text>
+          <View style={styles.helpRow}>
             <TouchableOpacity
               style={styles.helpBtn}
               onPress={() => { Haptics.selectionAsync(); setRulesVisible(true); }}
@@ -218,6 +217,7 @@ export default function MainMenu() {
               <Text style={styles.helpBtnText}>?</Text>
             </TouchableOpacity>
           </View>
+          <Text style={styles.title}>HEX BATTLE</Text>
           <View style={styles.accentLine} />
         </View>
 
@@ -264,20 +264,25 @@ export default function MainMenu() {
             <Text style={styles.label}>AI Difficulty</Text>
             <View style={styles.pills}>
               {([
-                ['super_easy', 'S.Easy'],
-                ['easy', 'Easy'],
-                ['medium', 'Medium'],
-                ['hard', 'Hard'],
-                ['super_hard', 'S.Hard'],
-              ] as [Difficulty, string][]).map(([d, label]) => (
+                ['super_easy', 'Super', 'Easy'],
+                ['easy', null, 'Easy'],
+                ['medium', null, 'Medium'],
+                ['hard', null, 'Hard'],
+                ['super_hard', 'Super', 'Hard'],
+              ] as [Difficulty, string | null, string][]).map(([d, top, bottom]) => (
                 <TouchableOpacity
                   key={d}
                   style={[styles.diffPill, difficulty === d && styles.diffPillActive]}
                   onPress={() => { Haptics.selectionAsync(); setDifficulty(d); }}
                   activeOpacity={0.7}
                 >
+                  {top && (
+                    <Text style={[styles.diffText, styles.diffTextSuper, difficulty === d && styles.diffTextActive]}>
+                      {top}
+                    </Text>
+                  )}
                   <Text style={[styles.diffText, difficulty === d && styles.diffTextActive]}>
-                    {label}
+                    {bottom}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -310,17 +315,16 @@ const styles = StyleSheet.create({
   header: {
     gap: 8,
   },
-  titleRow: {
+  helpRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
   },
   title: {
     fontSize: 46,
     fontFamily: 'Cinzel_700Bold',
     color: '#C8A24A',
-    lineHeight: 52,
     letterSpacing: 1,
+    textAlign: 'center',
   },
   helpBtn: {
     width: 36,
@@ -331,7 +335,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#2A1E0C',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 6,
   },
   helpBtnText: {
     fontSize: 16,
@@ -344,6 +347,7 @@ const styles = StyleSheet.create({
     height: 2,
     backgroundColor: '#6B4A10',
     marginTop: 4,
+    alignSelf: 'center',
   },
   sections: {
     gap: 28,
@@ -354,7 +358,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 13,
     fontFamily: 'Cinzel_400Regular',
-    color: '#786A54',
+    color: '#A08A60',
     letterSpacing: 2,
   },
   labelRow: {
@@ -402,7 +406,7 @@ const styles = StyleSheet.create({
   sliderLabelText: {
     fontSize: 10,
     fontFamily: 'Inter_400Regular',
-    color: '#786A54',
+    color: '#A08A60',
   },
   pills: {
     flexDirection: 'row',
@@ -432,7 +436,7 @@ const styles = StyleSheet.create({
   },
   diffPill: {
     flex: 1,
-    height: 42,
+    height: 54,
     borderRadius: 5,
     borderWidth: 1,
     borderColor: '#7A6030',
@@ -445,11 +449,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#3A2A10',
   },
   diffText: {
-    fontSize: 9,
+    fontSize: 12,
     fontFamily: 'Cinzel_400Regular',
     color: '#A08A60',
     letterSpacing: 0.5,
     textAlign: 'center',
+  },
+  diffTextSuper: {
+    fontSize: 9,
+    letterSpacing: 0.5,
   },
   diffTextActive: {
     color: '#C8A24A',
