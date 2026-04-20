@@ -47,12 +47,7 @@ import Svg, {
 const MOUNTAIN_IMG = require("../assets/images/mountain.webp");
 const WATER_IMG = require("../assets/images/water.webp");
 
-import {
-  CITY_NEUTRAL_FILL,
-  TERRAIN_FILLS,
-  TERRITORY_BORDERS,
-  TERRITORY_FILLS,
-} from "@/constants/colors";
+import { TERRITORY_BORDERS } from "@/constants/colors";
 import type {
   EntityType,
   HexTile,
@@ -112,11 +107,11 @@ import PurchaseRibbon from "@/components/PurchaseRibbon";
 import EntityPanel from "@/components/EntityPanel";
 import GameModals from "@/components/GameModals";
 import type { EconBreakdown } from "@/components/GameModals";
-import { HexCell } from "@/components/HexCell";
 import BottomActionMenu from "@/components/BottomActionMenu";
 import { DevModeOverlay, DevEconomicSvgOverlays } from "@/components/DevModeOverlay";
 
 import AnimatedMovingUnit from "@/components/AnimatedMovingUnit";
+import { HexTileLayer } from "@/components/HexTileLayer";
 import { EntityLayer } from "@/components/EntityLayer";
 import { BorderEdgeLayer } from "@/components/BorderEdgeLayer";
 import { MovementHighlightTapTargets } from "@/components/MovementHighlightTapTargets";
@@ -1522,32 +1517,13 @@ export default function GameScreen() {
                 height={boardH}
                 fill="transparent"
               />
-              {tileData.map(({ tile, cx, cy }) => {
-                const liveTile = activeTileMap.get(tile.key) ?? tile;
-                const isCityZone = tile.cityBuffer || cities.has(tile.key);
-                const liveOwner = liveTile.owner;
-                const terrain = tile.terrain;
-                const fill =
-                  terrain === "lake"
-                    ? "#5BAFD6"
-                    : hasSelection
-                      ? (TERRAIN_FILLS[terrain] ?? TERRAIN_FILLS.grass)
-                      : terrain === "mountain"
-                        ? TERRAIN_FILLS.mountain
-                        : isCityZone && liveOwner === "neutral"
-                          ? CITY_NEUTRAL_FILL
-                          : (TERRITORY_FILLS[liveOwner] ?? TERRITORY_FILLS.neutral);
-                return (
-                  <HexCell
-                    key={tile.key}
-                    tileKey={tile.key}
-                    cx={cx}
-                    cy={cy}
-                    hexSize={HEX_SIZE}
-                    fill={fill}
-                  />
-                );
-              })}
+              <HexTileLayer
+                tileData={tileData}
+                activeTileMap={activeTileMap}
+                cities={cities}
+                hasSelection={hasSelection}
+                HEX_SIZE={HEX_SIZE}
+              />
 
               <LakeImageLayer tileData={tileData} HEX_SIZE={HEX_SIZE} />
 
