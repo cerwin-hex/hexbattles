@@ -111,6 +111,7 @@ export function useEndTurnPulse({
           activeTileMap,
           tile.key,
           "player",
+          entities,
         );
         for (const t of territory) visited.add(t.key);
         const id = getTerritoryId(territory);

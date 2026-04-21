@@ -7,6 +7,7 @@ import React, {
   useState,
 } from "react";
 import {
+  Alert,
   Image,
   Modal,
   Platform,
@@ -89,6 +90,7 @@ import { MovementHighlightTapTargets } from "@/components/MovementHighlightTapTa
 import { MovementHighlightLayer } from "@/components/MovementHighlightLayer";
 import { FortificationDotLayer } from "@/components/FortificationDotLayer";
 import { CityOverlayLayer } from "@/components/CityOverlayLayer";
+import { BridgeOverlayLayer } from "@/components/BridgeOverlayLayer";
 import { GraveyardLayer } from "@/components/GraveyardLayer";
 import { AffordableTerritoryLayer } from "@/components/AffordableTerritoryLayer";
 import { LakeImageLayer } from "@/components/LakeImageLayer";
@@ -290,22 +292,8 @@ export default function GameScreen() {
   const freeTowerUsedTilesRef = useRef<Map<TerritoryOwner, Set<string>>>(
     new Map(),
   );
-  const [lakeUnitFunds, setLakeUnitFunds] = useState<Map<string, number>>(
-    new Map(),
-  );
-  const lakeUnitFundsRef = useRef<Map<string, number>>(new Map());
   const graveyardRef = useRef<Set<string>>(new Set());
   const ruinsRef = useRef<Set<string>>(new Set());
-  const [pendingLakeMove, setPendingLakeMove] = useState<{
-    fromKey: string;
-    toKey: string;
-    sourceTerrId: string;
-    maxAmount: number;
-    minAmount: number;
-  } | null>(null);
-  const [lakeTransferAmount, setLakeTransferAmount] = useState(6);
-  const [sliderTrackWidth, setSliderTrackWidth] = useState(220);
-  const sliderTrackPageX = useRef(0);
 
   const [errorTileKey, setErrorTileKey] = useState<string | null>(null);
   const errorTileTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -363,9 +351,6 @@ export default function GameScreen() {
   useEffect(() => {
     freeTowerUsedTilesRef.current = freeTowerUsedTiles;
   }, [freeTowerUsedTiles]);
-  useEffect(() => {
-    lakeUnitFundsRef.current = lakeUnitFunds;
-  }, [lakeUnitFunds]);
   useEffect(() => {
     graveyardRef.current = graveyard;
   }, [graveyard]);
@@ -436,9 +421,6 @@ export default function GameScreen() {
       setGraveyard(new Set());
       setRuins(new Set());
       setFreeTowerUsedTiles(new Map());
-      setLakeUnitFunds(new Map());
-      setPendingLakeMove(null);
-      setLakeTransferAmount(6);
 
       const initialEntities = new Map<string, EntityType>();
       // Cities are tracked purely via the cities Set<string> (permanent tile keys).
@@ -514,7 +496,6 @@ export default function GameScreen() {
       currentTileMap: Map<string, HexTile>,
       currentEntities: Map<string, EntityType>,
       currentBalances: Map<string, number>,
-      initialLakeFunds?: Map<string, number>,
       currentTurn?: number,
       initialGraveyard?: Set<string>,
       initialRuins?: Set<string>,
@@ -531,7 +512,6 @@ export default function GameScreen() {
         spentUnits: new Set<string>(),
         partialMoves: new Map<string, number>(),
         freeTowerUsed: new Map(freeTowerUsedTilesRef.current),
-        lakeFunds: new Map(initialLakeFunds ?? lakeUnitFundsRef.current),
       };
 
       const cbs = makeAiTurnCallbacks({
@@ -544,7 +524,6 @@ export default function GameScreen() {
         setCities,
         setFreeTowerUsedTiles,
         setAiStateMap,
-        setLakeUnitFunds,
         setIsAiTurn,
         setIsAiPaused,
         setIsAiTurnDone,
@@ -575,6 +554,8 @@ export default function GameScreen() {
     selectedTileKeys,
     selectedTerritoryDefenseCounts,
     validMoveTiles,
+    validBridgePlacementTiles,
+    hasBridgePlacementAvailable,
     fortificationDots,
     validPlacementAttackTiles,
     minUnitCost,
@@ -649,7 +630,6 @@ export default function GameScreen() {
     entities,
     cities,
     tileDataMap,
-    lakeUnitFunds,
     aiDifficulty,
     aiStateMap,
   });
@@ -664,7 +644,6 @@ export default function GameScreen() {
     liveOwnerMap,
     partialMoves,
     freeTowerUsedTiles,
-    lakeUnitFunds,
     selectedTileKey,
     isAiTurn,
     gameResult,
@@ -679,7 +658,6 @@ export default function GameScreen() {
     setLiveOwnerMap,
     setPartialMoves,
     setFreeTowerUsedTiles,
-    setLakeUnitFunds,
     setSelectedTileKey,
     setSelectedEntityKey,
     setArmedEntityId,
@@ -692,84 +670,44 @@ export default function GameScreen() {
     if (ribbonOpen) closeRibbon();
   }, [ribbonOpen]);
 
-  const commitPendingLakeMove = useCallback(
-    (transferAmount: number) => {
-      if (!pendingLakeMove) return;
-      const { fromKey, toKey, sourceTerrId, maxAmount, minAmount } =
-        pendingLakeMove;
-      const amount = Math.min(maxAmount, Math.max(minAmount, transferAmount));
-      setPendingLakeMove(null);
-
-      pushHistory();
-      const destTile = activeTileMap.get(toKey);
-      const previousOwner = destTile?.owner ?? "neutral";
-      const newTileMap = new Map(activeTileMap);
-      if (destTile) newTileMap.set(toKey, { ...destTile, owner: "player" });
-
-      const newEntities = new Map(entities);
-      const movingUnit = newEntities.get(fromKey)!;
-      newEntities.delete(fromKey);
-      newEntities.set(toKey, movingUnit);
-
-      const newSpentUnits = new Set(spentUnits);
-      const newPartialMoves = new Map(partialMoves);
-      newPartialMoves.delete(fromKey);
-      newSpentUnits.add(toKey);
-      newPartialMoves.delete(toKey);
-
-      const { balances: newBalances } = recalculateTerritories(
-        toKey,
-        previousOwner as TerritoryOwner,
-        activeTileMap,
-        newTileMap,
-        territoryBalances,
-      );
-      newBalances.set(
-        sourceTerrId,
-        (newBalances.get(sourceTerrId) ?? 0) - amount,
-      );
-
-      const newLiveOwnerMap = new Map(liveOwnerMap);
-      newLiveOwnerMap.set(toKey, "player");
-
-      const newLakeFunds = new Map(lakeUnitFunds);
-      newLakeFunds.set(toKey, amount);
-
-      setMutableTileMap(newTileMap);
-      setLiveOwnerMap(newLiveOwnerMap);
-      setEntities(newEntities);
-      setSpentUnits(newSpentUnits);
-      setPartialMoves(newPartialMoves);
-      setTerritoryBalances(newBalances);
-      setLakeUnitFunds(newLakeFunds);
-      setSelectedEntityKey(null);
-      setSelectedTileKey(toKey);
-      setGraveyard((prev) => {
-        const next = new Set(prev);
-        next.delete(toKey);
-        return next;
-      });
-      checkWinLoss(newTileMap);
-      if (ribbonOpen) closeRibbon();
-      if (movingUnit) {
-        triggerUnitAnimation(fromKey, toKey, movingUnit);
-      }
-    },
-    [
-      pendingLakeMove,
+  const handleDemolishBridge = useCallback(() => {
+    const bridgeKey = selectedEntityKey ?? selectedTileKey;
+    if (!bridgeKey) return;
+    const tile = activeTileMap.get(bridgeKey);
+    if (!tile || tile.terrain !== "lake" || tile.owner !== "player") return;
+    const entity = entities.get(bridgeKey);
+    if (entity !== "bridge") return;
+    pushHistory();
+    const newEntities = new Map(entities);
+    newEntities.delete(bridgeKey);
+    const newTileMap = new Map(activeTileMap);
+    newTileMap.set(bridgeKey, { ...tile, owner: "neutral" });
+    const { balances: newBalances } = recalculateTerritories(
+      bridgeKey,
+      "player",
       activeTileMap,
-      entities,
-      spentUnits,
-      partialMoves,
+      newTileMap,
       territoryBalances,
-      liveOwnerMap,
-      lakeUnitFunds,
-      pushHistory,
-      ribbonOpen,
-      checkWinLoss,
-      triggerUnitAnimation,
-    ],
-  );
+      newEntities,
+      entities,
+    );
+    const newLiveOwnerMap = new Map(liveOwnerMap);
+    newLiveOwnerMap.delete(bridgeKey);
+    setMutableTileMap(newTileMap);
+    setEntities(newEntities);
+    setTerritoryBalances(newBalances);
+    setLiveOwnerMap(newLiveOwnerMap);
+    setSelectedEntityKey(null);
+    setSelectedTileKey(null);
+  }, [
+    selectedEntityKey,
+    selectedTileKey,
+    activeTileMap,
+    entities,
+    territoryBalances,
+    liveOwnerMap,
+    pushHistory,
+  ]);
 
   const handleTileTap = useCallback(
     (key: string) => {
@@ -792,10 +730,10 @@ export default function GameScreen() {
         graveyard,
         ruins,
         liveOwnerMap,
-        lakeUnitFunds,
         combatSpentUnits,
         spentUnits,
         partialMoves,
+        validBridgePlacementTiles,
         validPlacementAttackTiles,
         ribbonOpen,
         cities,
@@ -806,15 +744,12 @@ export default function GameScreen() {
         setCombatSpentUnits,
         setPartialMoves,
         setTerritoryBalances,
-        setLakeUnitFunds,
         setSelectedEntityKey,
         setSelectedTileKey,
         setGraveyard,
         setRuins,
         setArmedEntityId,
         setFreeTowerUsedTiles,
-        setLakeTransferAmount,
-        setPendingLakeMove,
         setCities,
         checkWinLoss,
         pushHistory,
@@ -834,11 +769,11 @@ export default function GameScreen() {
       ribbonOpen,
       selectedEntityKey,
       validMoveTiles,
+      validBridgePlacementTiles,
       validPlacementAttackTiles,
       spentUnits,
       combatSpentUnits,
       liveOwnerMap,
-      lakeUnitFunds,
       isAiTurn,
       gameResult,
       graveyard,
@@ -869,16 +804,12 @@ export default function GameScreen() {
       ruins,
       mutableTileMap,
       liveOwnerMap,
-      lakeUnitFunds,
       aiTurnRef,
       setMoveHistory,
       setTerritoryBalances,
       setEntities,
       setGraveyard,
       setRuins,
-      setLakeUnitFunds,
-      setMutableTileMap,
-      setLiveOwnerMap,
       setTurn,
       setSelectedTileKey,
       setArmedEntityId,
@@ -895,7 +826,6 @@ export default function GameScreen() {
     activeTileMap,
     entities,
     territoryBalances,
-    lakeUnitFunds,
     mutableTileMap,
     liveOwnerMap,
     isAiTurn,
@@ -936,26 +866,8 @@ export default function GameScreen() {
   }));
 
   const hasSelection = selectedTerritory.length > 0;
-  const selectedLakeFund: number | null = useMemo(() => {
-    if (!selectedTileKey) return null;
-    const t = activeTileMap.get(selectedTileKey);
-    if (t?.terrain !== "lake") return null;
-    return lakeUnitFunds.has(selectedTileKey)
-      ? (lakeUnitFunds.get(selectedTileKey) ?? null)
-      : null;
-  }, [selectedTileKey, activeTileMap, lakeUnitFunds]);
-  const showCredits = hasSelection || selectedLakeFund !== null;
-  const creditsDisplayValue =
-    selectedLakeFund !== null ? selectedLakeFund : selectedTerritoryBalance;
-  const selectedLakeEntity = selectedTileKey
-    ? entities.get(selectedTileKey)
-    : undefined;
-  const lakeUpkeepPerTurn =
-    selectedLakeFund !== null &&
-    selectedLakeEntity &&
-    ENTITY_META[selectedLakeEntity].isUnit
-      ? ENTITY_META[selectedLakeEntity].upkeep
-      : null;
+  const showCredits = hasSelection;
+  const creditsDisplayValue = selectedTerritoryBalance;
 
   return (
     <View style={styles.root}>
@@ -1002,6 +914,13 @@ export default function GameScreen() {
                 HEX_SIZE={HEX_SIZE}
               />
 
+              <BridgeOverlayLayer
+                activeTileMap={activeTileMap}
+                tileDataMap={tileDataMap}
+                selectedEntityKey={selectedEntityKey}
+                HEX_SIZE={HEX_SIZE}
+              />
+
               <BorderEdgeLayer
                 outerEdges={outerTerritoryEdges}
                 innerEdges={borderEdges}
@@ -1019,6 +938,7 @@ export default function GameScreen() {
 
               <MovementHighlightTapTargets
                 validMoveTiles={validMoveTiles}
+                validBridgePlacementTiles={validBridgePlacementTiles}
                 validPlacementAttackTiles={validPlacementAttackTiles}
                 armedEntityId={armedEntityId}
                 tileDataMap={tileDataMap}
@@ -1079,6 +999,7 @@ export default function GameScreen() {
 
             <MovementHighlightLayer
               validMoveTiles={validMoveTiles}
+              validBridgePlacementTiles={validBridgePlacementTiles}
               validPlacementAttackTiles={validPlacementAttackTiles}
               selectedTileKeys={selectedTileKeys}
               armedEntityId={armedEntityId}
@@ -1119,6 +1040,7 @@ export default function GameScreen() {
         freeTowerUsedTiles={freeTowerUsedTiles}
         armedEntityId={armedEntityId}
         setArmedEntityId={setArmedEntityId}
+        hasBridgePlacementAvailable={hasBridgePlacementAvailable}
       />
 
       <TouchableOpacity
@@ -1152,6 +1074,11 @@ export default function GameScreen() {
           setEntities={setEntities}
           setTerritoryBalances={setTerritoryBalances}
           setSelectedEntityKey={setSelectedEntityKey}
+          onRemoveOverride={
+            entities.get(selectedEntityKey) === "bridge"
+              ? handleDemolishBridge
+              : undefined
+          }
         />
       )}
 
@@ -1165,8 +1092,6 @@ export default function GameScreen() {
         hasSelection={hasSelection}
         setShowEconModal={setShowEconModal}
         creditsDisplayValue={creditsDisplayValue}
-        selectedLakeFund={selectedLakeFund}
-        lakeUpkeepPerTurn={lakeUpkeepPerTurn}
         econBreakdown={econBreakdown as EconBreakdown | null}
         canBuild={canBuild}
         ribbonMode={ribbonMode}
@@ -1190,14 +1115,6 @@ export default function GameScreen() {
         confirmLeave={confirmLeave}
         setConfirmLeave={setConfirmLeave}
         onLeaveConfirm={() => router.back()}
-        pendingLakeMove={pendingLakeMove}
-        setPendingLakeMove={setPendingLakeMove}
-        lakeTransferAmount={lakeTransferAmount}
-        setLakeTransferAmount={setLakeTransferAmount}
-        sliderTrackWidth={sliderTrackWidth}
-        setSliderTrackWidth={setSliderTrackWidth}
-        sliderTrackPageX={sliderTrackPageX}
-        commitPendingLakeMove={commitPendingLakeMove}
         showEconModal={showEconModal}
         setShowEconModal={setShowEconModal}
         econBreakdown={econBreakdown as EconBreakdown | null}

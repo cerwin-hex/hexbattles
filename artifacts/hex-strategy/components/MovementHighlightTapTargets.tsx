@@ -5,6 +5,7 @@ import type { EntityType } from "@/types";
 
 export interface MovementHighlightTapTargetsProps {
   validMoveTiles: Set<string>;
+  validBridgePlacementTiles: Set<string>;
   validPlacementAttackTiles: Set<string>;
   armedEntityId: EntityType | null;
   tileDataMap: Map<string, { cx: number; cy: number }>;
@@ -13,6 +14,7 @@ export interface MovementHighlightTapTargetsProps {
 
 function MovementHighlightTapTargetsInner({
   validMoveTiles,
+  validBridgePlacementTiles,
   validPlacementAttackTiles,
   armedEntityId,
   tileDataMap,
@@ -27,6 +29,19 @@ function MovementHighlightTapTargetsInner({
           return (
             <Polygon
               key={`move-tap-${key}`}
+              points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
+              fill="transparent"
+            />
+          );
+        })}
+
+      {armedEntityId === "bridge" &&
+        Array.from(validBridgePlacementTiles).map((key) => {
+          const pos = tileDataMap.get(key);
+          if (!pos) return null;
+          return (
+            <Polygon
+              key={`bridge-tap-${key}`}
               points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
               fill="transparent"
             />
@@ -55,6 +70,7 @@ function areMovementHighlightTapTargetsEqual(
 ): boolean {
   return (
     prev.validMoveTiles === next.validMoveTiles &&
+    prev.validBridgePlacementTiles === next.validBridgePlacementTiles &&
     prev.validPlacementAttackTiles === next.validPlacementAttackTiles &&
     prev.armedEntityId === next.armedEntityId &&
     prev.tileDataMap === next.tileDataMap &&

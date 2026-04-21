@@ -14,15 +14,20 @@ export function calcTerritoryUpkeep(
   territory: HexTile[],
   ents: Map<string, EntityType>,
 ): number {
-  let towers = 0, castles = 0, unitUpkeep = 0;
+  let towers = 0, castles = 0, unitUpkeep = 0, bridges = 0;
   for (const t of territory) {
     const e = ents.get(t.key);
     if (!e) continue;
     if (e === "tower") towers++;
     else if (e === "castle") castles++;
-    else unitUpkeep += ENTITY_META[e].upkeep;
+    else if (e === "bridge") bridges++;
+    else {
+      unitUpkeep += ENTITY_META[e].upkeep;
+      // Unit standing on a lake tile implies a bridge underneath — count its upkeep too.
+      if (t.terrain === "lake") bridges++;
+    }
   }
-  return unitUpkeep + calcDefenseUpkeep("tower", towers) + calcDefenseUpkeep("castle", castles);
+  return unitUpkeep + calcDefenseUpkeep("tower", towers) + calcDefenseUpkeep("castle", castles) + bridges * ENTITY_META["bridge"].upkeep;
 }
 
 export function applySingleHexPenalty(
@@ -46,11 +51,12 @@ export function applySingleHexPenalty(
   for (const tile of tileMap.values()) {
     if (!allOwners.has(tile.owner as TerritoryOwner) || visited.has(tile.key))
       continue;
-    if (tile.terrain === "mountain" || tile.terrain === "lake") continue;
+    if (tile.terrain === "mountain") continue;
     const territory = getContiguousTerritory(
       tileMap,
       tile.key,
       tile.owner as TerritoryOwner,
+      entities,
     );
     for (const t of territory) visited.add(t.key);
     if (territory.length !== 1) continue;
@@ -62,19 +68,32 @@ export function applySingleHexPenalty(
         prevTileMap,
         singleKey,
         tile.owner as TerritoryOwner,
+        entities,
       );
       if (prevTerritory.length === 1) continue;
     }
     const id = getTerritoryId(territory);
     if (id) balances.set(id, 0);
     const entity = entities.get(singleKey);
+    const lt = tileMap.get(singleKey);
     if (entity) {
       entities.delete(singleKey);
       if (ENTITY_META[entity].isUnit) {
         graveyard.add(singleKey);
+        // Unit was on a bridge tile — also demolish the bridge since its territory is gone.
+        if (lt?.terrain === "lake") {
+          tileMap.set(singleKey, { ...lt, owner: "neutral" });
+        }
       } else if (entity !== "rebel" && entity !== "city") {
         ruins.add(singleKey);
+        // Bridge removed: lake tile must lose owner.
+        if (entity === "bridge" && lt?.terrain === "lake") {
+          tileMap.set(singleKey, { ...lt, owner: "neutral" });
+        }
       }
+    } else if (lt?.terrain === "lake" && lt.owner !== "neutral") {
+      // Ownerless lake tile with no entity — reset to neutral.
+      tileMap.set(singleKey, { ...lt, owner: "neutral" });
     }
   }
 }

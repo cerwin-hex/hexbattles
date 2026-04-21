@@ -6,7 +6,6 @@ import {
   CITY_BONUS,
   getContiguousTerritory,
   getTerritoryId,
-  getMaxEnemyZoC,
   getValidMoves,
   getMoveCost,
 } from "@/utils/hexGrid";
@@ -80,7 +79,7 @@ export function dtCaptureNegatesIncome(
 ): boolean {
   const capTile = ctx.tileMap.get(captureKey);
   if (!capTile || capTile.owner !== enemyOwner) return false;
-  const origTerr = getContiguousTerritory(ctx.tileMap, captureKey, enemyOwner);
+  const origTerr = getContiguousTerritory(ctx.tileMap, captureKey, enemyOwner, ctx.entities);
   const origId = getTerritoryId(origTerr);
   const enemyBal = origId ? (ctx.balances.get(origId) ?? 0) : 0;
   const simMap = new Map(ctx.tileMap);
@@ -89,7 +88,7 @@ export function dtCaptureNegatesIncome(
   simEntities.delete(captureKey);
   const anyRemaining = Array.from(simMap.values()).find((t) => t.owner === enemyOwner);
   if (!anyRemaining) return true;
-  const remTerr = getContiguousTerritory(simMap, anyRemaining.key, enemyOwner);
+  const remTerr = getContiguousTerritory(simMap, anyRemaining.key, enemyOwner, simEntities);
   const remIncome = remTerr.reduce((s, t) => {
     if (simEntities.get(t.key) === "rebel") return s;
     return s + (TERRAIN_INCOME[t.terrain] ?? 0) + (ctx.cities.has(t.key) ? CITY_BONUS : 0);
@@ -110,7 +109,7 @@ export function dtCaptureCreatesOneHex(
   const vis = new Set<string>();
   for (const t of Array.from(simMap.values())) {
     if (t.owner !== enemyOwner || vis.has(t.key)) continue;
-    const comp = getContiguousTerritory(simMap, t.key, enemyOwner);
+    const comp = getContiguousTerritory(simMap, t.key, enemyOwner, ctx.entities);
     for (const ct of comp) vis.add(ct.key);
     if (comp.length === 1) return true;
   }
@@ -151,74 +150,6 @@ export function dtBfsStep(
     }
   }
   return null;
-}
-
-export function dtLakeHasLandTarget(
-  lakeKey: string,
-  unitStrength: number,
-  ctx: AiContext,
-): boolean {
-  const vis = new Set<string>([lakeKey]);
-  const q = [lakeKey];
-  while (q.length > 0) {
-    const curr = q.shift()!;
-    const [cq, cr] = curr.split(",").map(Number);
-    for (const { dir: [dq, dr] } of HEX_EDGES) {
-      const nk = tileKey(cq + dq, cr + dr);
-      if (vis.has(nk)) continue;
-      vis.add(nk);
-      const nt = ctx.tileMap.get(nk);
-      if (!nt || nt.terrain === "mountain") continue;
-      if (nt.terrain !== "lake") {
-        if (nt.owner === ctx.aiOwner) {
-          if (!ctx.entities.has(nk)) return true;
-        } else {
-          const zoc = getMaxEnemyZoC(nk, ctx.aiOwner, ctx.entities, ctx.tileMap);
-          if (unitStrength > zoc) return true;
-        }
-      } else {
-        q.push(nk);
-      }
-    }
-  }
-  return false;
-}
-
-export function dtLakeHasSplitOpportunity(
-  lakeKey: string,
-  unitStrength: number,
-  ctx: AiContext,
-): boolean {
-  const vis = new Set<string>([lakeKey]);
-  const q = [lakeKey];
-  while (q.length > 0) {
-    const curr = q.shift()!;
-    const [cq, cr] = curr.split(",").map(Number);
-    for (const { dir: [dq, dr] } of HEX_EDGES) {
-      const nk = tileKey(cq + dq, cr + dr);
-      if (vis.has(nk)) continue;
-      vis.add(nk);
-      const nt = ctx.tileMap.get(nk);
-      if (!nt || nt.terrain === "mountain") continue;
-      if (nt.terrain !== "lake") {
-        if (nt.owner === ctx.aiOwner || nt.owner === "neutral") continue;
-        const zoc = getMaxEnemyZoC(nk, ctx.aiOwner, ctx.entities, ctx.tileMap);
-        if (unitStrength > zoc) {
-          const eOwner2 = nt.owner as TerritoryOwner;
-          if (
-            dtSplitScore(nk, eOwner2, ctx) > 0 ||
-            dtCaptureNegatesIncome(nk, eOwner2, ctx) ||
-            dtCaptureCreatesOneHex(nk, eOwner2, ctx)
-          ) {
-            return true;
-          }
-        }
-      } else {
-        q.push(nk);
-      }
-    }
-  }
-  return false;
 }
 
 export function dtDefenseMinDist(

@@ -40,6 +40,7 @@ function EntityLayerInner({
       <Svg width={boardW} height={boardH}>
         {Array.from(entities.entries()).map(([key, entityId]) => {
           if (entityId === "city") return null;
+          if (entityId === "bridge") return null;
           if (animatingUnit && key === animatingUnit.fromKey) return null;
           if (
             animatingUnit &&

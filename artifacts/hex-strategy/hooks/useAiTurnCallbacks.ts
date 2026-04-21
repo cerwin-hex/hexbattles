@@ -1,8 +1,5 @@
 import type { MutableRefObject } from "react";
-import type {
-  AiTurnCallbacks,
-  AiWorkingState,
-} from "@/logic/aiStrategy";
+import type { AiTurnCallbacks } from "@/logic/aiStrategy";
 import type {
   EntityType,
   HexTile,
@@ -21,9 +18,9 @@ export interface AiTurnCallbacksParams {
   setCities: (v: Set<string>) => void;
   setFreeTowerUsedTiles: (v: Map<TerritoryOwner, Set<string>>) => void;
   setAiStateMap: (v: Map<string, AiState>) => void;
-  setLakeUnitFunds: (v: Map<string, number>) => void;
   setIsAiTurn: (v: boolean) => void;
   setIsAiPaused: (v: boolean) => void;
+
   setIsAiTurnDone: (v: boolean) => void;
   setAiHistoryIndex: (v: number) => void;
   setAiHistoryLen: (v: number) => void;
@@ -52,7 +49,6 @@ export function makeAiTurnCallbacks(p: AiTurnCallbacksParams): AiTurnCallbacks {
       setCities: p.setCities,
       setFreeTowerUsedTiles: p.setFreeTowerUsedTiles,
       setAiStateMap: p.setAiStateMap,
-      setLakeUnitFunds: p.setLakeUnitFunds,
       setIsAiTurn: p.setIsAiTurn,
     },
     refs: {

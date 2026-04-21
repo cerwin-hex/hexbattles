@@ -25,6 +25,7 @@ interface PurchaseRibbonProps {
   freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
   armedEntityId: EntityType | null;
   setArmedEntityId: (id: EntityType | null) => void;
+  hasBridgePlacementAvailable: boolean;
 }
 
 export default function PurchaseRibbon({
@@ -41,6 +42,7 @@ export default function PurchaseRibbon({
   freeTowerUsedTiles,
   armedEntityId,
   setArmedEntityId,
+  hasBridgePlacementAvailable,
 }: PurchaseRibbonProps) {
   return (
     <Animated.View
@@ -68,10 +70,12 @@ export default function PurchaseRibbon({
           const isArmed = armedEntityId === item.id;
           const isTower = item.id === "tower";
           const isCastle = item.id === "castle";
+          const isBridge = item.id === "bridge";
           const round1Locked = turn === 1 && !isTower;
           const cityAlreadyBuilt = item.id === "city" && territoryHasCity;
           const cityTooSmall = item.id === "city" && selectedTerritory.length < 6;
           const cityLocked = cityAlreadyBuilt || cityTooSmall;
+          const bridgeLocked = isBridge && !hasBridgePlacementAvailable;
           const playerUsedTilesSet = freeTowerUsedTiles.get("player") ?? new Set<string>();
           const playerTowerFree =
             isTower &&
@@ -80,9 +84,11 @@ export default function PurchaseRibbon({
             !selectedTerritory.some((t) => playerUsedTilesSet.has(t.key));
           const effectiveCost = playerTowerFree ? 0 : item.cost;
           const affordable = effectiveCost <= selectedTerritoryBalance;
-          const enabled = affordable && !cityLocked && !round1Locked;
+          const enabled = affordable && !cityLocked && !round1Locked && !bridgeLocked;
           const costLabel = round1Locked
             ? "Round 2+"
+            : bridgeLocked
+              ? "No water"
             : cityAlreadyBuilt
               ? "BUILT"
               : cityTooSmall

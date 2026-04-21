@@ -24,8 +24,9 @@ export const ENTITY_META: Record<EntityType, EntityMeta> = {
   // Actual territory upkeep is LINEAR (n-th building costs n×base); use calcDefenseUpkeep/nextDefenseUpkeep.
   tower:         { name: 'Tower',     icon: '🛕',  cost: 15, upkeep: 1,  isUnit: false, strength: 1 },
   castle:        { name: 'Castle',    icon: '🏰',  cost: 30, upkeep: 5,  isUnit: false, strength: 2 },
-  city:          { name: 'City',          icon: '🏘️',  cost: 10, upkeep: 0,  isUnit: false, strength: 0 },
-  rebel:         { name: 'Rebel',         icon: '✊',   cost: 0,  upkeep: 0,  isUnit: false, strength: 0 },
+  city:          { name: 'City',      icon: '🏘️',  cost: 10, upkeep: 0,  isUnit: false, strength: 0 },
+  rebel:         { name: 'Rebel',     icon: '✊',   cost: 0,  upkeep: 0,  isUnit: false, strength: 0 },
+  bridge:        { name: 'Bridge',    icon: '➖',   cost: 5,  upkeep: 1,  isUnit: false, strength: 0 },
 };
 
 export const TERRAIN_INCOME: Record<TerrainType, number> = {
@@ -74,6 +75,26 @@ export function nextDefenseUpkeep(type: 'tower' | 'castle', currentCount: number
   return base * (currentCount + 1);
 }
 
+/** Returns true when a lake tile is bridged or occupied by a unit (captured bridge). */
+function isLakePassable(key: string, entities?: Map<string, EntityType>): boolean {
+  const e = entities?.get(key);
+  if (!e) return false;
+  return e === 'bridge' || ENTITY_META[e].isUnit;
+}
+
+/** A lake tile counts as territory only when it has a bridge entity or a unit standing on it. */
+function isTerritoryTile(
+  tileMap: Map<string, HexTile>,
+  key: string,
+  owner: TerritoryOwner,
+  entities?: Map<string, EntityType>,
+): boolean {
+  const t = tileMap.get(key);
+  if (!t || t.owner !== owner || t.terrain === 'mountain') return false;
+  if (t.terrain === 'lake') return isLakePassable(key, entities);
+  return true;
+}
+
 export function getZoCStrength(
   tileKey2: string,
   owner: TerritoryOwner,
@@ -104,11 +125,8 @@ export function getMaxEnemyZoC(
   tileMap: Map<string, HexTile>,
 ): number {
   const targetTile = tileMap.get(targetKey);
-  // Neutral tiles have no defending faction — no ZoC.
-  // Player's own tiles are never attacked via this path.
   if (!targetTile || targetTile.owner === playerOwner || targetTile.owner === 'neutral') return 0;
 
-  // Only units belonging to the tile's own faction count as defenders.
   const defenderOwner = targetTile.owner;
 
   const [q, r] = targetKey.split(',').map(Number);
@@ -116,7 +134,7 @@ export function getMaxEnemyZoC(
   let maxStr = 0;
   for (const ck of candidateKeys) {
     const t = tileMap.get(ck);
-    if (!t || t.owner !== defenderOwner || t.terrain === 'lake') continue;
+    if (!t || t.owner !== defenderOwner) continue;
     const e = entities.get(ck);
     if (e) {
       const str = ENTITY_META[e].strength;
@@ -168,19 +186,11 @@ export function getValidMoves(
       if (!neighbor) continue;
       if (neighbor.terrain === 'mountain') continue;
 
+      // Lake tiles are impassable unless they have a bridge entity
+      if (neighbor.terrain === 'lake' && !isLakePassable(nk, entities)) continue;
+
       const moveCost = TERRAIN_MOVE_COST[neighbor.terrain] ?? 1;
       const newCost = cost + moveCost;
-
-      if (neighbor.terrain === 'lake') {
-        if (newCost <= maxRange && !entities.has(nk)) {
-          const prev = bestCost.get(nk) ?? Infinity;
-          if (newCost < prev) {
-            bestCost.set(nk, newCost);
-            result.add(nk);
-          }
-        }
-        continue;
-      }
 
       if (newCost > maxRange) continue;
       const prev = bestCost.get(nk) ?? Infinity;
@@ -191,11 +201,12 @@ export function getValidMoves(
         const allyEntity = entities.get(nk);
         const allyIsRebel = allyEntity === 'rebel';
         const allyIsCity = allyEntity === 'city';
+        const allyIsBridge = allyEntity === 'bridge';
         const allyIsUnit = allyEntity ? ENTITY_META[allyEntity].isUnit : false;
         if (!allyEntity || allyIsRebel) {
           result.add(nk);
           bfsInsert(queue, { key: nk, cost: newCost });
-        } else if (allyIsCity) {
+        } else if (allyIsCity || allyIsBridge) {
           result.add(nk);
           bfsInsert(queue, { key: nk, cost: newCost });
         } else if (allyIsUnit) {
@@ -222,6 +233,7 @@ export function getMoveCost(
   fromKey: string,
   toKey: string,
   tileMap: Map<string, HexTile>,
+  entities?: Map<string, EntityType>,
 ): number {
   if (fromKey === toKey) return 0;
   const bestCost = new Map<string, number>([[fromKey, 0]]);
@@ -235,6 +247,7 @@ export function getMoveCost(
       const nk = tileKey(cq + dq, cr + dr);
       const neighbor = tileMap.get(nk);
       if (!neighbor || neighbor.terrain === 'mountain') continue;
+      if (neighbor.terrain === 'lake' && !isLakePassable(nk, entities)) continue;
       const moveCost = TERRAIN_MOVE_COST[neighbor.terrain] ?? 1;
       const newCost = cost + moveCost;
       const prev = bestCost.get(nk) ?? Infinity;
@@ -253,41 +266,72 @@ export function recalculateTerritories(
   previousTileMap: Map<string, HexTile>,
   newTiles: Map<string, HexTile>,
   previousBalances: Map<string, number>,
+  entities?: Map<string, EntityType>,
+  prevEntities?: Map<string, EntityType>,
 ): { balances: Map<string, number>; tiles: Map<string, HexTile> } {
   const balances = new Map(previousBalances);
+  // prevEntities: used for BFS over previousTileMap (old state).
+  // entities: used for BFS over newTiles (new state).
+  // Defaults to entities if prevEntities is not provided (backwards compat).
+  const oldEnt = prevEntities ?? entities;
 
-  function clusterOwner(tileMap: Map<string, HexTile>, startKey: string, owner: TerritoryOwner): HexTile[] {
+  function clusterOwnerOld(tileMap: Map<string, HexTile>, startKey: string, owner: TerritoryOwner): HexTile[] {
+    if (!isTerritoryTile(tileMap, startKey, owner, oldEnt)) return [];
     const cluster: HexTile[] = [];
     const visited = new Set<string>([startKey]);
     const q = [startKey];
     while (q.length > 0) {
       const curr = q.shift()!;
       const t = tileMap.get(curr);
-      if (!t || t.owner !== owner || t.terrain === 'mountain' || t.terrain === 'lake') continue;
+      if (!t || t.owner !== owner) continue;
+      if (t.terrain === 'mountain') continue;
+      if (t.terrain === 'lake' && !isLakePassable(curr, oldEnt)) continue;
       cluster.push(t);
       const [cq, cr] = curr.split(',').map(Number);
       for (const { dir: [dq, dr] } of HEX_EDGES) {
         const nk = tileKey(cq + dq, cr + dr);
         if (visited.has(nk)) continue;
         visited.add(nk);
-        const nt = tileMap.get(nk);
-        if (nt && nt.owner === owner && nt.terrain !== 'mountain' && nt.terrain !== 'lake') q.push(nk);
+        if (isTerritoryTile(tileMap, nk, owner, oldEnt)) q.push(nk);
       }
     }
     return cluster;
   }
 
-  const oldPlayerTerrContainingChanged = clusterOwner(previousTileMap, changedTileKey, 'player');
+  function clusterOwnerNew(tileMap: Map<string, HexTile>, startKey: string, owner: TerritoryOwner): HexTile[] {
+    if (!isTerritoryTile(tileMap, startKey, owner, entities)) return [];
+    const cluster: HexTile[] = [];
+    const visited = new Set<string>([startKey]);
+    const q = [startKey];
+    while (q.length > 0) {
+      const curr = q.shift()!;
+      const t = tileMap.get(curr);
+      if (!t || t.owner !== owner) continue;
+      if (t.terrain === 'mountain') continue;
+      if (t.terrain === 'lake' && !isLakePassable(curr, entities)) continue;
+      cluster.push(t);
+      const [cq, cr] = curr.split(',').map(Number);
+      for (const { dir: [dq, dr] } of HEX_EDGES) {
+        const nk = tileKey(cq + dq, cr + dr);
+        if (visited.has(nk)) continue;
+        visited.add(nk);
+        if (isTerritoryTile(tileMap, nk, owner, entities)) q.push(nk);
+      }
+    }
+    return cluster;
+  }
+
+  const oldPlayerTerrContainingChanged = clusterOwnerOld(previousTileMap, changedTileKey, 'player');
   const oldPlayerIdChanged = getTerritoryId(oldPlayerTerrContainingChanged);
 
-  const newPlayerCluster = clusterOwner(newTiles, changedTileKey, 'player');
+  const newPlayerCluster = clusterOwnerNew(newTiles, changedTileKey, 'player');
   const newPlayerId = getTerritoryId(newPlayerCluster);
 
   if (newPlayerId) {
     const oldIdsCollected = new Set<string>();
     for (const t of newPlayerCluster) {
       if (t.key === changedTileKey) continue;
-      const oldTerr = clusterOwner(previousTileMap, t.key, 'player');
+      const oldTerr = clusterOwnerOld(previousTileMap, t.key, 'player');
       const oldId = getTerritoryId(oldTerr);
       if (oldId) oldIdsCollected.add(oldId);
     }
@@ -304,7 +348,7 @@ export function recalculateTerritories(
   }
 
   if (previousOwner !== 'neutral' && previousOwner !== 'player') {
-    const oldDispTerr = clusterOwner(previousTileMap, changedTileKey, previousOwner);
+    const oldDispTerr = clusterOwnerOld(previousTileMap, changedTileKey, previousOwner);
     const oldDispId = getTerritoryId(oldDispTerr);
     const oldDispBalance = oldDispId ? (previousBalances.get(oldDispId) ?? 0) : 0;
 
@@ -321,7 +365,7 @@ export function recalculateTerritories(
       if (dispVisited.has(key)) continue;
       const tile = newTiles.get(key);
       if (!tile || tile.owner !== previousOwner) continue;
-      const cluster = clusterOwner(newTiles, key, previousOwner);
+      const cluster = clusterOwnerNew(newTiles, key, previousOwner);
       for (const ct of cluster) dispVisited.add(ct.key);
       dispClusters.push(cluster);
     }
@@ -363,34 +407,62 @@ export function recalculateTerritoriesForCapture(
   previousTileMap: Map<string, HexTile>,
   newTileMap: Map<string, HexTile>,
   previousBalances: Map<string, number>,
+  entities?: Map<string, EntityType>,
+  prevEntities?: Map<string, EntityType>,
 ): Map<string, number> {
   const balances = new Map(previousBalances);
+  // prevEntities: used for BFS over previousTileMap (old entity state).
+  // entities: used for BFS over newTileMap (new entity state).
+  const oldEnt = prevEntities ?? entities;
 
-  function clusterOwner(map: Map<string, HexTile>, startKey: string, owner: TerritoryOwner): HexTile[] {
-    const start = map.get(startKey);
-    if (!start || start.owner !== owner || start.terrain === 'mountain' || start.terrain === 'lake') return [];
+  function clusterOwnerOld(map: Map<string, HexTile>, startKey: string, owner: TerritoryOwner): HexTile[] {
+    if (!isTerritoryTile(map, startKey, owner, oldEnt)) return [];
     const cluster: HexTile[] = [];
     const visited = new Set<string>([startKey]);
     const q = [startKey];
     while (q.length > 0) {
       const curr = q.shift()!;
       const t = map.get(curr);
-      if (!t || t.owner !== owner || t.terrain === 'mountain' || t.terrain === 'lake') continue;
+      if (!t || t.owner !== owner) continue;
+      if (t.terrain === 'mountain') continue;
+      if (t.terrain === 'lake' && !isLakePassable(curr, oldEnt)) continue;
       cluster.push(t);
       const [cq, cr] = curr.split(',').map(Number);
       for (const { dir: [dq, dr] } of HEX_EDGES) {
         const nk = tileKey(cq + dq, cr + dr);
         if (visited.has(nk)) continue;
         visited.add(nk);
-        const nt = map.get(nk);
-        if (nt && nt.owner === owner && nt.terrain !== 'mountain' && nt.terrain !== 'lake') q.push(nk);
+        if (isTerritoryTile(map, nk, owner, oldEnt)) q.push(nk);
+      }
+    }
+    return cluster;
+  }
+
+  function clusterOwnerNew(map: Map<string, HexTile>, startKey: string, owner: TerritoryOwner): HexTile[] {
+    if (!isTerritoryTile(map, startKey, owner, entities)) return [];
+    const cluster: HexTile[] = [];
+    const visited = new Set<string>([startKey]);
+    const q = [startKey];
+    while (q.length > 0) {
+      const curr = q.shift()!;
+      const t = map.get(curr);
+      if (!t || t.owner !== owner) continue;
+      if (t.terrain === 'mountain') continue;
+      if (t.terrain === 'lake' && !isLakePassable(curr, entities)) continue;
+      cluster.push(t);
+      const [cq, cr] = curr.split(',').map(Number);
+      for (const { dir: [dq, dr] } of HEX_EDGES) {
+        const nk = tileKey(cq + dq, cr + dr);
+        if (visited.has(nk)) continue;
+        visited.add(nk);
+        if (isTerritoryTile(map, nk, owner, entities)) q.push(nk);
       }
     }
     return cluster;
   }
 
   if (previousOwner !== 'neutral' && previousOwner !== newOwner) {
-    const oldTerr = clusterOwner(previousTileMap, changedTileKey, previousOwner);
+    const oldTerr = clusterOwnerOld(previousTileMap, changedTileKey, previousOwner);
     const oldId = getTerritoryId(oldTerr);
     const oldBalance = oldId ? (previousBalances.get(oldId) ?? 0) : 0;
     if (oldId) balances.delete(oldId);
@@ -404,7 +476,7 @@ export function recalculateTerritoriesForCapture(
       if (dispVisited.has(key)) continue;
       const tile = newTileMap.get(key);
       if (!tile || tile.owner !== previousOwner) continue;
-      const cluster = clusterOwner(newTileMap, key, previousOwner);
+      const cluster = clusterOwnerNew(newTileMap, key, previousOwner);
       for (const ct of cluster) dispVisited.add(ct.key);
       dispClusters.push(cluster);
     }
@@ -435,17 +507,17 @@ export function recalculateTerritoriesForCapture(
   }
 
   if (newOwner !== 'neutral') {
-    const oldNewOwnerTerr = clusterOwner(previousTileMap, changedTileKey, newOwner);
+    const oldNewOwnerTerr = clusterOwnerOld(previousTileMap, changedTileKey, newOwner);
     const oldNewOwnerId = getTerritoryId(oldNewOwnerTerr);
 
-    const newTerr = clusterOwner(newTileMap, changedTileKey, newOwner);
+    const newTerr = clusterOwnerNew(newTileMap, changedTileKey, newOwner);
     const newTerrId = getTerritoryId(newTerr);
 
     if (newTerrId) {
       const mergedIds = new Set<string>();
       for (const t of newTerr) {
         if (t.key === changedTileKey) continue;
-        const oldTerr2 = clusterOwner(previousTileMap, t.key, newOwner);
+        const oldTerr2 = clusterOwnerOld(previousTileMap, t.key, newOwner);
         const oldId2 = getTerritoryId(oldTerr2);
         if (oldId2) mergedIds.add(oldId2);
       }
@@ -469,9 +541,12 @@ export function getContiguousTerritory(
   tileMap: Map<string, HexTile>,
   startKey: string,
   owner: TerritoryOwner,
+  entities?: Map<string, EntityType>,
 ): HexTile[] {
   const start = tileMap.get(startKey);
-  if (!start || start.owner !== owner || start.terrain === 'mountain' || start.terrain === 'lake') return [];
+  if (!start || start.owner !== owner || start.terrain === 'mountain') return [];
+  // Lake tiles are only part of territory if bridged or unit is standing on it
+  if (start.terrain === 'lake' && !isLakePassable(startKey, entities)) return [];
   const visited = new Set<string>([startKey]);
   const queue: string[] = [startKey];
   const result: HexTile[] = [start];
@@ -483,10 +558,11 @@ export function getContiguousTerritory(
       if (visited.has(nk)) continue;
       visited.add(nk);
       const neighbor = tileMap.get(nk);
-      if (neighbor && neighbor.owner === owner && neighbor.terrain !== 'mountain' && neighbor.terrain !== 'lake') {
-        result.push(neighbor);
-        queue.push(nk);
-      }
+      if (!neighbor || neighbor.owner !== owner || neighbor.terrain === 'mountain') continue;
+      // Lake tiles only traversable as territory when bridged or unit is standing on it
+      if (neighbor.terrain === 'lake' && !isLakePassable(nk, entities)) continue;
+      result.push(neighbor);
+      queue.push(nk);
     }
   }
   return result;
@@ -559,7 +635,7 @@ export function generateHexGrid(tileCount: number, playerCount: number): HexTile
     frontier.push([nq, nr]);
   }
 
-  // Fill internal voids: positions not in the map but completely surrounded by map tiles
+  // Fill internal voids
   let voidFilled = true;
   while (voidFilled) {
     voidFilled = false;
@@ -680,8 +756,6 @@ export function generateHexGrid(tileCount: number, playerCount: number): HexTile
     assignable[i].owner = ownerList[i % ownerList.length];
   }
 
-  // Final enforcement: every non-mountain tile adjacent to a city must be neutral.
-  // This catches tiles that were converted from mountains after cityBuffer was set.
   for (const tile of tiles) {
     if (!tile.isCity) continue;
     for (const [nq, nr] of getNeighborsOf(tile.q, tile.r)) {

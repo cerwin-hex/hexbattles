@@ -36,15 +36,6 @@ interface GameModalsProps {
   setConfirmLeave: (v: boolean) => void;
   onLeaveConfirm: () => void;
 
-  pendingLakeMove: { minAmount: number; maxAmount: number } | null;
-  setPendingLakeMove: (v: null) => void;
-  lakeTransferAmount: number;
-  setLakeTransferAmount: (updater: (prev: number) => number) => void;
-  sliderTrackWidth: number;
-  setSliderTrackWidth: (w: number) => void;
-  sliderTrackPageX: React.RefObject<number>;
-  commitPendingLakeMove: (amount: number) => void;
-
   showEconModal: boolean;
   setShowEconModal: (v: boolean) => void;
   econBreakdown: EconBreakdown | null;
@@ -62,14 +53,6 @@ export default function GameModals({
   confirmLeave,
   setConfirmLeave,
   onLeaveConfirm,
-  pendingLakeMove,
-  setPendingLakeMove,
-  lakeTransferAmount,
-  setLakeTransferAmount,
-  sliderTrackWidth,
-  setSliderTrackWidth,
-  sliderTrackPageX,
-  commitPendingLakeMove,
   showEconModal,
   setShowEconModal,
   econBreakdown,
@@ -114,120 +97,6 @@ export default function GameModals({
           </View>
         </View>
       </Modal>
-
-      {pendingLakeMove && (
-        <Modal
-          visible={true}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setPendingLakeMove(null)}
-        >
-          <View style={styles.lakeModalOverlay}>
-            <View style={styles.lakeModalBox}>
-              <Text style={styles.lakeModalTitle}>⚓ Naval Supply</Text>
-              <Text style={styles.lakeModalSubtitle}>
-                How many credits to provision this unit?{"\n"}
-                (min {pendingLakeMove.minAmount}, max{" "}
-                {pendingLakeMove.maxAmount})
-              </Text>
-
-              <Text style={styles.lakeModalAmount}>{lakeTransferAmount}</Text>
-
-              <View style={styles.lakeSliderRow}>
-                <TouchableOpacity
-                  style={styles.lakeStepBtn}
-                  onPress={() =>
-                    setLakeTransferAmount((prev) =>
-                      Math.max(pendingLakeMove.minAmount, prev - 1),
-                    )
-                  }
-                >
-                  <Text style={styles.lakeStepText}>−</Text>
-                </TouchableOpacity>
-
-                <View
-                  style={styles.lakeTrackHitZone}
-                  onLayout={(e) => {
-                    setSliderTrackWidth(e.nativeEvent.layout.width);
-                  }}
-                  onStartShouldSetResponder={() => true}
-                  onMoveShouldSetResponder={() => true}
-                  onMoveShouldSetResponderCapture={() => true}
-                  onResponderGrant={(e) => {
-                    sliderTrackPageX.current = e.nativeEvent.pageX - e.nativeEvent.locationX;
-                    const x = Math.max(0, Math.min(sliderTrackWidth, e.nativeEvent.pageX - sliderTrackPageX.current));
-                    const range = pendingLakeMove.maxAmount - pendingLakeMove.minAmount;
-                    if (range <= 0) return;
-                    setLakeTransferAmount(
-                      () => pendingLakeMove.minAmount + Math.round((x / sliderTrackWidth) * range),
-                    );
-                  }}
-                  onResponderMove={(e) => {
-                    const x = Math.max(0, Math.min(sliderTrackWidth, e.nativeEvent.pageX - sliderTrackPageX.current));
-                    const range = pendingLakeMove.maxAmount - pendingLakeMove.minAmount;
-                    if (range <= 0) return;
-                    setLakeTransferAmount(
-                      () => pendingLakeMove.minAmount + Math.round((x / sliderTrackWidth) * range),
-                    );
-                  }}
-                >
-                  <View style={styles.lakeTrack} pointerEvents="none">
-                    <View
-                      style={[
-                        styles.lakeTrackFill,
-                        {
-                          width: `${pendingLakeMove.maxAmount <= pendingLakeMove.minAmount ? 100 : Math.round(((lakeTransferAmount - pendingLakeMove.minAmount) / (pendingLakeMove.maxAmount - pendingLakeMove.minAmount)) * 100)}%`,
-                        },
-                      ]}
-                    />
-                    <View
-                      style={[
-                        styles.lakeThumb,
-                        {
-                          left:
-                            pendingLakeMove.maxAmount <= pendingLakeMove.minAmount
-                              ? sliderTrackWidth - 12
-                              : Math.round(
-                                  ((lakeTransferAmount - pendingLakeMove.minAmount) /
-                                    (pendingLakeMove.maxAmount - pendingLakeMove.minAmount)) *
-                                    (sliderTrackWidth - 24),
-                                ),
-                        },
-                      ]}
-                    />
-                  </View>
-                </View>
-
-                <TouchableOpacity
-                  style={styles.lakeStepBtn}
-                  onPress={() =>
-                    setLakeTransferAmount((prev) =>
-                      Math.min(pendingLakeMove.maxAmount, prev + 1),
-                    )
-                  }
-                >
-                  <Text style={styles.lakeStepText}>+</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.lakeModalButtons}>
-                <TouchableOpacity
-                  style={styles.lakeCancelBtn}
-                  onPress={() => setPendingLakeMove(null)}
-                >
-                  <Text style={styles.lakeCancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.lakeConfirmBtn}
-                  onPress={() => commitPendingLakeMove(lakeTransferAmount)}
-                >
-                  <Text style={styles.lakeConfirmText}>Dispatch ⚓</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
-      )}
 
       <Modal
         visible={showEconModal}

@@ -55,8 +55,8 @@ export function useSelectionState({
     if (!selectedTileKey) return [];
     const tile = activeTileMap.get(selectedTileKey);
     if (!tile || tile.owner !== "player") return [];
-    return getContiguousTerritory(activeTileMap, selectedTileKey, "player");
-  }, [selectedTileKey, activeTileMap]);
+    return getContiguousTerritory(activeTileMap, selectedTileKey, "player", entities);
+  }, [selectedTileKey, activeTileMap, entities]);
 
   const selectedTerritoryId = useMemo<string | null>(
     () => getTerritoryId(selectedTerritory),
@@ -128,17 +128,19 @@ export function useSelectionState({
     let territory: HexTile[];
     if (selectedEntityKey) {
       const selEntity = entities.get(selectedEntityKey);
-      if (!selEntity || ENTITY_META[selEntity].isUnit || selEntity === "city")
+      if (!selEntity || ENTITY_META[selEntity].isUnit || selEntity === "city" || selEntity === "bridge")
         return new Set();
       territory = getContiguousTerritory(
         activeTileMap,
         selectedEntityKey,
         "player",
+        entities,
       );
     } else if (
       armedEntityId &&
       !ENTITY_META[armedEntityId].isUnit &&
-      armedEntityId !== "city"
+      armedEntityId !== "city" &&
+      armedEntityId !== "bridge"
     ) {
       territory = selectedTerritory;
     } else {
@@ -148,7 +150,7 @@ export function useSelectionState({
     const dots = new Set<string>();
     for (const t of territory) {
       const e = entities.get(t.key);
-      if (!e || ENTITY_META[e].isUnit || e === "city" || e === "rebel")
+      if (!e || ENTITY_META[e].isUnit || e === "city" || e === "rebel" || e === "bridge")
         continue;
       dots.add(t.key);
       const [q, r] = t.key.split(",").map(Number);
@@ -168,13 +170,46 @@ export function useSelectionState({
     activeTileMap,
   ]);
 
+  const validBridgePlacementTiles = useMemo<Set<string>>(() => {
+    if (armedEntityId !== "bridge") return new Set();
+    const result = new Set<string>();
+    for (const tile of selectedTerritory) {
+      const [q, r] = tile.key.split(",").map(Number);
+      for (const { dir: [dq, dr] } of HEX_EDGES) {
+        const nk = tileKey(q + dq, r + dr);
+        if (selectedTileKeys.has(nk)) continue;
+        const neighbor = activeTileMap.get(nk);
+        if (!neighbor || neighbor.terrain !== "lake") continue;
+        if (entities.has(nk)) continue;
+        result.add(nk);
+      }
+    }
+    return result;
+  }, [armedEntityId, selectedTerritory, selectedTileKeys, activeTileMap, entities]);
+
+  const hasBridgePlacementAvailable = useMemo<boolean>(() => {
+    for (const tile of selectedTerritory) {
+      const [q, r] = tile.key.split(",").map(Number);
+      for (const { dir: [dq, dr] } of HEX_EDGES) {
+        const nk = tileKey(q + dq, r + dr);
+        if (selectedTileKeys.has(nk)) continue;
+        const neighbor = activeTileMap.get(nk);
+        if (!neighbor || neighbor.terrain !== "lake") continue;
+        if (entities.has(nk)) continue;
+        return true;
+      }
+    }
+    return false;
+  }, [selectedTerritory, selectedTileKeys, activeTileMap, entities]);
+
   const validPlacementAttackTiles = useMemo<Set<string>>(() => {
     if (!armedEntityId) return new Set();
     const meta = ENTITY_META[armedEntityId];
     if (!meta.isUnit) return new Set();
     const result = new Set<string>();
     for (const tile of selectedTerritory) {
-      if (tile.terrain === "mountain" || tile.terrain === "lake") continue;
+      if (tile.terrain === "mountain") continue;
+      if (tile.terrain === "lake" && entities.get(tile.key) !== "bridge") continue;
       const [q, r] = tile.key.split(",").map(Number);
       for (const {
         dir: [dq, dr],
@@ -183,8 +218,8 @@ export function useSelectionState({
         if (selectedTileKeys.has(nk)) continue;
         const neighbor = activeTileMap.get(nk);
         if (!neighbor) continue;
-        if (neighbor.terrain === "mountain" || neighbor.terrain === "lake")
-          continue;
+        if (neighbor.terrain === "mountain") continue;
+        if (neighbor.terrain === "lake" && entities.get(nk) !== "bridge") continue;
         const existingEntity = entities.get(nk);
         if (existingEntity && existingEntity !== "rebel") {
           // buildings with higher strength can't be captured
@@ -227,6 +262,7 @@ export function useSelectionState({
 
   const affordableTerritoryCache = useRef<{
     activeTileMap: Map<string, HexTile>;
+    entities: Map<string, EntityType>;
     territoryBalances: Map<string, number>;
     freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
     isAiTurn: boolean;
@@ -241,6 +277,7 @@ export function useSelectionState({
     if (
       cached &&
       cached.activeTileMap === activeTileMap &&
+      cached.entities === entities &&
       cached.territoryBalances === territoryBalances &&
       cached.freeTowerUsedTiles === freeTowerUsedTiles &&
       cached.isAiTurn === isAiTurn &&
@@ -258,6 +295,7 @@ export function useSelectionState({
         activeTileMap,
         tile.key,
         "player",
+        entities,
       );
       for (const t of territory) visited.add(t.key);
       const id = getTerritoryId(territory);
@@ -273,6 +311,7 @@ export function useSelectionState({
     }
     affordableTerritoryCache.current = {
       activeTileMap,
+      entities,
       territoryBalances,
       freeTowerUsedTiles,
       isAiTurn,
@@ -283,6 +322,7 @@ export function useSelectionState({
     return keys;
   }, [
     activeTileMap,
+    entities,
     territoryBalances,
     minUnitCost,
     freeTowerUsedTiles,
@@ -299,6 +339,8 @@ export function useSelectionState({
     selectedTerritoryDefenseCounts,
     validMoveTiles,
     fortificationDots,
+    validBridgePlacementTiles,
+    hasBridgePlacementAvailable,
     validPlacementAttackTiles,
     minUnitCost,
     territoryHasCity,

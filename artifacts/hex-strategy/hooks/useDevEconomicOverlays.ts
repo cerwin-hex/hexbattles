@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import type { EntityType, HexTile, TerritoryOwner, Difficulty, AiState } from "@/types";
 import {
   CITY_BONUS,
-  ENTITY_META,
   TERRAIN_INCOME,
   findCentralTile,
   getContiguousTerritory,
@@ -26,7 +25,6 @@ interface UseDevEconomicOverlaysParams {
   entities: Map<string, EntityType>;
   cities: Set<string>;
   tileDataMap: Map<string, { cx: number; cy: number }>;
-  lakeUnitFunds: Map<string, number>;
   aiDifficulty: Difficulty;
   aiStateMap: Map<string, AiState>;
 }
@@ -39,7 +37,6 @@ export function useDevEconomicOverlays({
   entities,
   cities,
   tileDataMap,
-  lakeUnitFunds,
   aiDifficulty,
   aiStateMap,
 }: UseDevEconomicOverlaysParams): DevEconomicOverlay[] {
@@ -64,6 +61,7 @@ export function useDevEconomicOverlays({
           activeTileMap,
           tile.key,
           aiOwner,
+          entities,
         );
         for (const t of territory) visited.add(t.key);
         const territoryId = getTerritoryId(territory);
@@ -115,14 +113,6 @@ export function useDevEconomicOverlays({
         result.push({ cx: pos.cx, cy: pos.cy, label, aiLabel });
       }
     }
-    for (const [lakeKey, fund] of lakeUnitFunds) {
-      const pos = tileDataMap.get(lakeKey);
-      const entity = entities.get(lakeKey);
-      if (!pos || !entity || !ENTITY_META[entity].isUnit) continue;
-      const upkeep = ENTITY_META[entity].upkeep;
-      const label = `⚓${fund} (-${upkeep}/t)`;
-      result.push({ cx: pos.cx, cy: pos.cy, label });
-    }
     return result;
   }, [
     isDeveloperModeActive,
@@ -132,7 +122,6 @@ export function useDevEconomicOverlays({
     entities,
     cities,
     tileDataMap,
-    lakeUnitFunds,
     aiDifficulty,
     aiStateMap,
   ]);

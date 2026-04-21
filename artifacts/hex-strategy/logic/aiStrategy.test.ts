@@ -26,7 +26,6 @@ function makeEmptyWs(tileMap: Map<string, HexTile>): AiWorkingState {
     spentUnits: new Set(),
     partialMoves: new Map(),
     freeTowerUsed: new Map(),
-    lakeFunds: new Map(),
   };
 }
 
@@ -54,13 +53,12 @@ function makeCbs(overrides: CbsOverrides = {}): AiTurnCallbacks {
       setCities: vi.fn(),
       setFreeTowerUsedTiles: vi.fn(),
       setAiStateMap: vi.fn(),
-      setLakeUnitFunds: vi.fn(),
       setIsAiTurn: vi.fn(),
       ...stateOverrides,
     },
     refs: {
       getAiStateMap: vi.fn(() => aiStateMapRef),
-      setAiStateMap: vi.fn((v) => { aiStateMapRef.clear(); v.forEach((val, k) => aiStateMapRef.set(k, val)); }),
+      setAiStateMap: vi.fn((v: Map<string, import("@/types").AiState>) => { aiStateMapRef.clear(); v.forEach((val, k) => aiStateMapRef.set(k, val)); }),
       isTurnActive: vi.fn().mockReturnValue(true),
       isDeveloperMode: vi.fn().mockReturnValue(false),
       setAiTurn: vi.fn(),
@@ -96,7 +94,6 @@ describe("makeCbs helper — per-member overrides", () => {
       "setCities",
       "setFreeTowerUsedTiles",
       "setAiStateMap",
-      "setLakeUnitFunds",
       "setIsAiTurn",
     ];
     for (const key of siblingKeys) {

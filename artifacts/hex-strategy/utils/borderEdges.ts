@@ -76,7 +76,6 @@ export function computeBorderEdges(
     const liveOwner = ownerOf(tile.key, tile);
     if (
       tile.terrain === "mountain" ||
-      tile.terrain === "lake" ||
       liveOwner === "neutral"
     ) {
       if ((tile.cityBuffer || tile.isCity) && liveOwner === "neutral") {
@@ -132,7 +131,6 @@ export function computeBorderEdges(
       const neighborLiveOwner = ownerOf(nk, neighborBase);
       const needsBorder =
         neighborBase.terrain === "mountain" ||
-        neighborBase.terrain === "lake" ||
         neighborLiveOwner === "neutral" ||
         neighborLiveOwner !== liveOwner;
       if (!needsBorder) continue;
@@ -271,7 +269,6 @@ export function computeOuterTerritoryEdges(
         const neighborLiveOwner = ownerOf(nk, neighborBase);
         const needsBorder =
           neighborBase.terrain === "mountain" ||
-          neighborBase.terrain === "lake" ||
           neighborLiveOwner === "neutral" ||
           neighborLiveOwner !== liveOwner;
         if (!needsBorder) continue;

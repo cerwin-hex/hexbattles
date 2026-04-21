@@ -61,6 +61,10 @@ export function useEconBreakdown({
         if (meta.upkeep > 0) {
           upkeepGroupMap.set(entityId, (upkeepGroupMap.get(entityId) ?? 0) + 1);
         }
+        // Unit standing on a lake tile = unit on bridge; count the bridge upkeep too.
+        if (meta.isUnit && t.terrain === "lake") {
+          upkeepGroupMap.set("bridge", (upkeepGroupMap.get("bridge") ?? 0) + 1);
+        }
       }
     }
     const UPKEEP_ORDER: EntityType[] = [
@@ -69,6 +73,7 @@ export function useEconBreakdown({
       "expert_unit",
       "tower",
       "castle",
+      "bridge",
     ];
     const upkeepGroups = UPKEEP_ORDER.filter((type) =>
       upkeepGroupMap.has(type),

@@ -31,16 +31,12 @@ export interface EndTurnParams {
   ruins: Set<string>;
   mutableTileMap: Map<string, HexTile>;
   liveOwnerMap: Map<string, TerritoryOwner>;
-  lakeUnitFunds: Map<string, number>;
   aiTurnRef: { current: boolean };
   setMoveHistory: Dispatch<SetStateAction<MoveHistorySnapshot[]>>;
   setTerritoryBalances: (m: Map<string, number>) => void;
   setEntities: (m: Map<string, EntityType>) => void;
   setGraveyard: (s: Set<string>) => void;
   setRuins: (s: Set<string>) => void;
-  setLakeUnitFunds: (m: Map<string, number>) => void;
-  setMutableTileMap: (m: Map<string, HexTile>) => void;
-  setLiveOwnerMap: (m: Map<string, TerritoryOwner>) => void;
   setTurn: Dispatch<SetStateAction<number>>;
   setSelectedTileKey: (k: string | null) => void;
   setArmedEntityId: (id: EntityType | null) => void;
@@ -54,7 +50,6 @@ export interface EndTurnParams {
     currentTileMap: Map<string, HexTile>,
     currentEntities: Map<string, EntityType>,
     currentBalances: Map<string, number>,
-    initialLakeFunds?: Map<string, number>,
     currentTurn?: number,
     initialGraveyard?: Set<string>,
     initialRuins?: Set<string>,
@@ -78,16 +73,12 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
     ruins,
     mutableTileMap,
     liveOwnerMap,
-    lakeUnitFunds,
     aiTurnRef,
     setMoveHistory,
     setTerritoryBalances,
     setEntities,
     setGraveyard,
     setRuins,
-    setLakeUnitFunds,
-    setMutableTileMap,
-    setLiveOwnerMap,
     setTurn,
     setSelectedTileKey,
     setArmedEntityId,
@@ -118,6 +109,7 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
         activeTileMap,
         tile.key,
         "player",
+        nextEntities,
       );
       for (const t of territory) visited.add(t.key);
       const territoryId = getTerritoryId(territory);
@@ -154,6 +146,11 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
             if (e && !ENTITY_META[e].isUnit && e !== "rebel" && e !== "city") {
               nextEntities.delete(t.key);
               nextRuins.add(t.key);
+              // Bridge removed: lake tile loses owner (non-occupiable without bridge)
+              if (e === "bridge") {
+                const lt = mutableTileMap.get(t.key);
+                if (lt) mutableTileMap.set(t.key, { ...lt, owner: "neutral" });
+              }
             }
           }
         }
@@ -174,6 +171,7 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
           activeTileMap,
           tile.key,
           aiOwner,
+          nextEntities,
         );
         for (const t of territory) aiVisited.add(t.key);
         const territoryId = getTerritoryId(territory);
@@ -214,6 +212,11 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
               if (e && !ENTITY_META[e].isUnit && e !== "rebel" && e !== "city") {
                 nextEntities.delete(t.key);
                 nextRuins.add(t.key);
+                // Bridge removed: lake tile loses owner (non-occupiable without bridge)
+                if (e === "bridge") {
+                  const lt = mutableTileMap.get(t.key);
+                  if (lt) mutableTileMap.set(t.key, { ...lt, owner: "neutral" });
+                }
               }
             }
           }
@@ -275,40 +278,10 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
     nextEntities = rebelSpawns;
   }
 
-  const nextMutableTileMap = new Map(mutableTileMap);
-  const nextLiveOwnerMap = new Map(liveOwnerMap);
-  const nextLakeFunds = new Map(lakeUnitFunds);
-  for (const [lakeKey, fund] of lakeUnitFunds) {
-    const entity = nextEntities.get(lakeKey);
-    if (!entity || !ENTITY_META[entity].isUnit) {
-      nextLakeFunds.delete(lakeKey);
-      const t = nextMutableTileMap.get(lakeKey);
-      if (t) nextMutableTileMap.set(lakeKey, { ...t, owner: "neutral" });
-      nextLiveOwnerMap.delete(lakeKey);
-      continue;
-    }
-    const upkeep = ENTITY_META[entity].upkeep;
-    const newFund = fund - upkeep;
-    if (newFund < 0) {
-      nextEntities = new Map(nextEntities);
-      nextEntities.delete(lakeKey);
-      nextGraveyard.add(lakeKey);
-      nextLakeFunds.delete(lakeKey);
-      const t = nextMutableTileMap.get(lakeKey);
-      if (t) nextMutableTileMap.set(lakeKey, { ...t, owner: "neutral" });
-      nextLiveOwnerMap.delete(lakeKey);
-    } else {
-      nextLakeFunds.set(lakeKey, newFund);
-    }
-  }
-
   setTerritoryBalances(nextBalances);
   setEntities(nextEntities);
   setGraveyard(nextGraveyard);
   setRuins(nextRuins);
-  setLakeUnitFunds(nextLakeFunds);
-  setMutableTileMap(nextMutableTileMap);
-  setLiveOwnerMap(nextLiveOwnerMap);
   setTurn((t) => t + 1);
   setSelectedTileKey(null);
   setArmedEntityId(null);
@@ -318,14 +291,13 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
   setPartialMoves(new Map());
   closeRibbon();
 
-  if (!checkWinLoss(nextMutableTileMap)) {
+  if (!checkWinLoss(mutableTileMap)) {
     setIsAiTurn(true);
     aiTurnRef.current = true;
     runAiTurn(
-      nextMutableTileMap,
+      mutableTileMap,
       nextEntities,
       nextBalances,
-      nextLakeFunds,
       turn,
       nextGraveyard,
       nextRuins,

@@ -18,7 +18,6 @@ interface UseMoveHistoryParams {
   liveOwnerMap: Map<string, TerritoryOwner>;
   partialMoves: Map<string, number>;
   freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
-  lakeUnitFunds: Map<string, number>;
   selectedTileKey: string | null;
   isAiTurn: boolean;
   gameResult: GameResult;
@@ -33,7 +32,6 @@ interface UseMoveHistoryParams {
   setLiveOwnerMap: (m: Map<string, TerritoryOwner>) => void;
   setPartialMoves: (m: Map<string, number>) => void;
   setFreeTowerUsedTiles: (m: Map<TerritoryOwner, Set<string>>) => void;
-  setLakeUnitFunds: (m: Map<string, number>) => void;
   setSelectedTileKey: (k: string | null) => void;
   setSelectedEntityKey: (k: string | null) => void;
   setArmedEntityId: (id: EntityType | null) => void;
@@ -49,7 +47,6 @@ export function useMoveHistory({
   liveOwnerMap,
   partialMoves,
   freeTowerUsedTiles,
-  lakeUnitFunds,
   selectedTileKey,
   isAiTurn,
   gameResult,
@@ -64,7 +61,6 @@ export function useMoveHistory({
   setLiveOwnerMap,
   setPartialMoves,
   setFreeTowerUsedTiles,
-  setLakeUnitFunds,
   setSelectedTileKey,
   setSelectedEntityKey,
   setArmedEntityId,
@@ -86,7 +82,6 @@ export function useMoveHistory({
         freeTowerUsedTiles: new Map(
           [...freeTowerUsedTiles.entries()].map(([k, v]) => [k, new Set(v)]),
         ),
-        lakeUnitFunds: new Map(lakeUnitFunds),
         selectedTileKey,
       },
     ]);
@@ -100,7 +95,6 @@ export function useMoveHistory({
     liveOwnerMap,
     partialMoves,
     freeTowerUsedTiles,
-    lakeUnitFunds,
     selectedTileKey,
   ]);
 
@@ -118,7 +112,6 @@ export function useMoveHistory({
       setLiveOwnerMap(snapshot.liveOwnerMap);
       setPartialMoves(snapshot.partialMoves);
       setFreeTowerUsedTiles(snapshot.freeTowerUsedTiles);
-      setLakeUnitFunds(snapshot.lakeUnitFunds);
       setSelectedTileKey(snapshot.selectedTileKey);
       setSelectedEntityKey(null);
       setArmedEntityId(null);
@@ -139,7 +132,6 @@ export function useMoveHistory({
     setLiveOwnerMap,
     setPartialMoves,
     setFreeTowerUsedTiles,
-    setLakeUnitFunds,
     setSelectedTileKey,
     setSelectedEntityKey,
     setArmedEntityId,

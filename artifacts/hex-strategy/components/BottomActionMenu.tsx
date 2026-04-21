@@ -15,8 +15,6 @@ interface BottomActionMenuProps {
   hasSelection: boolean;
   setShowEconModal: (v: boolean) => void;
   creditsDisplayValue: number;
-  selectedLakeFund: number | null;
-  lakeUpkeepPerTurn: number | null;
   econBreakdown: EconBreakdown | null;
   canBuild: boolean;
   ribbonMode: "units" | "buildings" | null;
@@ -46,8 +44,6 @@ export default function BottomActionMenu({
   hasSelection,
   setShowEconModal,
   creditsDisplayValue,
-  selectedLakeFund,
-  lakeUpkeepPerTurn,
   econBreakdown,
   canBuild,
   ribbonMode,
@@ -111,11 +107,7 @@ export default function BottomActionMenu({
               <Text style={styles.creditsIcon}>⚜️</Text>
               <Text style={styles.creditsAmount}>{creditsDisplayValue}</Text>
             </View>
-            {selectedLakeFund !== null && lakeUpkeepPerTurn !== null ? (
-              <Text style={[styles.creditsNet, styles.creditsNetNeg]}>
-                -{lakeUpkeepPerTurn}/turn
-              </Text>
-            ) : hasSelection && econBreakdown !== null ? (
+            {hasSelection && econBreakdown !== null ? (
               <Text
                 style={[
                   styles.creditsNet,

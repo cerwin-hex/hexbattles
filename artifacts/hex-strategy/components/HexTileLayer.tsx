@@ -30,16 +30,19 @@ function HexTileLayerInner({
         const isCityZone = tile.cityBuffer || cities.has(tile.key);
         const liveOwner = liveTile.owner;
         const terrain = tile.terrain;
+        const isOwnedLake = terrain === "lake" && liveOwner && liveOwner !== "neutral";
         const fill =
-          terrain === "lake"
+          terrain === "lake" && !isOwnedLake
             ? "#5BAFD6"
             : hasSelection
               ? (TERRAIN_FILLS[terrain] ?? TERRAIN_FILLS.grass)
               : terrain === "mountain"
                 ? TERRAIN_FILLS.mountain
-                : isCityZone && liveOwner === "neutral"
-                  ? CITY_NEUTRAL_FILL
-                  : (TERRITORY_FILLS[liveOwner] ?? TERRITORY_FILLS.neutral);
+                : isOwnedLake
+                  ? (TERRITORY_FILLS[liveOwner!] ?? TERRITORY_FILLS.neutral)
+                  : isCityZone && liveOwner === "neutral"
+                    ? CITY_NEUTRAL_FILL
+                    : (TERRITORY_FILLS[liveOwner] ?? TERRITORY_FILLS.neutral);
         return (
           <HexCell
             key={tile.key}

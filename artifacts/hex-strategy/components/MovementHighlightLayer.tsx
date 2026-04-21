@@ -6,6 +6,7 @@ import type { EntityType, HexTile } from "@/types";
 
 export interface MovementHighlightLayerProps {
   validMoveTiles: Set<string>;
+  validBridgePlacementTiles: Set<string>;
   validPlacementAttackTiles: Set<string>;
   selectedTileKeys: Set<string>;
   armedEntityId: EntityType | null;
@@ -21,6 +22,7 @@ export interface MovementHighlightLayerProps {
 
 function MovementHighlightLayerInner({
   validMoveTiles,
+  validBridgePlacementTiles,
   validPlacementAttackTiles,
   selectedTileKeys,
   armedEntityId,
@@ -54,7 +56,23 @@ function MovementHighlightLayerInner({
           );
         })}
 
+        {armedEntityId === "bridge" &&
+          Array.from(validBridgePlacementTiles).map((key) => {
+            const pos = tileDataMap.get(key);
+            if (!pos) return null;
+            return (
+              <Circle
+                key={`bridge-dot-${key}`}
+                cx={pos.cx}
+                cy={pos.cy}
+                r={HEX_SIZE * 0.18}
+                fill="rgba(80,200,255,0.85)"
+              />
+            );
+          })}
+
         {armedEntityId &&
+          armedEntityId !== "bridge" &&
           Array.from(selectedTileKeys).map((key) => {
             const pos = tileDataMap.get(key);
             if (!pos) return null;
@@ -68,6 +86,7 @@ function MovementHighlightLayerInner({
                 existingEntity &&
                 !ENTITY_META[existingEntity].isUnit &&
                 existingEntity !== "rebel" &&
+                existingEntity !== "bridge" &&
                 activeTileMap.get(key)?.owner === "player"
               )
                 return null;
@@ -110,6 +129,7 @@ function areMovementHighlightLayerEqual(
 ): boolean {
   return (
     prev.validMoveTiles === next.validMoveTiles &&
+    prev.validBridgePlacementTiles === next.validBridgePlacementTiles &&
     prev.validPlacementAttackTiles === next.validPlacementAttackTiles &&
     prev.selectedTileKeys === next.selectedTileKeys &&
     prev.armedEntityId === next.armedEntityId &&

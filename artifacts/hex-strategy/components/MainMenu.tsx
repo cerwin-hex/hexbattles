@@ -32,6 +32,7 @@ const UNIT_ROWS = [
   { icon: '🗼', name: 'Tower', cost: 15, upkeep: 1, strength: 1 },
   { icon: '🏰', name: 'Castle', cost: 30, upkeep: 5, strength: 2 },
   { icon: '🏙️', name: 'City', cost: 10, upkeep: 0, strength: 0 },
+  { icon: '➖', name: 'Bridge', cost: 5, upkeep: 1, strength: 0 },
 ];
 
 function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
@@ -88,13 +89,21 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
                     <Text style={[styles.tableCell, styles.tableCellName, styles.tableBodyText]}>{row.name}</Text>
                     <Text style={[styles.tableCell, styles.tableCellNum, styles.tableBodyText]}>{row.cost}</Text>
                     <Text style={[styles.tableCell, styles.tableCellNum, styles.tableBodyText]}>{row.upkeep}</Text>
-                    <Text style={[styles.tableCell, styles.tableCellNum, styles.tableBodyText]}>{row.strength}</Text>
+                    <Text style={[styles.tableCell, styles.tableCellNum, styles.tableBodyText]}>{row.strength === 0 ? '—' : row.strength}</Text>
                   </View>
                 ))}
               </View>
 
               <Text style={[styles.ruleBody, { marginTop: 10 }]}>
                 You can merge two units of the same strength on the same tile into one stronger unit, and you can upgrade existing units by paying the cost difference.
+              </Text>
+            </View>
+
+            <View style={styles.ruleSection}>
+              <Text style={styles.ruleSectionTitle}>Bridges</Text>
+              <View style={styles.ruleDivider} />
+              <Text style={styles.ruleBody}>
+                Build a Bridge (➖) on any lake tile adjacent to your territory for 5 gold (1 upkeep per turn). Bridges become part of your territory and allow units to cross the water. Enemies can capture or destroy your bridges, cutting off connections.
               </Text>
             </View>
 
@@ -114,7 +123,7 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
                 { name: 'Forest', desc: 'Good income like grass, but costs 2 movement to enter' },
                 { name: 'Desert', desc: 'Lower income' },
                 { name: 'Mountain', desc: 'Impassable' },
-                { name: 'Lake', desc: 'Can be entered, but requires a reserve fund' },
+                { name: 'Lake', desc: 'Impassable unless you build a Bridge' },
               ].map(t => (
                 <View key={t.name} style={styles.terrainRow}>
                   <Text style={styles.terrainName}>{t.name}</Text>

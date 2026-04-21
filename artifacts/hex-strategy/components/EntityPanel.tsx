@@ -23,6 +23,7 @@ interface EntityPanelProps {
   setEntities: (updater: (prev: Map<string, EntityType>) => Map<string, EntityType>) => void;
   setTerritoryBalances: (updater: (prev: Map<string, number>) => Map<string, number>) => void;
   setSelectedEntityKey: (key: string | null) => void;
+  onRemoveOverride?: () => void;
 }
 
 export default function EntityPanel({
@@ -38,6 +39,7 @@ export default function EntityPanel({
   setEntities,
   setTerritoryBalances,
   setSelectedEntityKey,
+  onRemoveOverride,
 }: EntityPanelProps) {
   const entityId = entities.get(selectedEntityKey);
   const isUnit = entityId ? ENTITY_META[entityId].isUnit : false;
@@ -51,7 +53,7 @@ export default function EntityPanel({
   const entityTile = activeTileMap.get(selectedEntityKey);
   const entityTerritoryId = entityTile
     ? getTerritoryId(
-        getContiguousTerritory(activeTileMap, selectedEntityKey, "player"),
+        getContiguousTerritory(activeTileMap, selectedEntityKey, "player", entities),
       )
     : null;
   const entityTerritoryBalance = entityTerritoryId
@@ -77,7 +79,12 @@ export default function EntityPanel({
         activeOpacity={removeEnabled ? 0.75 : 1}
         onPress={() => {
           if (isAiTurn || gameResult !== null) return;
-          if (!removeEnabled || !entityTerritoryId) return;
+          if (!removeEnabled) return;
+          if (onRemoveOverride) {
+            onRemoveOverride();
+            return;
+          }
+          if (!entityTerritoryId) return;
           pushHistory();
           setEntities((prev) => {
             const next = new Map(prev);

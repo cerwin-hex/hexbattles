@@ -1,23 +1,19 @@
 import type { Dispatch, SetStateAction } from "react";
-import { unstable_batchedUpdates } from "react-native";
+// React 18 auto-batches; this shim keeps call sites unchanged
+const unstable_batchedUpdates = (fn: () => void) => fn();
 import type { EntityType, HexTile, TerritoryOwner } from "@/types";
-import { ENTITY_META, getContiguousTerritory, getTerritoryId, getMoveCost } from "@/utils/hexGrid";
+import {
+  ENTITY_META,
+  getContiguousTerritory,
+  getTerritoryId,
+  getMoveCost,
+  recalculateTerritories,
+  recalculateTerritoriesForCapture,
+} from "@/utils/hexGrid";
 import {
   applySingleHexPenalty,
   mergedUnitType,
 } from "@/logic/gameLogic";
-import {
-  recalculateTerritories,
-  recalculateTerritoriesForCapture,
-} from "@/utils/hexGrid";
-
-export interface PendingLakeMove {
-  fromKey: string;
-  toKey: string;
-  sourceTerrId: string;
-  maxAmount: number;
-  minAmount: number;
-}
 
 export interface TileTapParams {
   key: string;
@@ -38,10 +34,10 @@ export interface TileTapParams {
   graveyard: Set<string>;
   ruins: Set<string>;
   liveOwnerMap: Map<string, TerritoryOwner>;
-  lakeUnitFunds: Map<string, number>;
   combatSpentUnits: Set<string>;
   spentUnits: Set<string>;
   partialMoves: Map<string, number>;
+  validBridgePlacementTiles: Set<string>;
   validPlacementAttackTiles: Set<string>;
   ribbonOpen: boolean;
   cities: Set<string>;
@@ -52,15 +48,12 @@ export interface TileTapParams {
   setCombatSpentUnits: (s: Set<string>) => void;
   setPartialMoves: (m: Map<string, number>) => void;
   setTerritoryBalances: Dispatch<SetStateAction<Map<string, number>>>;
-  setLakeUnitFunds: (m: Map<string, number>) => void;
   setSelectedEntityKey: (k: string | null) => void;
   setSelectedTileKey: (k: string | null) => void;
   setGraveyard: (s: Set<string>) => void;
   setRuins: (s: Set<string>) => void;
   setArmedEntityId: (id: EntityType | null) => void;
   setFreeTowerUsedTiles: Dispatch<SetStateAction<Map<TerritoryOwner, Set<string>>>>;
-  setLakeTransferAmount: (n: number) => void;
-  setPendingLakeMove: (p: PendingLakeMove | null) => void;
   setCities: Dispatch<SetStateAction<Set<string>>>;
   checkWinLoss: (map: Map<string, HexTile>) => void;
   pushHistory: () => void;
@@ -89,10 +82,10 @@ export function handleTileTapLogic(params: TileTapParams): void {
     graveyard,
     ruins,
     liveOwnerMap,
-    lakeUnitFunds,
     combatSpentUnits,
     spentUnits,
     partialMoves,
+    validBridgePlacementTiles,
     validPlacementAttackTiles,
     ribbonOpen,
     cities,
@@ -103,15 +96,12 @@ export function handleTileTapLogic(params: TileTapParams): void {
     setCombatSpentUnits,
     setPartialMoves,
     setTerritoryBalances,
-    setLakeUnitFunds,
     setSelectedEntityKey,
     setSelectedTileKey,
     setGraveyard,
     setRuins,
     setArmedEntityId,
     setFreeTowerUsedTiles,
-    setLakeTransferAmount,
-    setPendingLakeMove,
     setCities,
     checkWinLoss,
     pushHistory,
@@ -126,40 +116,9 @@ export function handleTileTapLogic(params: TileTapParams): void {
   if (isAiTurn || gameResult !== null) return;
   const tile = activeTileMap.get(key);
 
+  // ─── Unit move ───────────────────────────────────────────────────────────────
   if (selectedEntityKey && validMoveTiles.has(key)) {
     const targetTile = activeTileMap.get(key);
-    const movingToLake = targetTile?.terrain === "lake";
-    const fromTile = activeTileMap.get(selectedEntityKey);
-    const fromLake = fromTile?.terrain === "lake";
-
-    if (movingToLake && !fromLake) {
-      const sourceTerritory = getContiguousTerritory(
-        activeTileMap,
-        selectedEntityKey,
-        "player",
-      );
-      const sourceTerrId = getTerritoryId(sourceTerritory);
-      if (!sourceTerrId) return;
-      const sourceBalance = territoryBalances.get(sourceTerrId) ?? 0;
-      const movingEntityType = entities.get(selectedEntityKey);
-      const minAmount = movingEntityType
-        ? ENTITY_META[movingEntityType].upkeep * 2
-        : 2;
-      if (sourceBalance < minAmount) {
-        triggerErrorFlash(key);
-        return;
-      }
-      setLakeTransferAmount(minAmount);
-      setPendingLakeMove({
-        fromKey: selectedEntityKey,
-        toKey: key,
-        sourceTerrId,
-        maxAmount: sourceBalance,
-        minAmount,
-      });
-      return;
-    }
-
     const movingEntityId = entities.get(selectedEntityKey);
     const fromKeyForAnim = selectedEntityKey;
 
@@ -177,6 +136,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
       !!existingUnit &&
       existingUnit !== "city" &&
       existingUnit !== "rebel" &&
+      existingUnit !== "bridge" &&
       ENTITY_META[existingUnit].isUnit &&
       activeTileMap.get(key)?.owner === "player" &&
       ENTITY_META[movingUnit].strength +
@@ -192,18 +152,20 @@ export function handleTileTapLogic(params: TileTapParams): void {
       newEntities.delete(selectedEntityKey);
       newEntities.set(key, merged);
     } else {
-      // NOTE: cities are in the cities Set (not entities), so
-      // existingUnit will never be "city" — unit moves freely onto city tiles.
       newEntities.delete(key);
       newEntities.delete(selectedEntityKey);
       newEntities.set(key, movingUnit);
     }
 
-    const stepsUsed = getMoveCost(selectedEntityKey, key, activeTileMap);
+    // Bridge auto-restoration: if the unit moved FROM a lake tile (bridge), restore
+    // the bridge entity at the source so the bridge structure persists independently.
+    if (activeTileMap.get(selectedEntityKey)?.terrain === 'lake') {
+      newEntities.set(selectedEntityKey, 'bridge');
+    }
+
+    const stepsUsed = getMoveCost(selectedEntityKey, key, activeTileMap, entities);
     const prevRemaining = partialMoves.get(selectedEntityKey) ?? 3;
-    const remainingAfterMove = movingToLake
-      ? 0
-      : Math.max(0, prevRemaining - stepsUsed);
+    const remainingAfterMove = Math.max(0, prevRemaining - stepsUsed);
 
     const newSpentUnits = new Set(spentUnits);
     const newPartialMoves = new Map(partialMoves);
@@ -211,7 +173,6 @@ export function handleTileTapLogic(params: TileTapParams): void {
     if (isMerge) {
       const destRemaining =
         newPartialMoves.get(key) ?? (newSpentUnits.has(key) ? 0 : 3);
-      // Merged unit inherits the remaining steps of whichever unit had fewer left (the one that moved more)
       const mergedRemaining = Math.min(remainingAfterMove, destRemaining);
       newSpentUnits.delete(key);
       newPartialMoves.delete(key);
@@ -225,46 +186,23 @@ export function handleTileTapLogic(params: TileTapParams): void {
       newPartialMoves.delete(key);
     }
 
-    // A move is "combat" if it defeated an entity or captured a non-neutral tile
+    // Combat move: enemy territory OR overwriting a non-bridge entity (rebel/enemy unit).
+    // Moving to own bridge tile is NOT combat — bridge is a structure, not an enemy.
     const isCombatMove =
       !isMerge &&
-      (previousOwner !== "neutral" || existingUnit !== undefined);
+      ((previousOwner !== "neutral" && previousOwner !== "player") ||
+       (existingUnit !== undefined && existingUnit !== "bridge"));
     const newCombatSpentUnits = isCombatMove
       ? new Set([...combatSpentUnits, key])
       : combatSpentUnits;
 
-    const lakeLanding = fromLake && !movingToLake;
-
-    // Pre-compute lake fund changes and apply visual lake-tile mutations to
-    // newTileMap so Phase 1 immediately shows the from-tile as unoccupied.
-    const newLakeFunds = new Map(lakeUnitFunds);
-    let lakeFundToCredit = 0;
-    const fromLakeKey = selectedEntityKey;
-    if (fromLake && movingToLake) {
-      const fund = newLakeFunds.get(fromLakeKey) ?? 0;
-      newLakeFunds.delete(fromLakeKey);
-      newLakeFunds.set(key, fund);
-      if (fromTile) {
-        newTileMap.set(fromLakeKey, { ...fromTile, owner: "neutral" });
-      }
-    } else if (fromLake && !movingToLake) {
-      const fund = newLakeFunds.get(fromLakeKey) ?? 0;
-      newLakeFunds.delete(fromLakeKey);
-      lakeFundToCredit = fund;
-      if (fromTile) {
-        newTileMap.set(fromLakeKey, { ...fromTile, owner: "neutral" });
-      }
-    }
-
-    // Phase 1: immediate visual feedback — show unit at destination, clear
-    // selection, and start movement animation. No BFS yet.
+    // Phase 1: immediate visual feedback
     unstable_batchedUpdates(() => {
       setMutableTileMap(new Map(newTileMap));
       setEntities(new Map(newEntities));
       setSpentUnits(newSpentUnits);
       setCombatSpentUnits(newCombatSpentUnits);
       setPartialMoves(newPartialMoves);
-      setLakeUnitFunds(newLakeFunds);
       setSelectedEntityKey(null);
       setSelectedTileKey(key);
       if (ribbonOpen) closeRibbon();
@@ -273,9 +211,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
       }
     });
 
-    // Phase 2 (deferred): run the BFS territory recalculation and apply
-    // isolation penalties — these are expensive and do not affect the
-    // initial visual frame, so they run in the next event-loop tick.
+    // Phase 2 (deferred): BFS territory recalculation
     setTimeout(() => {
       const { balances: newBalances } = recalculateTerritories(
         key,
@@ -283,13 +219,13 @@ export function handleTileTapLogic(params: TileTapParams): void {
         activeTileMap,
         newTileMap,
         territoryBalances,
+        newEntities,
+        entities,
       );
 
       const newGraveyard = new Set(graveyard);
       const newRuins = new Set(ruins);
       newGraveyard.delete(key);
-      // Exempt the destination tile when landing from a lake — the unit is
-      // intentionally establishing a new beachhead, not being cut off.
       applySingleHexPenalty(
         activeTileMap,
         newTileMap,
@@ -297,24 +233,10 @@ export function handleTileTapLogic(params: TileTapParams): void {
         newEntities,
         newGraveyard,
         newRuins,
-        lakeLanding ? key : undefined,
       );
 
       const newLiveOwnerMap = new Map(liveOwnerMap);
       newLiveOwnerMap.set(key, "player");
-      if (fromLake) {
-        newLiveOwnerMap.delete(fromLakeKey);
-      }
-
-      // Credit any lake funds to the destination territory now that BFS has
-      // computed the correct territory boundaries.
-      if (lakeFundToCredit > 0) {
-        const newTerritory = getContiguousTerritory(newTileMap, key, "player");
-        const newTerrId = getTerritoryId(newTerritory);
-        if (newTerrId) {
-          newBalances.set(newTerrId, (newBalances.get(newTerrId) ?? 0) + lakeFundToCredit);
-        }
-      }
 
       setMutableTileMap(new Map(newTileMap));
       setEntities(new Map(newEntities));
@@ -327,6 +249,47 @@ export function handleTileTapLogic(params: TileTapParams): void {
     return;
   }
 
+  // ─── Bridge placement ─────────────────────────────────────────────────────────
+  if (armedEntityId === "bridge" && validBridgePlacementTiles.has(key)) {
+    if (!selectedTerritoryId) return;
+    const bridgeCost = ENTITY_META["bridge"].cost;
+    const balance = territoryBalances.get(selectedTerritoryId) ?? 0;
+    if (balance < bridgeCost) {
+      triggerErrorFlash(key);
+      return;
+    }
+    pushHistory();
+    const newTileMap = new Map(activeTileMap);
+    const targetTile = newTileMap.get(key);
+    if (targetTile) newTileMap.set(key, { ...targetTile, owner: "player" });
+    const newEntities = new Map(entities);
+    newEntities.set(key, "bridge");
+    const { balances: newBalances } = recalculateTerritories(
+      key,
+      "neutral" as TerritoryOwner,
+      activeTileMap,
+      newTileMap,
+      territoryBalances,
+      newEntities,
+    );
+    const newTerr = getContiguousTerritory(newTileMap, key, "player", newEntities);
+    const newTid = getTerritoryId(newTerr);
+    if (newTid) newBalances.set(newTid, (newBalances.get(newTid) ?? 0) - bridgeCost);
+    const newLiveOwnerMap = new Map(liveOwnerMap);
+    newLiveOwnerMap.set(key, "player");
+    unstable_batchedUpdates(() => {
+      setMutableTileMap(new Map(newTileMap));
+      setEntities(new Map(newEntities));
+      setTerritoryBalances(newBalances);
+      setLiveOwnerMap(newLiveOwnerMap);
+      setArmedEntityId(null);
+      setSelectedEntityKey(null);
+      closeRibbon();
+    });
+    return;
+  }
+
+  // ─── Armed entity placement on own territory ──────────────────────────────────
   if (armedEntityId && selectedTileKeys.has(key)) {
     const existingOnTile = entities.get(key);
     const armedIsUnit = ENTITY_META[armedEntityId].isUnit;
@@ -334,6 +297,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
       !!existingOnTile &&
       existingOnTile !== "rebel" &&
       existingOnTile !== "city" &&
+      existingOnTile !== "bridge" &&
       ENTITY_META[existingOnTile].isUnit &&
       activeTileMap.get(key)?.owner === "player";
     const canMerge =
@@ -355,10 +319,19 @@ export function handleTileTapLogic(params: TileTapParams): void {
       !existingBuildingIsOwn &&
       ENTITY_META[armedEntityId].strength >=
         ENTITY_META[existingOnTile as EntityType].strength;
+    const canPlaceOnBridge =
+      armedIsUnit &&
+      existingOnTile === "bridge" &&
+      activeTileMap.get(key)?.owner === "player";
     const alreadyOccupied =
-      (!!existingOnTile && !canMerge && !canOverwriteRebel && !canOverwriteBuilding) ||
-      // prevent placing a second city on an existing city tile
+      (!!existingOnTile && !canMerge && !canOverwriteRebel && !canOverwriteBuilding && !canPlaceOnBridge) ||
       (armedEntityId === "city" && cities.has(key));
+    // Don't allow placement on lake tiles unless there's a bridge (bridges are placed via validBridgePlacementTiles path)
+    const tileData = activeTileMap.get(key);
+    if (tileData?.terrain === "lake" && existingOnTile !== "bridge") {
+      triggerErrorFlash(key);
+      return;
+    }
     if (!alreadyOccupied && selectedTerritoryId) {
       const meta = ENTITY_META[armedEntityId];
       const balance = territoryBalances.get(selectedTerritoryId) ?? 0;
@@ -436,6 +409,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
     return;
   }
 
+  // ─── Armed unit placed outside own territory (attack/capture) ──────────────────
   if (armedEntityId && validPlacementAttackTiles.has(key)) {
     if (!selectedTerritoryId) return;
     const meta = ENTITY_META[armedEntityId];
@@ -460,8 +434,6 @@ export function handleTileTapLogic(params: TileTapParams): void {
       const newSpentUnits2 = new Set(spentUnits);
       newSpentUnits2.add(key);
 
-      // Phase 1: immediate visual feedback — show unit at destination and
-      // clear selection state before the expensive BFS runs.
       unstable_batchedUpdates(() => {
         setMutableTileMap(new Map(newTileMap));
         setEntities(new Map(newEntities));
@@ -473,8 +445,6 @@ export function handleTileTapLogic(params: TileTapParams): void {
         closeRibbon();
       });
 
-      // Phase 2 (deferred): BFS territory recalculation, penalty, and
-      // balance/ownership state updates in the next event-loop tick.
       setTimeout(() => {
         const newBalances = recalculateTerritoriesForCapture(
           key,
@@ -483,11 +453,14 @@ export function handleTileTapLogic(params: TileTapParams): void {
           activeTileMap,
           newTileMap,
           territoryBalances,
+          newEntities,
+          entities,
         );
         const mergedTerritory = getContiguousTerritory(
           newTileMap,
           key,
           "player",
+          newEntities,
         );
         const mergedId = getTerritoryId(mergedTerritory);
         if (mergedId)
@@ -521,6 +494,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
     return;
   }
 
+  // ─── Entity selection ─────────────────────────────────────────────────────────
   const entityOnTile = entities.get(key);
   const isSelectableEntity =
     entityOnTile &&
@@ -545,8 +519,15 @@ export function handleTileTapLogic(params: TileTapParams): void {
   }
 
   if (!tile || tile.owner !== "player") {
-    if (armedEntityId || selectedEntityKey) {
+    if (armedEntityId) {
       triggerErrorFlash(key);
+      return;
+    }
+    if (selectedEntityKey) {
+      unstable_batchedUpdates(() => {
+        setSelectedEntityKey(null);
+        setSelectedTileKey(null);
+      });
       return;
     }
     setSelectedTileKey(null);

@@ -1,6 +1,6 @@
 export type TerrainType = 'grass' | 'desert' | 'mountain' | 'lake' | 'forest';
 export type TerritoryOwner = 'neutral' | 'player' | 'ai1' | 'ai2' | 'ai3' | 'ai4' | 'ai5';
-export type EntityType = 'simple_unit' | 'advanced_unit' | 'expert_unit' | 'tower' | 'castle' | 'city' | 'rebel';
+export type EntityType = 'simple_unit' | 'advanced_unit' | 'expert_unit' | 'tower' | 'castle' | 'city' | 'rebel' | 'bridge';
 
 export interface HexTile {
   q: number;
@@ -52,7 +52,6 @@ export type MoveHistorySnapshot = {
   liveOwnerMap: Map<string, TerritoryOwner>;
   partialMoves: Map<string, number>;
   freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
-  lakeUnitFunds: Map<string, number>;
   selectedTileKey: string | null;
 };
 
