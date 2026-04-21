@@ -107,9 +107,13 @@ export function usePanZoomGesture({
 
   const pinchGesture = Gesture.Pinch()
     .onUpdate((e) => {
+      const prevScale = scale.value;
       const newScale = Math.max(0.3, Math.min(3, savedScale.value * e.scale));
+      const ratio = newScale / prevScale;
+      const newX = translateX.value + (e.focalX - translateX.value - boardW / 2) * (1 - ratio);
+      const newY = translateY.value + (e.focalY - translateY.value - boardH / 2) * (1 - ratio);
       scale.value = newScale;
-      const clamped = clampXY(translateX.value, translateY.value, newScale);
+      const clamped = clampXY(newX, newY, newScale);
       translateX.value = clamped.x;
       translateY.value = clamped.y;
     })

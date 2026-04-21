@@ -854,7 +854,7 @@ export async function runAiTerritoryDecisionLoop(
           const nk = tileKey(tq + dq, tr + dr);
           if (aiCtx.tileMap.get(nk)?.owner === aiOwner) ownedNeighbors++;
         }
-        if (ownedNeighbors >= 4) actionTaken = await exec.remove(t.key);
+        if (ownedNeighbors >= 5) actionTaken = await exec.remove(t.key);
       }
     }
 
