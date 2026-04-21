@@ -73,7 +73,7 @@ export function useMoveHistory({
 
   const pushHistory = useCallback(() => {
     setMoveHistory((prev) => [
-      ...prev,
+      ...prev.slice(-9),
       {
         entities: new Map(entities),
         cities: new Set(cities),

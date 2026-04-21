@@ -126,6 +126,16 @@ export function getMaxEnemyZoC(
   return maxStr;
 }
 
+function bfsInsert(queue: Array<{ key: string; cost: number }>, item: { key: string; cost: number }): void {
+  let lo = 0, hi = queue.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (queue[mid].cost <= item.cost) lo = mid + 1;
+    else hi = mid;
+  }
+  queue.splice(lo, 0, item);
+}
+
 export function getValidMoves(
   unitKey: string,
   owner: TerritoryOwner,
@@ -148,7 +158,6 @@ export function getValidMoves(
   const queue: Array<{ key: string; cost: number }> = [{ key: unitKey, cost: 0 }];
 
   while (queue.length > 0) {
-    queue.sort((a, b) => a.cost - b.cost);
     const { key: curr, cost } = queue.shift()!;
     if ((bestCost.get(curr) ?? Infinity) < cost) continue;
     const [cq, cr] = curr.split(',').map(Number);
@@ -185,15 +194,15 @@ export function getValidMoves(
         const allyIsUnit = allyEntity ? ENTITY_META[allyEntity].isUnit : false;
         if (!allyEntity || allyIsRebel) {
           result.add(nk);
-          queue.push({ key: nk, cost: newCost });
+          bfsInsert(queue, { key: nk, cost: newCost });
         } else if (allyIsCity) {
           result.add(nk);
-          queue.push({ key: nk, cost: newCost });
+          bfsInsert(queue, { key: nk, cost: newCost });
         } else if (allyIsUnit) {
           result.add(nk);
-          queue.push({ key: nk, cost: newCost });
+          bfsInsert(queue, { key: nk, cost: newCost });
         } else {
-          queue.push({ key: nk, cost: newCost });
+          bfsInsert(queue, { key: nk, cost: newCost });
         }
       } else if (neighbor.owner === 'neutral') {
         result.add(nk);
@@ -218,7 +227,6 @@ export function getMoveCost(
   const bestCost = new Map<string, number>([[fromKey, 0]]);
   const queue: Array<{ key: string; cost: number }> = [{ key: fromKey, cost: 0 }];
   while (queue.length > 0) {
-    queue.sort((a, b) => a.cost - b.cost);
     const { key: curr, cost } = queue.shift()!;
     if ((bestCost.get(curr) ?? Infinity) < cost) continue;
     if (curr === toKey) return cost;
@@ -232,7 +240,7 @@ export function getMoveCost(
       const prev = bestCost.get(nk) ?? Infinity;
       if (newCost < prev) {
         bestCost.set(nk, newCost);
-        queue.push({ key: nk, cost: newCost });
+        bfsInsert(queue, { key: nk, cost: newCost });
       }
     }
   }

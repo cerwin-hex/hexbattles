@@ -492,11 +492,11 @@ export default function GameScreen() {
   const delay = (ms: number) => new Promise<void>((res) => setTimeout(res, ms));
 
   const awaitStep = useCallback(async (afterSnap: AiStepSnapshot) => {
-    const newHistory = [...aiStepHistoryRef.current, afterSnap];
-    aiStepHistoryRef.current = newHistory;
-    const newIdx = newHistory.length - 1;
+    aiStepHistoryRef.current.push(afterSnap);
+    const newLen = aiStepHistoryRef.current.length;
+    const newIdx = newLen - 1;
     setAiHistoryIndex(newIdx);
-    setAiHistoryLen(newHistory.length);
+    setAiHistoryLen(newLen);
     if (isDeveloperModeRef.current) {
       setIsAiPaused(true);
       await new Promise<void>((resolve) => {
