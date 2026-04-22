@@ -6,43 +6,24 @@ import {
 } from "@/constants/colors";
 import type { HexTile } from "@/types";
 import { HexCell } from "@/components/HexCell";
-import { areHexTileLayerEqual } from "@/components/layerEquality";
+import {
+  areHexTerrainLayerEqual,
+  areHexTerritoryLayerEqual,
+} from "@/components/layerEquality";
 
-export interface HexTileLayerProps {
+export interface HexTileTerrainLayerProps {
   tileData: Array<{ tile: HexTile; cx: number; cy: number }>;
-  activeTileMap: Map<string, HexTile>;
-  cities: Set<string>;
-  hasSelection: boolean;
   HEX_SIZE: number;
 }
 
-function HexTileLayerInner({
-  tileData,
-  activeTileMap,
-  cities,
-  hasSelection,
-  HEX_SIZE,
-}: HexTileLayerProps) {
+function HexTileTerrainLayerInner({ tileData, HEX_SIZE }: HexTileTerrainLayerProps) {
   return (
     <>
       {tileData.map(({ tile, cx, cy }) => {
-        const liveTile = activeTileMap.get(tile.key) ?? tile;
-        const isCityZone = tile.cityBuffer || cities.has(tile.key);
-        const liveOwner = liveTile.owner;
-        const terrain = tile.terrain;
-        const isOwnedLake = terrain === "lake" && liveOwner && liveOwner !== "neutral";
         const fill =
-          terrain === "lake" && !isOwnedLake
+          tile.terrain === "lake"
             ? "#5BAFD6"
-            : hasSelection
-              ? (TERRAIN_FILLS[terrain] ?? TERRAIN_FILLS.grass)
-              : terrain === "mountain"
-                ? TERRAIN_FILLS.mountain
-                : isOwnedLake
-                  ? (TERRITORY_FILLS[liveOwner!] ?? TERRITORY_FILLS.neutral)
-                  : isCityZone && liveOwner === "neutral"
-                    ? CITY_NEUTRAL_FILL
-                    : (TERRITORY_FILLS[liveOwner] ?? TERRITORY_FILLS.neutral);
+            : (TERRAIN_FILLS[tile.terrain] ?? TERRAIN_FILLS.grass);
         return (
           <HexCell
             key={tile.key}
@@ -58,5 +39,61 @@ function HexTileLayerInner({
   );
 }
 
-export { areHexTileLayerEqual };
-export const HexTileLayer = React.memo(HexTileLayerInner, areHexTileLayerEqual);
+export const HexTileTerrainLayer = React.memo(
+  HexTileTerrainLayerInner,
+  areHexTerrainLayerEqual,
+);
+
+export interface HexTileTerritoryLayerProps {
+  tileData: Array<{ tile: HexTile; cx: number; cy: number }>;
+  activeTileMap: Map<string, HexTile>;
+  cities: Set<string>;
+  HEX_SIZE: number;
+}
+
+function HexTileTerritoryLayerInner({
+  tileData,
+  activeTileMap,
+  cities,
+  HEX_SIZE,
+}: HexTileTerritoryLayerProps) {
+  return (
+    <>
+      {tileData.map(({ tile, cx, cy }) => {
+        const liveTile = activeTileMap.get(tile.key) ?? tile;
+        const isCityZone = tile.cityBuffer || cities.has(tile.key);
+        const liveOwner = liveTile.owner;
+        const terrain = tile.terrain;
+        const isOwnedLake = terrain === "lake" && liveOwner && liveOwner !== "neutral";
+        const fill =
+          terrain === "lake" && !isOwnedLake
+            ? "#5BAFD6"
+            : terrain === "mountain"
+              ? TERRAIN_FILLS.mountain
+              : isOwnedLake
+                ? (TERRITORY_FILLS[liveOwner!] ?? TERRITORY_FILLS.neutral)
+                : isCityZone && liveOwner === "neutral"
+                  ? CITY_NEUTRAL_FILL
+                  : (TERRITORY_FILLS[liveOwner] ?? TERRITORY_FILLS.neutral);
+        return (
+          <HexCell
+            key={tile.key}
+            tileKey={tile.key}
+            cx={cx}
+            cy={cy}
+            hexSize={HEX_SIZE}
+            fill={fill}
+          />
+        );
+      })}
+    </>
+  );
+}
+
+export const HexTileTerritoryLayer = React.memo(
+  HexTileTerritoryLayerInner,
+  areHexTerritoryLayerEqual,
+);
+
+// Legacy export kept so any remaining references compile without error.
+export { areHexTerrainLayerEqual as areHexTileLayerEqual };

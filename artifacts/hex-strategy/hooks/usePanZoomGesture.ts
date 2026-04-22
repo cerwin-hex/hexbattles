@@ -98,6 +98,13 @@ export function usePanZoomGesture({
   const panGesture = Gesture.Pan()
     .maxPointers(1)
     .minDistance(10)
+    .onStart(() => {
+      // Sync saved position to the current visual position so that a pan
+      // starting after a two-finger pinch (where savedX/Y may be stale)
+      // does not cause the board to jump.
+      savedX.value = translateX.value;
+      savedY.value = translateY.value;
+    })
     .onUpdate((e) => {
       const raw = {
         x: savedX.value + e.translationX,

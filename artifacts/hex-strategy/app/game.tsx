@@ -31,6 +31,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, {
   Defs,
+  G,
   LinearGradient,
   Rect,
   Stop,
@@ -83,7 +84,10 @@ import type { EconBreakdown } from "@/components/GameModals";
 import BottomActionMenu from "@/components/BottomActionMenu";
 import { DevModeOverlay, DevEconomicSvgOverlays } from "@/components/DevModeOverlay";
 
-import { HexTileLayer } from "@/components/HexTileLayer";
+import {
+  HexTileTerrainLayer,
+  HexTileTerritoryLayer,
+} from "@/components/HexTileLayer";
 import { EntityLayer } from "@/components/EntityLayer";
 import { BorderEdgeLayer } from "@/components/BorderEdgeLayer";
 import { MovementHighlightTapTargets } from "@/components/MovementHighlightTapTargets";
@@ -895,13 +899,26 @@ export default function GameScreen() {
                 height={boardH}
                 fill="transparent"
               />
-              <HexTileLayer
-                tileData={tileData}
-                activeTileMap={activeTileMap}
-                cities={cities}
-                hasSelection={hasSelection}
-                HEX_SIZE={HEX_SIZE}
-              />
+              {/*
+               * Two permanently-mounted hex layers controlled by SVG G opacity.
+               * Neither layer ever re-renders when hasSelection changes — only the
+               * G wrapper's opacity prop is updated, which is a cheap native
+               * operation and makes the terrain/territory switch instant.
+               */}
+              <G opacity={hasSelection ? 0 : 1}>
+                <HexTileTerritoryLayer
+                  tileData={tileData}
+                  activeTileMap={activeTileMap}
+                  cities={cities}
+                  HEX_SIZE={HEX_SIZE}
+                />
+              </G>
+              <G opacity={hasSelection ? 1 : 0}>
+                <HexTileTerrainLayer
+                  tileData={tileData}
+                  HEX_SIZE={HEX_SIZE}
+                />
+              </G>
 
               <LakeImageLayer tileData={tileData} HEX_SIZE={HEX_SIZE} />
 

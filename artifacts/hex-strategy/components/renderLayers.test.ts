@@ -69,13 +69,13 @@ describe("areHexTileLayerEqual", () => {
     expect(areHexTileLayerEqual(base, next)).toBe(false);
   });
 
-  it("returns false when hasSelection flips", () => {
+  it("returns true when only hasSelection flips (selection is controlled by G opacity, not re-render)", () => {
     const tileData: HexTileLayerEqualProps["tileData"] = [];
     const activeTileMap = new Map<string, HexTile>();
     const cities = new Set<string>();
     const base = makeHexTileLayerProps({ tileData, activeTileMap, cities, hasSelection: false });
     const next = makeHexTileLayerProps({ tileData, activeTileMap, cities, hasSelection: true });
-    expect(areHexTileLayerEqual(base, next)).toBe(false);
+    expect(areHexTileLayerEqual(base, next)).toBe(true);
   });
 
   it("returns false when HEX_SIZE changes", () => {
