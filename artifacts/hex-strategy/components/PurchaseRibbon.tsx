@@ -99,18 +99,18 @@ export default function PurchaseRibbon({
           const nextUpkeepLabel = (() => {
             if (isTower) {
               const cost = nextDefenseUpkeep("tower", selectedTerritoryDefenseCounts.tower);
-              return { text: `${cost}/tur`, income: false };
+              return { text: `-${cost}/turn`, income: false };
             }
             if (isCastle) {
               const cost = nextDefenseUpkeep("castle", selectedTerritoryDefenseCounts.castle);
-              return { text: `${cost}/tur`, income: false };
+              return { text: `-${cost}/turn`, income: false };
             }
             if (item.id === "city") {
-              return { text: `+${CITY_BONUS}/tur`, income: true };
+              return { text: `+${CITY_BONUS}/turn`, income: true };
             }
             const upkeep = ENTITY_META[item.id as EntityType].upkeep;
             if (upkeep > 0) {
-              return { text: `${upkeep}/tur`, income: false };
+              return { text: `-${upkeep}/turn`, income: false };
             }
             return null;
           })();
@@ -155,7 +155,8 @@ export default function PurchaseRibbon({
                     styles.ribbonCost,
                     !enabled && styles.ribbonDim,
                     { fontSize: 10, marginTop: 1 },
-                    nextUpkeepLabel.income && { color: "#70C870" },
+                    !nextUpkeepLabel.income && enabled && { color: "#E07060" },
+                    nextUpkeepLabel.income && enabled && { color: "#70C870" },
                   ]}
                 >
                   {nextUpkeepLabel.text}

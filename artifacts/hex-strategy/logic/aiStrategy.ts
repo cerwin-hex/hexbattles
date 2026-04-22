@@ -537,10 +537,11 @@ export async function runAiTerritoryDecisionLoop(
           }
         }
 
-        // D2b: aggressive expansion bridges — lake tile adjacent to current territory AND enemy/neutral land
+        // D2b: attack bridges — build only when a unit can immediately attack across the bridge
+        // this same round. Never build adjacent to an existing bridge (prevents wasteful chains).
         if (!actionTaken && (difficulty === "hard" || difficulty === "super_hard")) {
+          outer:
           for (const t of currTerr) {
-            if (actionTaken) break;
             const [tq, tr] = t.key.split(",").map(Number);
             for (const { dir: [dq, dr] } of HEX_EDGES) {
               const nk = tileKey(tq + dq, tr + dr);
@@ -548,17 +549,41 @@ export async function runAiTerritoryDecisionLoop(
               const nt = aiCtx.tileMap.get(nk);
               if (!nt || nt.terrain !== "lake") continue;
               if (aiCtx.entities.has(nk)) continue;
+
               const [nq, nr] = nk.split(",").map(Number);
-              const reachesExpansionTarget = HEX_EDGES.some(({ dir: [dq2, dr2] }) => {
-                const nk2 = tileKey(nq + dq2, nr + dr2);
-                if (currTerrKeys.has(nk2)) return false;
-                const nt2 = aiCtx.tileMap.get(nk2);
-                if (!nt2 || nt2.terrain === "lake" || nt2.terrain === "mountain") return false;
-                return nt2.owner !== aiOwner;
+
+              // Skip if a neighbouring lake tile already has a bridge (no chains)
+              const adjacentBridgeExists = HEX_EDGES.some(({ dir: [dq2, dr2] }) =>
+                aiCtx.entities.get(tileKey(nq + dq2, nr + dr2)) === "bridge",
+              );
+              if (adjacentBridgeExists) continue;
+
+              // Collect non-AI land tiles reachable from the bridge
+              const attackTargets = HEX_EDGES
+                .map(({ dir: [dq2, dr2] }) => tileKey(nq + dq2, nr + dr2))
+                .filter(nk2 => {
+                  if (currTerrKeys.has(nk2)) return false;
+                  const nt2 = aiCtx.tileMap.get(nk2);
+                  if (!nt2 || nt2.terrain === "lake" || nt2.terrain === "mountain") return false;
+                  return nt2.owner !== aiOwner;
+                });
+              if (attackTargets.length === 0) continue;
+
+              // Check that at least one available unit is adjacent to the bridge tile and
+              // strong enough to capture one of the attack targets this round.
+              const canAttackNow = Array.from(availUnits).some(([uk, ue]) => {
+                const [ukq, ukr] = uk.split(",").map(Number);
+                if (hexDistance(ukq, ukr, nq, nr) !== 1) return false;
+                return attackTargets.some(targetKey => {
+                  const zoc = getMaxEnemyZoC(targetKey, aiOwner, aiCtx.entities, aiCtx.tileMap);
+                  return ENTITY_META[ue].strength > zoc;
+                });
               });
-              if (reachesExpansionTarget) {
-                actionTaken = await exec.build("bridge", nk, bridgeCost);
-              }
+
+              if (!canAttackNow) continue;
+
+              actionTaken = await exec.build("bridge", nk, bridgeCost);
+              if (actionTaken) break outer;
             }
           }
         }

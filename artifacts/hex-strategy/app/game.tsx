@@ -239,12 +239,12 @@ export default function GameScreen() {
 
   function openRibbon(mode: "units" | "buildings") {
     setRibbonMode(mode);
-    ribbonAnim.value = withTiming(0, { duration: 280 });
+    ribbonAnim.value = withTiming(0, { duration: 130 });
     ribbonScrollRef.current?.scrollTo({ x: 0, animated: false });
   }
 
   function closeRibbon() {
-    ribbonAnim.value = withTiming(RIBBON_H, { duration: 220 });
+    ribbonAnim.value = withTiming(RIBBON_H, { duration: 100 });
     setRibbonMode(null);
   }
 
