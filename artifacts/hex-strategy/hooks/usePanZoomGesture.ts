@@ -46,6 +46,8 @@ export function usePanZoomGesture({
   const translateY = useSharedValue(initY);
   const savedX = useSharedValue(initX);
   const savedY = useSharedValue(initY);
+  const lastFocalX = useSharedValue(0);
+  const lastFocalY = useSharedValue(0);
 
   useEffect(() => {
     translateX.value = initX;
@@ -89,7 +91,12 @@ export function usePanZoomGesture({
     return { x: clampedX, y: clampedY };
   };
 
+  // Single-finger pan only. Two-finger translation is handled by pinchGesture
+  // so we limit maxPointers here to avoid both gestures writing to translateX/Y
+  // simultaneously (which would cause the pinch focal-point compensation to be
+  // overwritten every frame by the pan gesture).
   const panGesture = Gesture.Pan()
+    .maxPointers(1)
     .minDistance(10)
     .onUpdate((e) => {
       const raw = {
@@ -105,13 +112,33 @@ export function usePanZoomGesture({
       savedY.value = translateY.value;
     });
 
+  // Two-finger gesture: handles both zoom-toward-focal-point and two-finger pan.
+  // We track the focal point delta each frame separately from the scale
+  // compensation so that moving the two fingers without changing distance still
+  // pans the board.
   const pinchGesture = Gesture.Pinch()
+    .onStart((e) => {
+      lastFocalX.value = e.focalX;
+      lastFocalY.value = e.focalY;
+    })
     .onUpdate((e) => {
       const prevScale = scale.value;
       const newScale = Math.max(0.3, Math.min(3, savedScale.value * e.scale));
       const ratio = newScale / prevScale;
-      const newX = translateX.value + (e.focalX - translateX.value - boardW / 2) * (1 - ratio);
-      const newY = translateY.value + (e.focalY - translateY.value - boardH / 2) * (1 - ratio);
+
+      // Compensation to keep the focal point stationary while scaling
+      const scaleCompX = (e.focalX - translateX.value - boardW / 2) * (1 - ratio);
+      const scaleCompY = (e.focalY - translateY.value - boardH / 2) * (1 - ratio);
+
+      // Two-finger translation: follow the moving midpoint between fingers
+      const focalDeltaX = e.focalX - lastFocalX.value;
+      const focalDeltaY = e.focalY - lastFocalY.value;
+      lastFocalX.value = e.focalX;
+      lastFocalY.value = e.focalY;
+
+      const newX = translateX.value + scaleCompX + focalDeltaX;
+      const newY = translateY.value + scaleCompY + focalDeltaY;
+
       scale.value = newScale;
       const clamped = clampXY(newX, newY, newScale);
       translateX.value = clamped.x;
