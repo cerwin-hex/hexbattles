@@ -24,9 +24,9 @@ export const ENTITY_META: Record<EntityType, EntityMeta> = {
   // Actual territory upkeep is LINEAR (n-th building costs n×base); use calcDefenseUpkeep/nextDefenseUpkeep.
   tower:         { name: 'Tower',     icon: '🛕',  cost: 15, upkeep: 1,  isUnit: false, strength: 1 },
   castle:        { name: 'Castle',    icon: '🏰',  cost: 30, upkeep: 5,  isUnit: false, strength: 2 },
-  city:          { name: 'City',      icon: '🏘️',  cost: 10, upkeep: 0,  isUnit: false, strength: 0 },
-  rebel:         { name: 'Rebel',     icon: '✊',   cost: 0,  upkeep: 0,  isUnit: false, strength: 0 },
   bridge:        { name: 'Bridge',    icon: '➖',   cost: 5,  upkeep: 1,  isUnit: false, strength: 0 },
+  rebel:         { name: 'Rebel',     icon: '✊',   cost: 0,  upkeep: 0,  isUnit: false, strength: 0 },
+  city:          { name: 'City',      icon: '🏘️',  cost: 10, upkeep: 0,  isUnit: false, strength: 0 },
 };
 
 export const TERRAIN_INCOME: Record<TerrainType, number> = {
@@ -203,9 +203,12 @@ export function getValidMoves(
         const allyIsCity = allyEntity === 'city';
         const allyIsBridge = allyEntity === 'bridge';
         const allyIsUnit = allyEntity ? ENTITY_META[allyEntity].isUnit : false;
-        if (!allyEntity || allyIsRebel) {
+        if (!allyEntity) {
           result.add(nk);
           bfsInsert(queue, { key: nk, cost: newCost });
+        } else if (allyIsRebel) {
+          // Can move ONTO a rebel tile to clear it, but cannot pass THROUGH it.
+          result.add(nk);
         } else if (allyIsCity || allyIsBridge) {
           result.add(nk);
           bfsInsert(queue, { key: nk, cost: newCost });

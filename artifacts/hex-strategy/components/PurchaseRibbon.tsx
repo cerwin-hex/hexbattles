@@ -1,7 +1,7 @@
 import React from "react";
 import { ScrollView, StyleProp, Text, TouchableOpacity, ViewStyle } from "react-native";
 import Animated from "react-native-reanimated";
-import { nextDefenseUpkeep } from "@/utils/hexGrid";
+import { nextDefenseUpkeep, ENTITY_META, CITY_BONUS } from "@/utils/hexGrid";
 import type { HexTile, TerritoryOwner, EntityType } from "@/types";
 import {
   UNIT_PURCHASABLES,
@@ -99,11 +99,18 @@ export default function PurchaseRibbon({
           const nextUpkeepLabel = (() => {
             if (isTower) {
               const cost = nextDefenseUpkeep("tower", selectedTerritoryDefenseCounts.tower);
-              return `${cost}/turn`;
+              return { text: `${cost}/tur`, income: false };
             }
             if (isCastle) {
               const cost = nextDefenseUpkeep("castle", selectedTerritoryDefenseCounts.castle);
-              return `${cost}/turn`;
+              return { text: `${cost}/tur`, income: false };
+            }
+            if (item.id === "city") {
+              return { text: `+${CITY_BONUS}/tur`, income: true };
+            }
+            const upkeep = ENTITY_META[item.id as EntityType].upkeep;
+            if (upkeep > 0) {
+              return { text: `${upkeep}/tur`, income: false };
             }
             return null;
           })();
@@ -148,9 +155,10 @@ export default function PurchaseRibbon({
                     styles.ribbonCost,
                     !enabled && styles.ribbonDim,
                     { fontSize: 10, marginTop: 1 },
+                    nextUpkeepLabel.income && { color: "#70C870" },
                   ]}
                 >
-                  {nextUpkeepLabel}
+                  {nextUpkeepLabel.text}
                 </Text>
               )}
             </TouchableOpacity>

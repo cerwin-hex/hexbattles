@@ -71,9 +71,9 @@ export function useEconBreakdown({
       "simple_unit",
       "advanced_unit",
       "expert_unit",
+      "bridge",
       "tower",
       "castle",
-      "bridge",
     ];
     const upkeepGroups = UPKEEP_ORDER.filter((type) =>
       upkeepGroupMap.has(type),
