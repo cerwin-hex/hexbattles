@@ -242,5 +242,5 @@ export function usePanZoomGesture({
     ],
   }));
 
-  return { gesture, boardStyle };
+  return { gesture, boardStyle, translateX, translateY, scale };
 }

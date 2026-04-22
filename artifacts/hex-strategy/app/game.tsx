@@ -23,6 +23,7 @@ import Animated, {
   Easing,
   cancelAnimation,
   runOnJS,
+  useAnimatedReaction,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
@@ -117,6 +118,35 @@ import { useEndTurnPulse } from "@/hooks/useEndTurnPulse";
 import { handleTileTapLogic } from "@/logic/tileTapHandler";
 import { handleEndTurnLogic } from "@/logic/endTurnHandler";
 import { checkWinLossLogic } from "@/logic/winLossChecker";
+
+type ViewportRect = { minX: number; maxX: number; minY: number; maxY: number };
+
+function computeViewportRect(
+  tx: number,
+  ty: number,
+  s: number,
+  boardW: number,
+  boardH: number,
+  SW: number,
+  topInset: number,
+  availH: number,
+  margin: number,
+): ViewportRect {
+  return {
+    minX: boardW / 2 + (0 - tx - boardW / 2) / s - margin,
+    maxX: boardW / 2 + (SW - tx - boardW / 2) / s + margin,
+    minY: boardH / 2 + (topInset - ty - boardH / 2) / s - margin,
+    maxY: boardH / 2 + (topInset + availH - ty - boardH / 2) / s + margin,
+  };
+}
+
+function isEdgeVisible(edge: BorderEdge, vp: ViewportRect): boolean {
+  const midX = (edge.x1 + edge.x2) / 2;
+  const midY = (edge.y1 + edge.y2) / 2;
+  return (
+    midX >= vp.minX && midX <= vp.maxX && midY >= vp.minY && midY <= vp.maxY
+  );
+}
 
 export default function GameScreen() {
 
@@ -845,7 +875,13 @@ export default function GameScreen() {
     closeRibbon,
   ]);
 
-  const { gesture, boardStyle } = usePanZoomGesture({
+  const {
+    gesture,
+    boardStyle,
+    translateX: panTX,
+    translateY: panTY,
+    scale: panScale,
+  } = usePanZoomGesture({
     boardW,
     boardH,
     bounds,
@@ -860,6 +896,103 @@ export default function GameScreen() {
     handleTileTap,
     handleDeselect,
   });
+
+  const vpMargin = HEX_SIZE * 2;
+
+  const [viewport, setViewport] = useState<ViewportRect>(() =>
+    computeViewportRect(initX, initY, fitScale, boardW, boardH, SW, topInset, availH, vpMargin),
+  );
+
+  useEffect(() => {
+    setViewport(
+      computeViewportRect(initX, initY, fitScale, boardW, boardH, SW, topInset, availH, vpMargin),
+    );
+  }, [initX, initY, fitScale]);
+
+  const updateViewport = useCallback(
+    (tx: number, ty: number, s: number) => {
+      setViewport(computeViewportRect(tx, ty, s, boardW, boardH, SW, topInset, availH, vpMargin));
+    },
+    [boardW, boardH, SW, topInset, availH, vpMargin],
+  );
+
+  useAnimatedReaction(
+    () => ({
+      tx: Math.round(panTX.value / 25) * 25,
+      ty: Math.round(panTY.value / 25) * 25,
+      s: Math.round(panScale.value * 25) / 25,
+    }),
+    (curr, prev) => {
+      if (
+        !prev ||
+        curr.tx !== prev.tx ||
+        curr.ty !== prev.ty ||
+        curr.s !== prev.s
+      ) {
+        runOnJS(updateViewport)(panTX.value, panTY.value, panScale.value);
+      }
+    },
+    [updateViewport, panTX, panTY, panScale],
+  );
+
+  const visibleTileData = useMemo(
+    () =>
+      tileData.filter(
+        ({ cx, cy }) =>
+          cx >= viewport.minX &&
+          cx <= viewport.maxX &&
+          cy >= viewport.minY &&
+          cy <= viewport.maxY,
+      ),
+    [tileData, viewport],
+  );
+
+  const visibleTileDataMap = useMemo(() => {
+    const m = new Map<string, { cx: number; cy: number }>();
+    for (const { tile, cx, cy } of visibleTileData) m.set(tile.key, { cx, cy });
+    if (animatingUnit) {
+      const fp = tileDataMap.get(animatingUnit.fromKey);
+      if (fp) m.set(animatingUnit.fromKey, fp);
+      const tp = tileDataMap.get(animatingUnit.toKey);
+      if (tp) m.set(animatingUnit.toKey, tp);
+    }
+    return m;
+  }, [visibleTileData, tileDataMap, animatingUnit]);
+
+  const visibleTileKeySet = useMemo(
+    () => new Set(visibleTileData.map(({ tile }) => tile.key)),
+    [visibleTileData],
+  );
+
+  const visibleEntities = useMemo(() => {
+    const m = new Map<string, EntityType>();
+    for (const [key, entityId] of entities) {
+      if (
+        visibleTileKeySet.has(key) ||
+        key === selectedEntityKey ||
+        key === animatingUnit?.fromKey ||
+        key === animatingUnit?.toKey
+      ) {
+        m.set(key, entityId);
+      }
+    }
+    return m;
+  }, [entities, visibleTileKeySet, selectedEntityKey, animatingUnit]);
+
+  const visibleBorderEdges = useMemo(
+    () => borderEdges.filter((e) => isEdgeVisible(e, viewport)),
+    [borderEdges, viewport],
+  );
+
+  const visibleOuterEdges = useMemo(
+    () => outerTerritoryEdges.filter((e) => isEdgeVisible(e, viewport)),
+    [outerTerritoryEdges, viewport],
+  );
+
+  const visibleSelectionEdges = useMemo(
+    () => selectionBorderEdges.filter((e) => isEdgeVisible(e, viewport)),
+    [selectionBorderEdges, viewport],
+  );
 
   const territoryPulseStyle = useAnimatedStyle(() => ({
     opacity: territoryPulseVal.value,
@@ -907,7 +1040,7 @@ export default function GameScreen() {
                */}
               <G opacity={hasSelection ? 0 : 1}>
                 <HexTileTerritoryLayer
-                  tileData={tileData}
+                  tileData={visibleTileData}
                   activeTileMap={activeTileMap}
                   cities={cities}
                   HEX_SIZE={HEX_SIZE}
@@ -915,41 +1048,41 @@ export default function GameScreen() {
               </G>
               <G opacity={hasSelection ? 1 : 0}>
                 <HexTileTerrainLayer
-                  tileData={tileData}
+                  tileData={visibleTileData}
                   HEX_SIZE={HEX_SIZE}
                 />
               </G>
 
-              <LakeImageLayer tileData={tileData} HEX_SIZE={HEX_SIZE} />
+              <LakeImageLayer tileData={visibleTileData} HEX_SIZE={HEX_SIZE} />
 
-              <MountainImageLayer tileData={tileData} HEX_SIZE={HEX_SIZE} />
+              <MountainImageLayer tileData={visibleTileData} HEX_SIZE={HEX_SIZE} />
 
               <CityOverlayLayer
                 cities={cities}
                 activeTileMap={activeTileMap}
-                tileDataMap={tileDataMap}
+                tileDataMap={visibleTileDataMap}
                 HEX_SIZE={HEX_SIZE}
               />
 
               <BridgeOverlayLayer
                 activeTileMap={activeTileMap}
-                tileDataMap={tileDataMap}
+                tileDataMap={visibleTileDataMap}
                 selectedEntityKey={selectedEntityKey}
                 HEX_SIZE={HEX_SIZE}
               />
 
               <BorderEdgeLayer
-                outerEdges={outerTerritoryEdges}
-                innerEdges={borderEdges}
+                outerEdges={visibleOuterEdges}
+                innerEdges={visibleBorderEdges}
                 hasSelection={hasSelection}
-                selectionEdges={selectionBorderEdges}
+                selectionEdges={visibleSelectionEdges}
               />
 
               <GraveyardLayer
                 graveyard={graveyard}
                 ruins={ruins}
                 entities={entities}
-                tileDataMap={tileDataMap}
+                tileDataMap={visibleTileDataMap}
                 HEX_SIZE={HEX_SIZE}
               />
 
@@ -958,7 +1091,7 @@ export default function GameScreen() {
                 validBridgePlacementTiles={validBridgePlacementTiles}
                 validPlacementAttackTiles={validPlacementAttackTiles}
                 armedEntityId={armedEntityId}
-                tileDataMap={tileDataMap}
+                tileDataMap={visibleTileDataMap}
                 HEX_SIZE={HEX_SIZE}
               />
 
@@ -966,7 +1099,7 @@ export default function GameScreen() {
 
             <AffordableTerritoryLayer
               affordableTerritoryTileKeys={affordableTerritoryTileKeys}
-              tileDataMap={tileDataMap}
+              tileDataMap={visibleTileDataMap}
               activeTileMap={activeTileMap}
               boardW={boardW}
               boardH={boardH}
@@ -983,8 +1116,8 @@ export default function GameScreen() {
             />
 
             <EntityLayer
-              entities={entities}
-              tileDataMap={tileDataMap}
+              entities={visibleEntities}
+              tileDataMap={visibleTileDataMap}
               activeTileMap={activeTileMap}
               selectedEntityKey={selectedEntityKey}
               spentUnits={spentUnits}
@@ -995,9 +1128,9 @@ export default function GameScreen() {
             />
 
             <IdleUnitLayer
-              entities={entities}
+              entities={visibleEntities}
               activeTileMap={activeTileMap}
-              tileDataMap={tileDataMap}
+              tileDataMap={visibleTileDataMap}
               spentUnits={spentUnits}
               selectedEntityKey={selectedEntityKey}
               animatingUnit={animatingUnit}
@@ -1010,7 +1143,7 @@ export default function GameScreen() {
 
             <FortificationDotLayer
               fortificationDots={fortificationDots}
-              tileDataMap={tileDataMap}
+              tileDataMap={visibleTileDataMap}
               boardW={boardW}
               boardH={boardH}
               HEX_SIZE={HEX_SIZE}
@@ -1026,7 +1159,7 @@ export default function GameScreen() {
               activeTileMap={activeTileMap}
               graveyard={graveyard}
               fortificationDots={fortificationDots}
-              tileDataMap={tileDataMap}
+              tileDataMap={visibleTileDataMap}
               boardW={boardW}
               boardH={boardH}
               HEX_SIZE={HEX_SIZE}
