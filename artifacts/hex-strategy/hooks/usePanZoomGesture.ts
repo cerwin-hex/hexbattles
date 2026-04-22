@@ -44,16 +44,19 @@ export function usePanZoomGesture({
   const savedScale = useSharedValue(fitScale);
   const translateX = useSharedValue(initX);
   const translateY = useSharedValue(initY);
-  const savedX = useSharedValue(initX);
-  const savedY = useSharedValue(initY);
   const lastFocalX = useSharedValue(0);
   const lastFocalY = useSharedValue(0);
+
+  // Per-frame delta tracking for the pan gesture. Using absolute
+  // translationX/Y + a saved base is fragile when the pinch gesture moves
+  // translateX/Y underneath the pan, causing double-counting on native.
+  // Tracking only the incremental delta each frame avoids the issue entirely.
+  const panLastTX = useSharedValue(0);
+  const panLastTY = useSharedValue(0);
 
   useEffect(() => {
     translateX.value = initX;
     translateY.value = initY;
-    savedX.value = initX;
-    savedY.value = initY;
     scale.value = fitScale;
     savedScale.value = fitScale;
   }, [initX, initY, fitScale]);
@@ -91,32 +94,40 @@ export function usePanZoomGesture({
     return { x: clampedX, y: clampedY };
   };
 
-  // Single-finger pan only. Two-finger translation is handled by pinchGesture
-  // so we limit maxPointers here to avoid both gestures writing to translateX/Y
-  // simultaneously (which would cause the pinch focal-point compensation to be
-  // overwritten every frame by the pan gesture).
+  // Single-finger pan.
+  // Uses per-frame delta tracking (dx = translationX - lastTX) rather than
+  // savedBase + translationX. This prevents a jump when the pinch gesture has
+  // moved translateX/Y while the pan gesture's translationX was also
+  // accumulating — an issue seen in Expo Go (native) where Simultaneous allows
+  // the pan to run alongside the pinch even with maxPointers(1).
   const panGesture = Gesture.Pan()
     .maxPointers(1)
     .minDistance(10)
     .onStart(() => {
-      // Sync saved position to the current visual position so that a pan
-      // starting after a two-finger pinch (where savedX/Y may be stale)
-      // does not cause the board to jump.
-      savedX.value = translateX.value;
-      savedY.value = translateY.value;
+      panLastTX.value = 0;
+      panLastTY.value = 0;
     })
     .onUpdate((e) => {
-      const raw = {
-        x: savedX.value + e.translationX,
-        y: savedY.value + e.translationY,
-      };
+      // Skip frames where more than one pointer is active to avoid interfering
+      // with the pinch gesture on native platforms.
+      if (e.numberOfPointers > 1) {
+        panLastTX.value = e.translationX;
+        panLastTY.value = e.translationY;
+        return;
+      }
+      const dx = e.translationX - panLastTX.value;
+      const dy = e.translationY - panLastTY.value;
+      panLastTX.value = e.translationX;
+      panLastTY.value = e.translationY;
+      const raw = { x: translateX.value + dx, y: translateY.value + dy };
       const clamped = clampXY(raw.x, raw.y, scale.value);
       translateX.value = clamped.x;
       translateY.value = clamped.y;
     })
     .onEnd(() => {
-      savedX.value = translateX.value;
-      savedY.value = translateY.value;
+      const clamped = clampXY(translateX.value, translateY.value, scale.value);
+      translateX.value = clamped.x;
+      translateY.value = clamped.y;
     });
 
   // Two-finger gesture: handles both zoom-toward-focal-point and two-finger pan.
@@ -127,12 +138,28 @@ export function usePanZoomGesture({
     .onStart((e) => {
       lastFocalX.value = e.focalX;
       lastFocalY.value = e.focalY;
+      savedScale.value = scale.value;
     })
     .onUpdate((e) => {
-      // When one finger releases, numberOfPointers drops to 1 and the focal
-      // point jumps from the midpoint to the remaining finger. Ignore the frame
-      // so the camera does not drift toward the last finger.
+      // Guard 1: numberOfPointers — on web and some native builds, the update
+      // fires with 1 pointer when the second finger releases, causing the focal
+      // point to jump to the remaining finger.
       if (e.numberOfPointers < 2) {
+        lastFocalX.value = e.focalX;
+        lastFocalY.value = e.focalY;
+        savedScale.value = scale.value;
+        return;
+      }
+
+      // Guard 2: focal jump threshold — on native Expo Go, numberOfPointers may
+      // not drop below 2 before onEnd fires. Instead, detect an implausibly
+      // large focal movement in a single frame (finger-lift artifact) and
+      // suppress it. A natural focal movement at 60 fps is well under 40 px.
+      const focalDeltaX = e.focalX - lastFocalX.value;
+      const focalDeltaY = e.focalY - lastFocalY.value;
+      const focalJump =
+        focalDeltaX * focalDeltaX + focalDeltaY * focalDeltaY;
+      if (focalJump > 40 * 40) {
         lastFocalX.value = e.focalX;
         lastFocalY.value = e.focalY;
         savedScale.value = scale.value;
@@ -147,9 +174,6 @@ export function usePanZoomGesture({
       const scaleCompX = (e.focalX - translateX.value - boardW / 2) * (1 - ratio);
       const scaleCompY = (e.focalY - translateY.value - boardH / 2) * (1 - ratio);
 
-      // Two-finger translation: follow the moving midpoint between fingers
-      const focalDeltaX = e.focalX - lastFocalX.value;
-      const focalDeltaY = e.focalY - lastFocalY.value;
       lastFocalX.value = e.focalX;
       lastFocalY.value = e.focalY;
 
@@ -166,8 +190,6 @@ export function usePanZoomGesture({
       const clamped = clampXY(translateX.value, translateY.value, scale.value);
       translateX.value = clamped.x;
       translateY.value = clamped.y;
-      savedX.value = clamped.x;
-      savedY.value = clamped.y;
     });
 
   const handleBoardTap = useCallback(
