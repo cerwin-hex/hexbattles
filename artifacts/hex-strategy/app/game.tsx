@@ -22,7 +22,9 @@ import { GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   Easing,
   cancelAnimation,
+  createAnimatedComponent,
   runOnJS,
+  useAnimatedProps,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
@@ -117,6 +119,10 @@ import { useEndTurnPulse } from "@/hooks/useEndTurnPulse";
 import { handleTileTapLogic } from "@/logic/tileTapHandler";
 import { handleEndTurnLogic } from "@/logic/endTurnHandler";
 import { checkWinLossLogic } from "@/logic/winLossChecker";
+
+// AnimatedG is created at module level so the animated component class is
+// stable across renders (createAnimatedComponent is not free).
+const AnimatedG = createAnimatedComponent(G);
 
 export default function GameScreen() {
 
@@ -239,6 +245,10 @@ export default function GameScreen() {
   );
   const ribbonOpen = ribbonMode !== null;
   const ribbonAnim = useSharedValue(RIBBON_H);
+  // 0 = territory colour mode, 1 = terrain colour mode.
+  // Updated both optimistically (before React renders) and via useEffect for
+  // correctness — see handleTileTapOptimistic / handleDeselectOptimistic below.
+  const terrainVisible = useSharedValue(0);
   const ribbonScrollRef = useRef<ScrollView>(null);
 
   function openRibbon(mode: "units" | "buildings") {
@@ -845,6 +855,25 @@ export default function GameScreen() {
     closeRibbon,
   ]);
 
+  // Optimistic terrain switch: update the Reanimated shared value immediately
+  // (before React re-renders) so the terrain/territory layer swap is visible
+  // within the current frame rather than after the full reconciliation cycle.
+  // A simple owner check is used as the heuristic; the useEffect below corrects
+  // any edge cases (e.g. tapping an already-selected territory → deselect).
+  const handleTileTapOptimistic = useCallback(
+    (key: string) => {
+      const tile = activeTileMap.get(key);
+      terrainVisible.value = tile?.owner === "player" ? 1 : 0;
+      handleTileTap(key);
+    },
+    [activeTileMap, handleTileTap, terrainVisible],
+  );
+
+  const handleDeselectOptimistic = useCallback(() => {
+    terrainVisible.value = 0;
+    handleDeselect();
+  }, [handleDeselect, terrainVisible]);
+
   const { gesture, boardStyle } = usePanZoomGesture({
     boardW,
     boardH,
@@ -857,8 +886,8 @@ export default function GameScreen() {
     initY,
     fitScale,
     activeTileMap,
-    handleTileTap,
-    handleDeselect,
+    handleTileTap: handleTileTapOptimistic,
+    handleDeselect: handleDeselectOptimistic,
   });
 
   const territoryPulseStyle = useAnimatedStyle(() => ({
@@ -869,7 +898,24 @@ export default function GameScreen() {
     transform: [{ translateY: ribbonAnim.value }],
   }));
 
+  // Animated props for the two permanently-mounted hex layers.
+  // Updating terrainVisible.value bypasses React reconciliation and goes
+  // directly to the UI thread — the switch is visible within the current frame.
+  const terrainGroupProps = useAnimatedProps(() => ({
+    opacity: terrainVisible.value,
+  }));
+  const territoryGroupProps = useAnimatedProps(() => ({
+    opacity: 1 - terrainVisible.value,
+  }));
+
   const hasSelection = selectedTerritory.length > 0;
+
+  // Correctness sync: after React resolves the final selection state, make sure
+  // terrainVisible matches.  This handles edge cases (e.g. deselecting by
+  // tapping the same territory) where the optimistic update was wrong.
+  useEffect(() => {
+    terrainVisible.value = hasSelection ? 1 : 0;
+  }, [hasSelection]);
   const showCredits = hasSelection;
   const creditsDisplayValue = selectedTerritoryBalance;
 
@@ -900,25 +946,26 @@ export default function GameScreen() {
                 fill="transparent"
               />
               {/*
-               * Two permanently-mounted hex layers controlled by SVG G opacity.
-               * Neither layer ever re-renders when hasSelection changes — only the
-               * G wrapper's opacity prop is updated, which is a cheap native
-               * operation and makes the terrain/territory switch instant.
+               * Two permanently-mounted hex layers.  Opacity is driven by a
+               * Reanimated SharedValue (terrainVisible) so the switch happens
+               * directly on the UI thread — no React reconciliation needed.
+               * An optimistic update in handleTileTapOptimistic fires the change
+               * before setSelectedTileKey, and a useEffect corrects edge cases.
                */}
-              <G opacity={hasSelection ? 0 : 1}>
+              <AnimatedG animatedProps={territoryGroupProps}>
                 <HexTileTerritoryLayer
                   tileData={tileData}
                   activeTileMap={activeTileMap}
                   cities={cities}
                   HEX_SIZE={HEX_SIZE}
                 />
-              </G>
-              <G opacity={hasSelection ? 1 : 0}>
+              </AnimatedG>
+              <AnimatedG animatedProps={terrainGroupProps}>
                 <HexTileTerrainLayer
                   tileData={tileData}
                   HEX_SIZE={HEX_SIZE}
                 />
-              </G>
+              </AnimatedG>
 
               <LakeImageLayer tileData={tileData} HEX_SIZE={HEX_SIZE} />
 

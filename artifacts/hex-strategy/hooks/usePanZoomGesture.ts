@@ -4,6 +4,7 @@ import {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
+  type SharedValue,
 } from "react-native-reanimated";
 import { EXTRA_PAN } from "@/constants/gameConstants";
 import { tileKey } from "@/utils/hexMath";
@@ -91,21 +92,39 @@ export function usePanZoomGesture({
     return { x: clampedX, y: clampedY };
   };
 
-  // Single-finger pan only. Two-finger translation is handled by pinchGesture
-  // so we limit maxPointers here to avoid both gestures writing to translateX/Y
-  // simultaneously (which would cause the pinch focal-point compensation to be
-  // overwritten every frame by the pan gesture).
+  // Single-finger pan.  maxPointers is intentionally NOT set here — instead we
+  // guard inside onUpdate based on numberOfPointers.  This lets the gesture
+  // stay ACTIVE across the 2→1 pointer transition that occurs when the first
+  // finger is released after a pinch, which is essential for the anti-jump
+  // formula below.
+  //
+  // Anti-jump formula:
+  //   During multi-finger frames we keep savedX = translateX - e.translationX.
+  //   Because e.translationX is cumulative from onBegin (including all
+  //   movement that happened during the pinch), this identity guarantees that
+  //   the very first single-finger onUpdate produces:
+  //     raw.x = savedX + e.translationX
+  //           = (translateX - e.translationX) + e.translationX
+  //           = translateX          ← no jump
+  //   Subsequent frames accumulate correctly from that base.
   const panGesture = Gesture.Pan()
-    .maxPointers(1)
     .minDistance(10)
-    .onStart(() => {
-      // Sync saved position to the current visual position so that a pan
-      // starting after a two-finger pinch (where savedX/Y may be stale)
-      // does not cause the board to jump.
-      savedX.value = translateX.value;
-      savedY.value = translateY.value;
+    .onBegin(() => {
+      // Record the current board position when the gesture first begins
+      // tracking (before any movement).  This covers the case where a
+      // fresh single-finger pan starts without any prior pinch.
+      savedX.value = translateX.value - 0; // e.translationX == 0 at begin
+      savedY.value = translateY.value - 0;
     })
     .onUpdate((e) => {
+      if (e.numberOfPointers !== 1) {
+        // Multi-finger: pinch gesture owns translateX/Y.  Keep savedX in
+        // sync using the anti-jump formula so the first single-finger frame
+        // produces zero net movement.
+        savedX.value = translateX.value - e.translationX;
+        savedY.value = translateY.value - e.translationY;
+        return;
+      }
       const raw = {
         x: savedX.value + e.translationX,
         y: savedY.value + e.translationY,
