@@ -22,7 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Difficulty } from '@/types';
 
 const TILE_MIN = 40;
-const TILE_MAX = 300;
+const TILE_MAX = 200;
 const THUMB_SIZE = 26;
 
 const UNIT_ROWS = [
@@ -254,7 +254,7 @@ export default function MainMenu() {
           <View style={styles.section}>
             <Text style={styles.label}>AI Opponents</Text>
             <View style={styles.pills}>
-              {[1, 2, 3, 4, 5].map(n => (
+              {[1, 2, 3, 4].map(n => (
                 <TouchableOpacity
                   key={n}
                   style={[styles.pill, opponentCount === n && styles.pillActive]}

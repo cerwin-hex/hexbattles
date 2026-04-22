@@ -125,9 +125,9 @@ export default function GameScreen() {
     opponentCount: string;
     difficulty: string;
   }>();
-  const numTiles = Math.min(300, Math.max(40, Number(params.tileCount) || 100));
+  const numTiles = Math.min(200, Math.max(40, Number(params.tileCount) || 100));
   const numOpponents = Math.min(
-    5,
+    4,
     Math.max(1, Number(params.opponentCount) || 3),
   );
   const aiDifficulty = (params.difficulty as Difficulty) || "medium";
