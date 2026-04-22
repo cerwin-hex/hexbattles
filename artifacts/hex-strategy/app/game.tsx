@@ -1004,6 +1004,8 @@ export default function GameScreen() {
               animUnitProgress={animUnitProgress}
               HEX_SIZE={HEX_SIZE}
               isAiTurn={isAiTurn}
+              boardW={boardW}
+              boardH={boardH}
             />
 
             <FortificationDotLayer

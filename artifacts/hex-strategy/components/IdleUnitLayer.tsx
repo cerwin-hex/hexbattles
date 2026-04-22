@@ -1,19 +1,22 @@
 import React, { useEffect } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import Animated, {
   cancelAnimation,
   Easing,
-  useAnimatedStyle,
+  useAnimatedProps,
   useSharedValue,
   withRepeat,
   withSequence,
   withTiming,
 } from "react-native-reanimated";
 import type { SharedValue } from "react-native-reanimated";
+import Svg, { Circle, G, Text as SvgText } from "react-native-svg";
 import { ENTITY_META } from "@/utils/hexGrid";
 import { TERRITORY_BORDERS } from "@/constants/colors";
 import type { EntityType, HexTile, TerritoryOwner } from "@/types";
 import AnimatedMovingUnit from "@/components/AnimatedMovingUnit";
+
+const AnimatedG = Animated.createAnimatedComponent(G);
 
 interface AnimatingUnit {
   fromKey: string;
@@ -33,6 +36,8 @@ export interface IdleUnitLayerProps {
   animUnitProgress: SharedValue<number>;
   HEX_SIZE: number;
   isAiTurn: boolean;
+  boardW: number;
+  boardH: number;
 }
 
 export function IdleUnitLayer({
@@ -45,6 +50,8 @@ export function IdleUnitLayer({
   animUnitProgress,
   HEX_SIZE,
   isAiTurn,
+  boardW,
+  boardH,
 }: IdleUnitLayerProps) {
   const idleBounceY = useSharedValue(0);
 
@@ -67,7 +74,7 @@ export function IdleUnitLayer({
     };
   }, [isAiTurn]);
 
-  const idleBounceStyle = useAnimatedStyle(() => ({
+  const bounceAnimatedProps = useAnimatedProps(() => ({
     transform: [{ translateY: idleBounceY.value }],
   }));
 
@@ -77,6 +84,36 @@ export function IdleUnitLayer({
   const animToPos = animatingUnit
     ? tileDataMap.get(animatingUnit.toKey)
     : null;
+
+  const r = HEX_SIZE * 0.5;
+  const playerBorderColor = TERRITORY_BORDERS["player"];
+
+  const idleUnits: Array<{
+    key: string;
+    icon: string;
+    cx: number;
+    cy: number;
+  }> = [];
+
+  for (const [key, entityId] of entities) {
+    if (entityId === "city" || entityId === "rebel") continue;
+    if (animatingUnit && key === animatingUnit.fromKey) continue;
+    if (
+      animatingUnit &&
+      animatingUnit.hideDestination &&
+      key === animatingUnit.toKey
+    )
+      continue;
+    const meta = ENTITY_META[entityId];
+    if (!meta.isUnit) continue;
+    const liveTile = activeTileMap.get(key);
+    if (liveTile?.owner !== "player") continue;
+    if (spentUnits.has(key)) continue;
+    if (selectedEntityKey === key) continue;
+    const pos = tileDataMap.get(key);
+    if (!pos) continue;
+    idleUnits.push({ key, icon: meta.icon, cx: pos.cx, cy: pos.cy });
+  }
 
   return (
     <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
@@ -90,50 +127,35 @@ export function IdleUnitLayer({
           progress={animUnitProgress}
         />
       )}
-      {Array.from(entities.entries()).map(([key, entityId]) => {
-        if (entityId === "city" || entityId === "rebel") return null;
-        if (animatingUnit && key === animatingUnit.fromKey) return null;
-        if (
-          animatingUnit &&
-          animatingUnit.hideDestination &&
-          key === animatingUnit.toKey
-        )
-          return null;
-        const meta = ENTITY_META[entityId];
-        if (!meta.isUnit) return null;
-        const liveTile = activeTileMap.get(key);
-        if (liveTile?.owner !== "player") return null;
-        if (spentUnits.has(key)) return null;
-        if (selectedEntityKey === key) return null;
-        const pos = tileDataMap.get(key);
-        if (!pos) return null;
-        const r = HEX_SIZE * 0.5;
-        return (
-          <Animated.View
-            key={`bounce-${key}`}
-            style={[
-              {
-                position: "absolute",
-                left: pos.cx - r,
-                top: pos.cy - r,
-                width: r * 2,
-                height: r * 2,
-                borderRadius: r,
-                backgroundColor: "rgba(30,50,120,0.9)",
-                borderWidth: 2.2,
-                borderColor: TERRITORY_BORDERS["player"],
-                alignItems: "center",
-                justifyContent: "center",
-              },
-              idleBounceStyle,
-            ]}
-          >
-            <Text style={{ fontSize: r * 1.1, lineHeight: r * 1.6 }}>
-              {meta.icon}
-            </Text>
-          </Animated.View>
-        );
-      })}
+      <Svg
+        width={boardW}
+        height={boardH}
+        style={StyleSheet.absoluteFillObject}
+      >
+        <AnimatedG animatedProps={bounceAnimatedProps}>
+          {idleUnits.map(({ key, icon, cx, cy }) => (
+            <React.Fragment key={`idle-${key}`}>
+              <Circle
+                cx={cx}
+                cy={cy}
+                r={r}
+                fill="rgba(30,50,120,0.9)"
+                stroke={playerBorderColor}
+                strokeWidth={2.2}
+              />
+              <SvgText
+                x={cx}
+                y={cy + r * 0.35}
+                textAnchor="middle"
+                fontSize={r * 1.1}
+                fill="#fff"
+              >
+                {icon}
+              </SvgText>
+            </React.Fragment>
+          ))}
+        </AnimatedG>
+      </Svg>
     </View>
   );
 }
