@@ -129,6 +129,16 @@ export function usePanZoomGesture({
       lastFocalY.value = e.focalY;
     })
     .onUpdate((e) => {
+      // When one finger releases, numberOfPointers drops to 1 and the focal
+      // point jumps from the midpoint to the remaining finger. Ignore the frame
+      // so the camera does not drift toward the last finger.
+      if (e.numberOfPointers < 2) {
+        lastFocalX.value = e.focalX;
+        lastFocalY.value = e.focalY;
+        savedScale.value = scale.value;
+        return;
+      }
+
       const prevScale = scale.value;
       const newScale = Math.max(0.3, Math.min(3, savedScale.value * e.scale));
       const ratio = newScale / prevScale;
