@@ -1397,7 +1397,13 @@ export async function runAiTurn(
           const e = ws.entities.get(t.key);
           if (e && ENTITY_META[e].isUnit) {
             unitUpkeepSaved += ENTITY_META[e].upkeep;
-            ws.entities.delete(t.key);
+            // If the unit was standing on a bridge tile, restore the bridge
+            // entity so the lake tile stays connected to the territory.
+            if (ws.tileMap.get(t.key)?.terrain === 'lake') {
+              ws.entities.set(t.key, 'bridge');
+            } else {
+              ws.entities.delete(t.key);
+            }
             ws.graveyard = new Set(ws.graveyard);
             ws.graveyard.add(t.key);
           }

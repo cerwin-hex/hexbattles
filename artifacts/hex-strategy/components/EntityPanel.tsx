@@ -88,7 +88,16 @@ export default function EntityPanel({
           pushHistory();
           setEntities((prev) => {
             const next = new Map(prev);
-            next.delete(selectedEntityKey);
+            // If the unit is standing on a lake tile it must be on a bridge.
+            // Restore the bridge entity instead of leaving the lake tile empty,
+            // otherwise the tile (and anything connected through it) drops out
+            // of the territory.
+            const tileUnderUnit = activeTileMap.get(selectedEntityKey);
+            if (tileUnderUnit?.terrain === "lake") {
+              next.set(selectedEntityKey, "bridge");
+            } else {
+              next.delete(selectedEntityKey);
+            }
             return next;
           });
           if (removeCost > 0) {
