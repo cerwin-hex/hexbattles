@@ -53,6 +53,7 @@ export function usePanZoomGesture({
   // Tracking only the incremental delta each frame avoids the issue entirely.
   const panLastTX = useSharedValue(0);
   const panLastTY = useSharedValue(0);
+  const panLastPointerCount = useSharedValue(0);
 
   useEffect(() => {
     translateX.value = initX;
@@ -94,37 +95,49 @@ export function usePanZoomGesture({
     return { x: clampedX, y: clampedY };
   };
 
-  // Single-finger pan.
-  // Uses per-frame delta tracking (dx = translationX - lastTX) rather than
-  // savedBase + translationX. This prevents a jump when the pinch gesture has
-  // moved translateX/Y while the pan gesture's translationX was also
-  // accumulating — an issue seen in Expo Go (native) where Simultaneous allows
-  // the pan to run alongside the pinch even with maxPointers(1).
+  // Pan gesture — works with 1 or 2 fingers active.
+  // No maxPointers restriction so the gesture stays alive during pinch and can
+  // seamlessly take over when one finger is lifted without a new gesture cycle.
+  // Per-frame delta tracking avoids jumps when the pinch moves the board while
+  // the pan's translationX is also accumulating. A pointer-count guard skips
+  // movement while 2 fingers are down (pinch handles it), and a 2→1 transition
+  // frame resets the reference position to prevent a large jump on finger lift.
   const panGesture = Gesture.Pan()
-    .maxPointers(1)
-    .minDistance(10)
-    .onStart(() => {
-      panLastTX.value = 0;
-      panLastTY.value = 0;
+    .minDistance(0)
+    .onStart((e) => {
+      panLastTX.value = e.translationX;
+      panLastTY.value = e.translationY;
+      panLastPointerCount.value = e.numberOfPointers;
     })
     .onUpdate((e) => {
-      // Skip frames where more than one pointer is active to avoid interfering
-      // with the pinch gesture on native platforms.
+      // When more than one pointer is active, keep tracking position so we
+      // don't accumulate a jump, but don't move the board (the pinch handles it).
       if (e.numberOfPointers > 1) {
         panLastTX.value = e.translationX;
         panLastTY.value = e.translationY;
+        panLastPointerCount.value = e.numberOfPointers;
+        return;
+      }
+      // Transition from 2 → 1 finger: reset tracking to current position so
+      // the first delta after the lift is 0 instead of a large jump.
+      if (panLastPointerCount.value > 1) {
+        panLastTX.value = e.translationX;
+        panLastTY.value = e.translationY;
+        panLastPointerCount.value = 1;
         return;
       }
       const dx = e.translationX - panLastTX.value;
       const dy = e.translationY - panLastTY.value;
       panLastTX.value = e.translationX;
       panLastTY.value = e.translationY;
+      panLastPointerCount.value = 1;
       const raw = { x: translateX.value + dx, y: translateY.value + dy };
       const clamped = clampXY(raw.x, raw.y, scale.value);
       translateX.value = clamped.x;
       translateY.value = clamped.y;
     })
     .onEnd(() => {
+      panLastPointerCount.value = 0;
       const clamped = clampXY(translateX.value, translateY.value, scale.value);
       translateX.value = clamped.x;
       translateY.value = clamped.y;
