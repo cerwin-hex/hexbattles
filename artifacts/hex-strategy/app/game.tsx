@@ -1071,11 +1071,13 @@ export default function GameScreen() {
         <Text style={styles.menuBtnText}>Menu</Text>
       </TouchableOpacity>
 
-      <DevModeOverlay
-        isDeveloperModeActive={isDeveloperModeActive}
-        setIsDeveloperModeActive={setIsDeveloperModeActive}
-        topInset={topInset}
-      />
+      {__DEV__ && (
+        <DevModeOverlay
+          isDeveloperModeActive={isDeveloperModeActive}
+          setIsDeveloperModeActive={setIsDeveloperModeActive}
+          topInset={topInset}
+        />
+      )}
 
       {selectedEntityKey && (
         <EntityPanel
