@@ -103,7 +103,7 @@ export function usePanZoomGesture({
   // movement while 2 fingers are down (pinch handles it), and a 2→1 transition
   // frame resets the reference position to prevent a large jump on finger lift.
   const panGesture = Gesture.Pan()
-    .minDistance(0)
+    .minDistance(8)
     .onStart((e) => {
       panLastTX.value = e.translationX;
       panLastTY.value = e.translationY;
