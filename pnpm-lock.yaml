@@ -363,6 +363,10 @@ importers:
         version: 3.5.4(zod@3.25.76)
 
   artifacts/mockup-sandbox:
+    dependencies:
+      docx:
+        specifier: ^9.6.1
+        version: 9.6.1
     devDependencies:
       '@hookform/resolvers':
         specifier: ^3.10.0
