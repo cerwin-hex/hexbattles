@@ -55,10 +55,13 @@ import {
   getBoardBounds,
   hexToPixel,
   tileKey,
+  HEX_EDGES,
 } from "@/utils/hexMath";
 import {
   ENTITY_META,
   generateHexGrid,
+  getContiguousTerritory,
+  getTerritoryId,
   recalculateTerritories,
   recalculateTerritoriesForCapture,
 } from "@/utils/hexGrid";
@@ -682,19 +685,57 @@ export default function GameScreen() {
     const entity = entities.get(bridgeKey);
     if (entity !== "bridge") return;
     pushHistory();
+
     const newEntities = new Map(entities);
     newEntities.delete(bridgeKey);
     const newTileMap = new Map(activeTileMap);
     newTileMap.set(bridgeKey, { ...tile, owner: "neutral" });
-    const { balances: newBalances } = recalculateTerritories(
-      bridgeKey,
-      "player",
-      activeTileMap,
-      newTileMap,
-      territoryBalances,
-      newEntities,
-      entities,
-    );
+
+    // Find old player territory (with bridge still present) to get its balance.
+    const oldCluster = getContiguousTerritory(activeTileMap, bridgeKey, "player", entities);
+    const oldId = getTerritoryId(oldCluster);
+    const oldBalance = oldId ? (territoryBalances.get(oldId) ?? 0) : 0;
+
+    // BFS from each neighbour of the bridge tile to find new player clusters.
+    const [bq, br] = bridgeKey.split(",").map(Number);
+    const visitedKeys = new Set<string>();
+    const newClusters: HexTile[][] = [];
+    for (const { dir: [dq, dr] } of HEX_EDGES) {
+      const nk = tileKey(bq + dq, br + dr);
+      if (visitedKeys.has(nk)) continue;
+      const cluster = getContiguousTerritory(newTileMap, nk, "player", newEntities);
+      if (cluster.length === 0) continue;
+      for (const ct of cluster) visitedKeys.add(ct.key);
+      newClusters.push(cluster);
+    }
+
+    // Redistribute the old balance: largest cluster inherits everything.
+    // If two clusters are exactly equal in size, split evenly.
+    const newBalances = new Map(territoryBalances);
+    if (oldId) newBalances.delete(oldId);
+
+    if (newClusters.length === 1) {
+      const newId = getTerritoryId(newClusters[0]);
+      if (newId) newBalances.set(newId, oldBalance);
+    } else if (newClusters.length > 1) {
+      const maxSize = Math.max(...newClusters.map((c) => c.length));
+      const exactlyTwoEqual =
+        newClusters.length === 2 && newClusters.every((c) => c.length === maxSize);
+      const firstId = getTerritoryId(newClusters[0]) ?? "";
+      for (const cluster of newClusters) {
+        const newId = getTerritoryId(cluster);
+        if (!newId) continue;
+        if (exactlyTwoEqual) {
+          const half = Math.floor(oldBalance / 2);
+          newBalances.set(newId, half + (newId === firstId ? oldBalance % 2 : 0));
+        } else if (cluster.length === maxSize) {
+          newBalances.set(newId, oldBalance);
+        } else {
+          newBalances.set(newId, 0);
+        }
+      }
+    }
+
     const newLiveOwnerMap = new Map(liveOwnerMap);
     newLiveOwnerMap.delete(bridgeKey);
     setMutableTileMap(newTileMap);
@@ -702,7 +743,15 @@ export default function GameScreen() {
     setTerritoryBalances(newBalances);
     setLiveOwnerMap(newLiveOwnerMap);
     setSelectedEntityKey(null);
-    setSelectedTileKey(null);
+
+    // Keep the largest remaining territory selected instead of deselecting.
+    const largestCluster =
+      newClusters.length > 0
+        ? newClusters.reduce((best, c) => (c.length > best.length ? c : best))
+        : [];
+    const anchorTile =
+      largestCluster.find((t) => t.terrain !== "lake") ?? largestCluster[0];
+    setSelectedTileKey(anchorTile?.key ?? null);
   }, [
     selectedEntityKey,
     selectedTileKey,
