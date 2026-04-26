@@ -85,7 +85,7 @@ import EntityPanel from "@/components/EntityPanel";
 import GameModals from "@/components/GameModals";
 import type { EconBreakdown } from "@/components/GameModals";
 import BottomActionMenu from "@/components/BottomActionMenu";
-import { DevModeOverlay, DevEconomicSvgOverlays } from "@/components/DevModeOverlay";
+import { DevModeOverlay, DevEconomicSvgOverlays, DevTerrainSvgOverlays } from "@/components/DevModeOverlay";
 
 import {
   HexTileTerrainLayer,
@@ -116,6 +116,7 @@ import { usePanZoomGesture } from "@/hooks/usePanZoomGesture";
 import { useMoveHistory } from "@/hooks/useMoveHistory";
 import { useEconBreakdown } from "@/hooks/useEconBreakdown";
 import { useDevEconomicOverlays } from "@/hooks/useDevEconomicOverlays";
+import { useDevTerrainOverlays } from "@/hooks/useDevTerrainOverlays";
 import { useEndTurnPulse } from "@/hooks/useEndTurnPulse";
 import { handleTileTapLogic } from "@/logic/tileTapHandler";
 import { handleEndTurnLogic } from "@/logic/endTurnHandler";
@@ -641,6 +642,13 @@ export default function GameScreen() {
     aiStateMap,
   });
 
+  const devTerrainOverlays = useDevTerrainOverlays({
+    isDeveloperModeActive,
+    isAiTurn,
+    activeTileMap,
+    tileDataMap,
+  });
+
   const { moveHistory, setMoveHistory, pushHistory, handleUndo } = useMoveHistory({
     entities,
     cities,
@@ -1081,6 +1089,10 @@ export default function GameScreen() {
 
             <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
               <Svg width={boardW} height={boardH}>
+                <DevTerrainSvgOverlays
+                  devTerrainOverlays={devTerrainOverlays}
+                  hexSize={HEX_SIZE}
+                />
                 <DevEconomicSvgOverlays
                   isDeveloperModeActive={isDeveloperModeActive}
                   devEconomicOverlays={devEconomicOverlays}

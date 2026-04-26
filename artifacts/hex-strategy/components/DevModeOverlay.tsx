@@ -2,6 +2,7 @@ import React from "react";
 import { Text, TouchableOpacity } from "react-native";
 import { Rect, Text as SvgText } from "react-native-svg";
 import styles from "@/app/gameStyles";
+import type { DevTerrainOverlay } from "@/hooks/useDevTerrainOverlays";
 
 interface DevModeOverlayProps {
   isDeveloperModeActive: boolean;
@@ -49,6 +50,50 @@ interface DevEconomicSvgOverlaysProps {
   devEconomicOverlays: DevEconOverlay[];
   hexSize: number;
 }
+
+interface DevTerrainSvgOverlaysProps {
+  devTerrainOverlays: DevTerrainOverlay[];
+  hexSize: number;
+}
+
+export const DevTerrainSvgOverlays = React.memo(
+  function DevTerrainSvgOverlays({
+    devTerrainOverlays,
+    hexSize,
+  }: DevTerrainSvgOverlaysProps) {
+    if (devTerrainOverlays.length === 0) return null;
+    const fontSize = Math.max(6, Math.min(10, hexSize * 0.28));
+    return (
+      <>
+        {devTerrainOverlays.map(({ cx, cy, terrain }, i) => {
+          const w = fontSize * terrain.length * 0.62;
+          return (
+            <React.Fragment key={`dev-terrain-${i}`}>
+              <Rect
+                x={cx - w / 2}
+                y={cy + hexSize * 0.22}
+                width={w}
+                height={fontSize * 1.4}
+                fill="rgba(0,0,0,0.55)"
+                rx={2}
+              />
+              <SvgText
+                x={cx}
+                y={cy + hexSize * 0.22 + fontSize * 1.05}
+                textAnchor="middle"
+                fontSize={fontSize}
+                fill="#E8D87A"
+                fontWeight="bold"
+              >
+                {terrain}
+              </SvgText>
+            </React.Fragment>
+          );
+        })}
+      </>
+    );
+  }
+);
 
 export const DevEconomicSvgOverlays = React.memo(
   function DevEconomicSvgOverlays({
