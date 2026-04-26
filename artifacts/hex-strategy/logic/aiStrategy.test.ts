@@ -379,16 +379,16 @@ describe("runAiTerritoryDecisionLoop", () => {
     expect(outside).toBe(true);
   });
 
-  it("skips all purchases when income would go negative", async () => {
-    // AI owns only (0,0) — income = 2, upkeep = 0, balance = 50.
+  it("skips all purchases when balance is too low to afford any unit", async () => {
+    // AI owns only (0,0) — income = 2, upkeep = 0, balance = 0.
     // Enemy owns (1,0) with no entity, adjacent to (0,0).
-    // canAfford(simple_unit cost=10, upkeep=3): income(2) - upkeep(0) - 3 = -1 < 0 → blocked.
-    // Upkeep for advanced/expert units is even higher, so all buy paths are skipped.
+    // canAfford(simple_unit cost=10, ...): 0 >= 10 → false → blocked.
+    // All unit types cost at least 10, so all buy paths are skipped.
     const tiles = [
       makeTile(0, 0, "ai1"),
       makeTile(1, 0, "player"),
     ];
-    const balances = new Map([["0,0", 50]]);
+    const balances = new Map([["0,0", 0]]);
     const aiCtx = makeAiCtx(tiles, "ai1", new Map(), balances);
     const exec = makeExec();
 

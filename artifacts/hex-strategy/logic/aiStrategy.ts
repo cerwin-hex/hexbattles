@@ -994,6 +994,8 @@ export async function runAiTurn(
     );
     if (aiTiles.length === 0) continue;
 
+    const cache = new TerritoryCache();
+
     for (const startTile of aiTiles) {
       if (visited.has(startTile.key)) continue;
       const territory = getContiguousTerritory(ws.tileMap, startTile.key, aiOwner, ws.entities);
@@ -1046,8 +1048,6 @@ export async function runAiTurn(
       }
 
       if (currentTurn === 1) continue;
-
-      const cache = new TerritoryCache();
 
       const aiCtx: AiContext = {
         get tileMap() { return ws.tileMap; },
