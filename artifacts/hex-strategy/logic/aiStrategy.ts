@@ -60,7 +60,7 @@ export async function runAiTerritoryDecisionLoop(
     const currUpkeep = calcTerritoryUpkeep(currTerr, aiCtx.entities);
 
     const canAfford = (cost: number, extraUpkeep: number = 0): boolean =>
-      currBal >= cost && currIncome - (currUpkeep + extraUpkeep) >= 0;
+      currBal >= cost && currBal + (currIncome - (currUpkeep + extraUpkeep)) >= 0;
 
     const currMaxStr = currTerr.reduce((best, t) => {
       const e = aiCtx.entities.get(t.key);
