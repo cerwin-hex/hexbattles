@@ -571,6 +571,34 @@ export function getContiguousTerritory(
   return result;
 }
 
+/**
+ * Lightweight per-turn cache for `getContiguousTerritory` results.
+ * Key: `"${startKey}:${owner}"`. Assumes the underlying tileMap and entities
+ * are immutable for the lifetime of the cache; call `clear()` whenever either
+ * mutates so stale results are never returned.
+ */
+export class TerritoryCache {
+  private _cache = new Map<string, HexTile[]>();
+
+  get(
+    tileMap: Map<string, HexTile>,
+    startKey: string,
+    owner: TerritoryOwner,
+    entities?: Map<string, EntityType>,
+  ): HexTile[] {
+    const cacheKey = `${startKey}:${owner}`;
+    const hit = this._cache.get(cacheKey);
+    if (hit !== undefined) return hit;
+    const result = getContiguousTerritory(tileMap, startKey, owner, entities);
+    this._cache.set(cacheKey, result);
+    return result;
+  }
+
+  clear(): void {
+    this._cache.clear();
+  }
+}
+
 /** Stable territory ID: lexicographically smallest tile key. Order-independent. */
 export function getTerritoryId(tiles: HexTile[]): string | null {
   if (tiles.length === 0) return null;

@@ -8,6 +8,7 @@ import {
   getTerritoryId,
   getValidMoves,
   getMoveCost,
+  TerritoryCache,
 } from "@/utils/hexGrid";
 import { calcTerritoryUpkeep, mergedUnitType } from "@/logic/gameLogic";
 
@@ -19,6 +20,7 @@ export interface AiContext {
   spentUnits: Set<string>;
   partialMoves: Map<string, number>;
   aiOwner: TerritoryOwner;
+  territoryCache?: TerritoryCache;
 }
 
 export function dtCountClusters(
@@ -79,7 +81,9 @@ export function dtCaptureNegatesIncome(
 ): boolean {
   const capTile = ctx.tileMap.get(captureKey);
   if (!capTile || capTile.owner !== enemyOwner) return false;
-  const origTerr = getContiguousTerritory(ctx.tileMap, captureKey, enemyOwner, ctx.entities);
+  const origTerr = ctx.territoryCache
+    ? ctx.territoryCache.get(ctx.tileMap, captureKey, enemyOwner, ctx.entities)
+    : getContiguousTerritory(ctx.tileMap, captureKey, enemyOwner, ctx.entities);
   const origId = getTerritoryId(origTerr);
   const enemyBal = origId ? (ctx.balances.get(origId) ?? 0) : 0;
   const simMap = new Map(ctx.tileMap);

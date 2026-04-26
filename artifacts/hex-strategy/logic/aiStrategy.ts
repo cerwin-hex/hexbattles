@@ -11,6 +11,7 @@ import {
   TERRAIN_INCOME,
   CITY_BONUS,
   recalculateTerritoriesForCapture,
+  TerritoryCache,
 } from "@/utils/hexGrid";
 import { calcTerritoryUpkeep, mergedUnitType } from "@/logic/gameLogic";
 import {
@@ -42,11 +43,16 @@ export async function runAiTerritoryDecisionLoop(
 ): Promise<void> {
   const aiOwner = aiCtx.aiOwner;
 
+  const getCT = (key: string, owner: TerritoryOwner): HexTile[] =>
+    aiCtx.territoryCache
+      ? aiCtx.territoryCache.get(aiCtx.tileMap, key, owner, aiCtx.entities)
+      : getContiguousTerritory(aiCtx.tileMap, key, owner, aiCtx.entities);
+
   let dtIter = 0;
   while (dtIter++ < 100) {
     if (!isTurnActive()) return;
 
-    const currTerr = getContiguousTerritory(aiCtx.tileMap, startTileKey, aiOwner, aiCtx.entities);
+    const currTerr = getCT(startTileKey, aiOwner);
     if (currTerr.length === 0) break;
     const currTerrKeys = new Set(currTerr.map((t) => t.key));
     const currTid = getTerritoryId(currTerr);
@@ -86,7 +92,7 @@ export async function runAiTerritoryDecisionLoop(
           const nt = aiCtx.tileMap.get(nk);
           if (!nt || nt.owner === aiOwner || nt.owner === "neutral" || visitedAdj.has(nk)) continue;
           visitedAdj.add(nk);
-          const adjTerr = getContiguousTerritory(aiCtx.tileMap, nk, nt.owner as TerritoryOwner, aiCtx.entities);
+          const adjTerr = getCT(nk, nt.owner as TerritoryOwner);
           for (const t of adjTerr) adjacentEnemyTileKeys.add(t.key);
         }
       }
@@ -369,7 +375,7 @@ export async function runAiTerritoryDecisionLoop(
               const nt2 = aiCtx.tileMap.get(nk2);
               return (nt2 && nt2.owner === aiOwner && !currTerrKeys.has(nk2)) ? nk2 : null;
             }).find((k) => k !== null);
-            const sz = otherKey ? getContiguousTerritory(aiCtx.tileMap, otherKey, aiOwner, aiCtx.entities).length : 0;
+            const sz = otherKey ? getCT(otherKey, aiOwner).length : 0;
             bridges.push({ tile: mk, sz });
             continue;
           }
@@ -436,7 +442,7 @@ export async function runAiTerritoryDecisionLoop(
           const nk = tileKey(tq + dq, tr + dr);
           const nt = aiCtx.tileMap.get(nk);
           if (!nt || nt.owner === aiOwner || nt.owner === "neutral") return false;
-          return getContiguousTerritory(aiCtx.tileMap, nk, nt.owner as TerritoryOwner, aiCtx.entities).length >= 2;
+          return getCT(nk, nt.owner as TerritoryOwner).length >= 2;
         });
       });
       if (undefBorder.length > 0) {
@@ -489,7 +495,7 @@ export async function runAiTerritoryDecisionLoop(
         const visLarge = new Set<string>();
         for (const t of Array.from(aiCtx.tileMap.values())) {
           if (t.owner === aiOwner || t.owner === "neutral" || visLarge.has(t.key)) continue;
-          const comp = getContiguousTerritory(aiCtx.tileMap, t.key, t.owner as TerritoryOwner, aiCtx.entities);
+          const comp = getCT(t.key, t.owner as TerritoryOwner);
           for (const ct of comp) visLarge.add(ct.key);
           if (comp.length > largestEnemySz) { largestEnemySz = comp.length; largestEnemyKey = t.key; }
         }
@@ -676,7 +682,7 @@ export async function runAiTerritoryDecisionLoop(
             const zoc = getMaxEnemyZoC(mk, aiOwner, aiCtx.entities, aiCtx.tileMap);
             if (ENTITY_META[ue].strength <= zoc) continue;
             if (mt.terrain === "lake") continue;
-            const sz = getContiguousTerritory(aiCtx.tileMap, mk, mt.owner as TerritoryOwner, aiCtx.entities).length;
+            const sz = getCT(mk, mt.owner as TerritoryOwner).length;
             emptyEnemyMoves.push({ fk: uk, tk: mk, sz });
           }
         }
@@ -716,7 +722,7 @@ export async function runAiTerritoryDecisionLoop(
                 if (nt.terrain === "lake") continue;
                 const zoc = getMaxEnemyZoC(nk, aiOwner, aiCtx.entities, aiCtx.tileMap);
                 if (str > zoc) {
-                  const sz = getContiguousTerritory(aiCtx.tileMap, nk, nt.owner as TerritoryOwner, aiCtx.entities).length;
+                  const sz = getCT(nk, nt.owner as TerritoryOwner).length;
                   if (!best || sz > best.sz) best = { tile: nk, sz };
                 }
               }
@@ -1041,6 +1047,8 @@ export async function runAiTurn(
 
       if (currentTurn === 1) continue;
 
+      const cache = new TerritoryCache();
+
       const aiCtx: AiContext = {
         get tileMap() { return ws.tileMap; },
         get entities() { return ws.entities; },
@@ -1049,6 +1057,7 @@ export async function runAiTurn(
         get spentUnits() { return ws.spentUnits; },
         get partialMoves() { return ws.partialMoves; },
         get aiOwner() { return aiOwner; },
+        territoryCache: cache,
       };
 
       const dtAwait = async (): Promise<void> => {
@@ -1169,6 +1178,7 @@ export async function runAiTurn(
           ws.graveyard, ws.ruins,
         );
         cbs.state.setRuins(new Set(ws.ruins));
+        cache.clear();
 
         if (!cbs.refs.isDeveloperMode()) {
           await new Promise<void>((resolve) => {
@@ -1209,6 +1219,7 @@ export async function runAiTurn(
           } else {
             ws.entities.set(target, unitType);
           }
+          cache.clear();
           const buyTerr = getContiguousTerritory(ws.tileMap, startTile.key, aiOwner, ws.entities);
           const buyTid = getTerritoryId(buyTerr);
           if (buyTid) ws.balances.set(buyTid, (ws.balances.get(buyTid) ?? 0) - cost);
@@ -1230,6 +1241,7 @@ export async function runAiTurn(
             ws.entities.delete(target);
             ws.entities.set(target, unitType);
           }
+          cache.clear();
           ws.balances = cbs.recalculateTerritoriesForCapture(
             target, aiOwner, previousOwner, prevSnapshot, ws.tileMap, ws.balances, ws.entities,
           );
@@ -1258,6 +1270,7 @@ export async function runAiTurn(
         if (!cbs.refs.isTurnActive()) return false;
         ws.entities = new Map(ws.entities);
         ws.entities.set(targetKey, to);
+        cache.clear();
         ws.balances = new Map(ws.balances);
         const buyTerr = getContiguousTerritory(ws.tileMap, startTile.key, aiOwner, ws.entities);
         const buyTid = getTerritoryId(buyTerr);
@@ -1280,6 +1293,7 @@ export async function runAiTurn(
           ws.tileMap.set(targetKey, { ...targetTile, owner: aiOwner });
           ws.entities = new Map(ws.entities);
           ws.entities.set(targetKey, "bridge");
+          cache.clear();
           ws.balances = new Map(ws.balances);
           ws.balances = cbs.recalculateTerritoriesForCapture(
             targetKey, aiOwner, "neutral", prevSnapshot, ws.tileMap, ws.balances, ws.entities,
@@ -1305,6 +1319,7 @@ export async function runAiTurn(
           ws.entities = new Map(ws.entities);
           ws.entities.set(targetKey, buildingType);
         }
+        cache.clear();
         const buyTerr = getContiguousTerritory(ws.tileMap, startTile.key, aiOwner, ws.entities);
         const buyTid = getTerritoryId(buyTerr);
         if (buyTid) ws.balances.set(buyTid, (ws.balances.get(buyTid) ?? 0) - cost);
@@ -1329,6 +1344,7 @@ export async function runAiTurn(
             cbs.state.setMutableTileMap(new Map(ws.tileMap));
           }
         }
+        cache.clear();
         cbs.state.setEntities(new Map(ws.entities));
         cbs.state.setTerritoryBalances(new Map(ws.balances));
         await dtAwait();
