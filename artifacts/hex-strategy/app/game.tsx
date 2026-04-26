@@ -611,6 +611,8 @@ export default function GameScreen() {
   useEffect(() => {
     if (
       hasAffordableTerritories &&
+      !selectedTileKey &&
+      !selectedEntityKey &&
       !armedEntityId &&
       !isAiTurn &&
       gameResult === null
@@ -627,7 +629,7 @@ export default function GameScreen() {
     return () => {
       cancelAnimation(territoryPulseVal);
     };
-  }, [hasAffordableTerritories, armedEntityId, isAiTurn, gameResult]);
+  }, [hasAffordableTerritories, selectedTileKey, selectedEntityKey, armedEntityId, isAiTurn, gameResult]);
 
   const devEconomicOverlays = useDevEconomicOverlays({
     isDeveloperModeActive,
