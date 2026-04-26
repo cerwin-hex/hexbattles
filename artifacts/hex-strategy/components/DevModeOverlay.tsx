@@ -2,6 +2,7 @@ import React from "react";
 import { Text, TouchableOpacity } from "react-native";
 import { Rect, Text as SvgText } from "react-native-svg";
 import styles from "@/app/gameStyles";
+import type { HexTile } from "@/types";
 
 interface DevModeOverlayProps {
   isDeveloperModeActive: boolean;
@@ -36,6 +37,53 @@ export function DevModeOverlay({
     </TouchableOpacity>
   );
 }
+
+const TERRAIN_ABBR: Record<string, string> = {
+  grass: "Grs",
+  forest: "Frs",
+  desert: "Dst",
+  mountain: "Mtn",
+  lake: "Lke",
+};
+
+interface DevTerrainSvgLabelsProps {
+  isDeveloperModeActive: boolean;
+  tileDataMap: Map<string, { cx: number; cy: number }>;
+  activeTileMap: Map<string, HexTile>;
+  hexSize: number;
+}
+
+export const DevTerrainSvgLabels = React.memo(
+  function DevTerrainSvgLabels({
+    isDeveloperModeActive,
+    tileDataMap,
+    activeTileMap,
+    hexSize,
+  }: DevTerrainSvgLabelsProps) {
+    if (!isDeveloperModeActive) return null;
+    const fontSize = Math.max(6, Math.min(9, hexSize * 0.24));
+    const items: React.ReactElement[] = [];
+    tileDataMap.forEach(({ cx, cy }, key) => {
+      const tile = activeTileMap.get(key);
+      if (!tile) return;
+      const label = TERRAIN_ABBR[tile.terrain] ?? tile.terrain;
+      items.push(
+        <SvgText
+          key={`terrain-${key}`}
+          x={cx}
+          y={cy + hexSize * 0.38}
+          textAnchor="middle"
+          fontSize={fontSize}
+          fill="rgba(255,255,255,0.75)"
+          fontWeight="bold"
+        >
+          {label}
+        </SvgText>
+      );
+    });
+    return <>{items}</>;
+  }
+);
 
 interface DevEconOverlay {
   cx: number;

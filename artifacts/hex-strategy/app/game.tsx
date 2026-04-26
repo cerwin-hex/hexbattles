@@ -85,7 +85,7 @@ import EntityPanel from "@/components/EntityPanel";
 import GameModals from "@/components/GameModals";
 import type { EconBreakdown } from "@/components/GameModals";
 import BottomActionMenu from "@/components/BottomActionMenu";
-import { DevModeOverlay, DevEconomicSvgOverlays } from "@/components/DevModeOverlay";
+import { DevModeOverlay, DevEconomicSvgOverlays, DevTerrainSvgLabels } from "@/components/DevModeOverlay";
 
 import {
   HexTileTerrainLayer,
@@ -1081,6 +1081,12 @@ export default function GameScreen() {
 
             <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
               <Svg width={boardW} height={boardH}>
+                <DevTerrainSvgLabels
+                  isDeveloperModeActive={isDeveloperModeActive}
+                  tileDataMap={tileDataMap}
+                  activeTileMap={activeTileMap}
+                  hexSize={HEX_SIZE}
+                />
                 <DevEconomicSvgOverlays
                   isDeveloperModeActive={isDeveloperModeActive}
                   devEconomicOverlays={devEconomicOverlays}
