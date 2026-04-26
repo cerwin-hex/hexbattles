@@ -76,7 +76,7 @@ export function applySingleHexPenalty(
     if (id) balances.set(id, 0);
     const entity = entities.get(singleKey);
     const lt = tileMap.get(singleKey);
-    if (entity) {
+    if (entity && entity !== "rebel") {
       entities.delete(singleKey);
       if (ENTITY_META[entity].isUnit) {
         graveyard.add(singleKey);
