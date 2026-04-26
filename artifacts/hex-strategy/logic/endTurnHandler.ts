@@ -185,9 +185,10 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
             (cities.has(t.key) ? CITY_BONUS : 0)
           );
         }, 0);
+        const landTileCount = territory.filter(t => t.terrain !== "lake").length;
         const incomeModifier =
-          aiDifficulty === "super_hard" ? territory.length :
-          aiDifficulty === "super_easy" ? -territory.length : 0;
+          aiDifficulty === "super_hard" ? landTileCount :
+          aiDifficulty === "super_easy" ? -landTileCount : 0;
         const upkeep = calcTerritoryUpkeep(territory, nextEntities);
         const current = nextBalances.get(territoryId) ?? 0;
         const delta = income + incomeModifier - upkeep;
