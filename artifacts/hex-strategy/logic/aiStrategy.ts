@@ -261,7 +261,7 @@ export async function runAiTerritoryDecisionLoop(
           })) continue;
           const rawPlacements = currTerr.filter((t) => {
             if (t.terrain === "mountain" || t.terrain === "lake") return false;
-            if (aiCtx.entities.has(t.key)) return false;
+            if (aiCtx.entities.has(t.key) || aiCtx.cities.has(t.key)) return false;
             const [tq, tr] = t.key.split(",").map(Number);
             return hexDistance(tq, tr, seqE, serE) <= 5;
           }).sort((a, b) => {
@@ -287,7 +287,7 @@ export async function runAiTerritoryDecisionLoop(
           })) continue;
           const rawPlacements = currTerr.filter((t) => {
             if (t.terrain === "mountain" || t.terrain === "lake") return false;
-            if (aiCtx.entities.has(t.key)) return false;
+            if (aiCtx.entities.has(t.key) || aiCtx.cities.has(t.key)) return false;
             const [tq, tr] = t.key.split(",").map(Number);
             return HEX_EDGES.some(({ dir: [dq, dr] }) => {
               const nk = tileKey(tq + dq, tr + dr);
@@ -442,7 +442,7 @@ export async function runAiTerritoryDecisionLoop(
       if (undefBorder.length > 0) {
         const innerCands = currTerr.filter((t) => {
           if (t.terrain === "mountain" || t.terrain === "lake") return false;
-          if (aiCtx.entities.has(t.key)) return false;
+          if (aiCtx.entities.has(t.key) || aiCtx.cities.has(t.key)) return false;
           if (currBorderTiles.some((bt) => bt.key === t.key)) return false;
           const [tq, tr] = t.key.split(",").map(Number);
           return undefBorder.some((bt) => {
@@ -452,7 +452,7 @@ export async function runAiTerritoryDecisionLoop(
         });
         const borderCands = undefBorder.filter((t) => {
           if (t.terrain === "mountain" || t.terrain === "lake") return false;
-          return !aiCtx.entities.has(t.key);
+          return !aiCtx.entities.has(t.key) && !aiCtx.cities.has(t.key);
         });
         const rawPlacementsC = innerCands.length > 0 ? innerCands : borderCands;
         const placementsC = dtSpacedPlacements(rawPlacementsC, aiCtx);
@@ -1006,6 +1006,7 @@ export async function runAiTurn(
                 t.terrain !== "mountain" &&
                 t.terrain !== "lake" &&
                 !ws.entities.has(t.key) &&
+                !ws.cities.has(t.key) &&
                 !ws.graveyard.has(t.key),
             )
             .map((t) => t.key);
