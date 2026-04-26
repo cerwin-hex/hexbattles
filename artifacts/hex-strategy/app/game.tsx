@@ -637,7 +637,6 @@ export default function GameScreen() {
     entities,
     cities,
     tileDataMap,
-    aiDifficulty,
     aiStateMap,
   });
 
@@ -1125,6 +1124,7 @@ export default function GameScreen() {
           isDeveloperModeActive={isDeveloperModeActive}
           setIsDeveloperModeActive={setIsDeveloperModeActive}
           topInset={topInset}
+          aiDifficulty={aiDifficulty}
         />
       )}
 

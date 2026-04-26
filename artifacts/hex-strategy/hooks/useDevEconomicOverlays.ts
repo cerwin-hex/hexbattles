@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { EntityType, HexTile, TerritoryOwner, Difficulty, AiState } from "@/types";
+import type { EntityType, HexTile, TerritoryOwner, AiState } from "@/types";
 import {
   CITY_BONUS,
   TERRAIN_INCOME,
@@ -25,7 +25,6 @@ interface UseDevEconomicOverlaysParams {
   entities: Map<string, EntityType>;
   cities: Set<string>;
   tileDataMap: Map<string, { cx: number; cy: number }>;
-  aiDifficulty: Difficulty;
   aiStateMap: Map<string, AiState>;
 }
 
@@ -37,23 +36,12 @@ export function useDevEconomicOverlays({
   entities,
   cities,
   tileDataMap,
-  aiDifficulty,
   aiStateMap,
 }: UseDevEconomicOverlaysParams): DevEconomicOverlay[] {
   return useMemo<DevEconomicOverlay[]>(() => {
     if (!isDeveloperModeActive) return [];
     const result: DevEconomicOverlay[] = [];
     const visited = new Set<string>();
-    const diffLabel =
-      aiDifficulty === "super_hard"
-        ? "S.Hrd"
-        : aiDifficulty === "hard"
-          ? "Hrd"
-          : aiDifficulty === "medium"
-            ? "Med"
-            : aiDifficulty === "easy"
-              ? "Esy"
-              : "S.Esy";
     for (const aiOwner of aiOwners) {
       for (const tile of Array.from(activeTileMap.values())) {
         if (tile.owner !== aiOwner || visited.has(tile.key)) continue;
@@ -79,8 +67,7 @@ export function useDevEconomicOverlays({
         const net = income - upkeep;
         const label = net >= 0 ? `${balance}(+${net})` : `${balance}(${net})`;
         const stateVal = aiStateMap.get(territoryId);
-        const stateLabel = stateVal === "attacking" ? "Atk" : "Def";
-        const aiLabel = `${diffLabel}·${stateLabel}`;
+        const aiLabel = stateVal === "attacking" ? "Atk" : "Def";
         const central = findCentralTile(territory);
         if (!central) continue;
         const [centQ, centR] = central.key.split(",").map(Number);
@@ -122,7 +109,6 @@ export function useDevEconomicOverlays({
     entities,
     cities,
     tileDataMap,
-    aiDifficulty,
     aiStateMap,
   ]);
 }

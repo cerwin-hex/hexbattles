@@ -1,39 +1,74 @@
 import React from "react";
-import { Text, TouchableOpacity } from "react-native";
+import { Text, TouchableOpacity, View } from "react-native";
 import { Rect, Text as SvgText } from "react-native-svg";
 import styles from "@/app/gameStyles";
+import type { Difficulty } from "@/types";
+
+function diffLabel(d: Difficulty): string {
+  if (d === "super_hard") return "S.Hard";
+  if (d === "hard") return "Hard";
+  if (d === "medium") return "Med";
+  return "Easy";
+}
 
 interface DevModeOverlayProps {
   isDeveloperModeActive: boolean;
   setIsDeveloperModeActive: React.Dispatch<React.SetStateAction<boolean>>;
   topInset: number;
+  aiDifficulty: Difficulty;
 }
 
 export function DevModeOverlay({
   isDeveloperModeActive,
   setIsDeveloperModeActive,
   topInset,
+  aiDifficulty,
 }: DevModeOverlayProps) {
   return (
-    <TouchableOpacity
-      style={[
-        styles.devBtn,
-        isDeveloperModeActive ? styles.devBtnActive : styles.devBtnInactive,
-        { top: topInset + 4, right: 4, position: "absolute", zIndex: 20 },
-      ]}
-      onPress={() => setIsDeveloperModeActive((v) => !v)}
+    <View
+      style={{
+        position: "absolute",
+        top: topInset + 4,
+        right: 4,
+        zIndex: 20,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+      }}
     >
-      <Text
+      {isDeveloperModeActive && (
+        <View
+          style={{
+            backgroundColor: "rgba(0,0,0,0.6)",
+            borderRadius: 4,
+            paddingHorizontal: 5,
+            paddingVertical: 2,
+          }}
+        >
+          <Text style={{ color: "#FFD700", fontSize: 11, fontWeight: "bold" }}>
+            {diffLabel(aiDifficulty)}
+          </Text>
+        </View>
+      )}
+      <TouchableOpacity
         style={[
-          styles.devBtnText,
-          isDeveloperModeActive
-            ? styles.devBtnTextActive
-            : styles.devBtnTextInactive,
+          styles.devBtn,
+          isDeveloperModeActive ? styles.devBtnActive : styles.devBtnInactive,
         ]}
+        onPress={() => setIsDeveloperModeActive((v) => !v)}
       >
-        DEV
-      </Text>
-    </TouchableOpacity>
+        <Text
+          style={[
+            styles.devBtnText,
+            isDeveloperModeActive
+              ? styles.devBtnTextActive
+              : styles.devBtnTextInactive,
+          ]}
+        >
+          DEV
+        </Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 

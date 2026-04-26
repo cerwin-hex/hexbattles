@@ -273,7 +273,6 @@ export default function MainMenu() {
             <Text style={styles.label}>AI Difficulty</Text>
             <View style={styles.pills}>
               {([
-                ['super_easy', 'Super', 'Easy'],
                 ['easy', null, 'Easy'],
                 ['medium', null, 'Medium'],
                 ['hard', null, 'Hard'],
