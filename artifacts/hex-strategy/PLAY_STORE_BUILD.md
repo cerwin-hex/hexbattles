@@ -68,11 +68,15 @@ eas build --platform android --profile production
 
 ## Step 7 — Download the .aab file
 
-When the build finishes, EAS will print a download link in the terminal. You can also find it at:
+When the build finishes, EAS will print a download link in the terminal. Download it with this command (the build ID is shown at the end of the build):
+
+```bash
+eas build:download --id BUILD_ID_FROM_TERMINAL
+```
+
+Or you can find all your builds and download from the web dashboard:
 
 https://expo.dev/accounts/YOUR_USERNAME/projects/hex-strategy/builds
-
-Click the build and download the `.aab` file.
 
 ## Step 8 — Upload to Google Play Console
 
