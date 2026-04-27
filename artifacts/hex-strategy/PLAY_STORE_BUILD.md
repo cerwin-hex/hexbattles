@@ -42,6 +42,20 @@ Enter your Expo account email and password.
 npm install
 ```
 
+## Step 5b — Set your production domain in app.json
+
+Open `app.json` and find this line:
+
+```json
+"origin": "https://YOUR-DEPLOYED-DOMAIN.replit.app/"
+```
+
+Replace `YOUR-DEPLOYED-DOMAIN` with the actual domain of your deployed Replit app (the one you publish to, ending in `.replit.app`). This tells the app where your API server lives in production.
+
+If you have not deployed the app yet, deploy it first from Replit, then copy the domain here before building.
+
+---
+
 ## Step 6 — Build the .aab file for Google Play
 
 ```bash
