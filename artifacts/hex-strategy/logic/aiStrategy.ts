@@ -1458,6 +1458,6 @@ export async function runAiTurn(
   cbs.state.setRuins(new Set(ws.ruins));
   cbs.state.setFreeTowerUsedTiles(new Map(ws.freeTowerUsed));
   cbs.refs.setAiTurn(false);
-  cbs.state.setIsAiTurn(false);
   await cbs.awaitPostAiResume();
+  cbs.state.setIsAiTurn(false);
 }
