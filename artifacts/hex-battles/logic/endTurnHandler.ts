@@ -127,9 +127,12 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
       const delta = income - upkeep;
       const newBalance = current + delta;
       if (newBalance < 0) {
+        // Bankruptcy: reserves + income could not cover upkeep, so the balance
+        // is fully drained paying as much of the bill as possible (lands at 0),
+        // then units are liquidated, and if upkeep still exceeds income,
+        // buildings are demolished.
         nextBalances.set(territoryId, 0);
         nextEntities = new Map(nextEntities);
-        // First pass: kill units, accumulate saved upkeep
         let unitUpkeepSaved = 0;
         for (const t of territory) {
           const e = nextEntities.get(t.key);
@@ -139,14 +142,12 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
             nextGraveyard.add(t.key);
           }
         }
-        // Second pass: if ongoing delta is STILL negative after units die, demolish buildings
         if (delta + unitUpkeepSaved < 0) {
           for (const t of territory) {
             const e = nextEntities.get(t.key);
             if (e && !ENTITY_META[e].isUnit && e !== "rebel" && e !== "city") {
               nextEntities.delete(t.key);
               nextRuins.add(t.key);
-              // Bridge removed: lake tile loses owner (non-occupiable without bridge)
               if (e === "bridge") {
                 const lt = mutableTileMap.get(t.key);
                 if (lt) mutableTileMap.set(t.key, { ...lt, owner: "neutral" });
@@ -160,9 +161,11 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
     }
   }
 
-  // AI income and upkeep start from round 3 (same cadence as the player:
-  // neither side earns income in rounds 1 or 2).
-  if (turn > 2) {
+  // AI income and upkeep follow the same cadence as the player: suspended in
+  // round 1, then credited at the end of every subsequent end-turn. The player
+  // goes first each round, so income is computed once here for both sides at
+  // the same point in time.
+  if (turn !== 1) {
     for (const aiOwner of aiOwners) {
       const aiVisited = new Set<string>();
       for (const tile of Array.from(activeTileMap.values())) {
@@ -192,9 +195,11 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
         const delta = income + incomeModifier - upkeep;
         const newBalance = current + delta;
         if (newBalance < 0) {
+          // Bankruptcy: reserves + income could not cover upkeep, so the
+          // balance is drained to 0 and units (and possibly buildings) are
+          // liquidated.
           nextBalances.set(territoryId, 0);
           nextEntities = new Map(nextEntities);
-          // First pass: kill units, accumulate saved upkeep
           let unitUpkeepSaved = 0;
           for (const t of territory) {
             const e = nextEntities.get(t.key);
@@ -204,14 +209,12 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
               nextGraveyard.add(t.key);
             }
           }
-          // Second pass: if ongoing delta is STILL negative after units die, demolish buildings
           if (delta + unitUpkeepSaved < 0) {
             for (const t of territory) {
               const e = nextEntities.get(t.key);
               if (e && !ENTITY_META[e].isUnit && e !== "rebel" && e !== "city") {
                 nextEntities.delete(t.key);
                 nextRuins.add(t.key);
-                // Bridge removed: lake tile loses owner (non-occupiable without bridge)
                 if (e === "bridge") {
                   const lt = mutableTileMap.get(t.key);
                   if (lt) mutableTileMap.set(t.key, { ...lt, owner: "neutral" });
@@ -228,19 +231,21 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
 
   // Rebel spawning and spreading is suspended in round 1
   if (turn !== 1) {
-    for (const gravKey of Array.from(graveyard)) {
+    // Clone nextEntities once before the spawn loops so we can mutate in-place.
+    // Earlier this clone happened inside the loop per spawn, which made the
+    // whole pass quadratic once graveyard/ruins accumulated late in the game.
+    nextEntities = new Map(nextEntities);
+    for (const gravKey of graveyard) {
       const gravTile = activeTileMap.get(gravKey);
       if (gravTile?.terrain === "lake") continue;
       if (!nextEntities.has(gravKey) && Math.random() < 0.75) {
-        nextEntities = new Map(nextEntities);
         nextEntities.set(gravKey, "rebel");
       }
     }
-    for (const ruinKey of Array.from(ruins)) {
+    for (const ruinKey of ruins) {
       const ruinTile = activeTileMap.get(ruinKey);
       if (ruinTile?.terrain === "lake") continue;
       if (!nextEntities.has(ruinKey) && Math.random() < 0.75) {
-        nextEntities = new Map(nextEntities);
         nextEntities.set(ruinKey, "rebel");
       }
     }
@@ -255,7 +260,7 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
     ];
     const preSpawnEntities = nextEntities;
     const rebelSpawns = new Map(nextEntities);
-    for (const tile of Array.from(activeTileMap.values())) {
+    for (const tile of activeTileMap.values()) {
       if (!allOwners.includes(tile.owner)) continue;
       if (tile.terrain === "mountain" || tile.terrain === "lake") continue;
       if (preSpawnEntities.has(tile.key)) continue;

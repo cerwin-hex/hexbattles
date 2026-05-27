@@ -35,9 +35,12 @@ export function computeBorderEdges(
   const isNewBoard =
     !prev || prev.tileData !== tileData || prev.INNER_SIZE !== INNER_SIZE;
 
+  // Reuse the previous perTileEdges map by mutating it in place. The cache is
+  // private to this module and the returned BorderEdge[] is rebuilt every call,
+  // so the map itself is never observed by anything outside.
   const perTileEdges: Map<string, BorderEdge[]> = isNewBoard
     ? new Map()
-    : new Map(prev!.perTileEdges);
+    : prev!.perTileEdges;
 
   const changedKeys = new Set<string>();
   if (isNewBoard) {
@@ -46,10 +49,8 @@ export function computeBorderEdges(
     for (const [key, tile] of mutableTileMap) {
       if (prev!.mutableTileMap.get(key)?.owner !== tile.owner) {
         changedKeys.add(key);
-        for (const {
-          dir: [dq, dr],
-        } of ORDERED_EDGES) {
-          const [q, r] = key.split(",").map(Number);
+        const [q, r] = key.split(",").map(Number);
+        for (const { dir: [dq, dr] } of ORDERED_EDGES) {
           changedKeys.add(tileKey(q + dq, r + dr));
         }
       }
@@ -57,10 +58,8 @@ export function computeBorderEdges(
     for (const [key] of prev!.mutableTileMap) {
       if (!mutableTileMap.has(key)) {
         changedKeys.add(key);
-        for (const {
-          dir: [dq, dr],
-        } of ORDERED_EDGES) {
-          const [q, r] = key.split(",").map(Number);
+        const [q, r] = key.split(",").map(Number);
+        for (const { dir: [dq, dr] } of ORDERED_EDGES) {
           changedKeys.add(tileKey(q + dq, r + dr));
         }
       }
@@ -191,7 +190,7 @@ export function computeOuterTerritoryEdges(
 
   const perTileEdges: Map<string, BorderEdge[]> = isNewBoard
     ? new Map()
-    : new Map(prev!.perTileEdges);
+    : prev!.perTileEdges;
 
   const changedKeys = new Set<string>();
   if (isNewBoard) {
@@ -200,10 +199,8 @@ export function computeOuterTerritoryEdges(
     for (const [key, tile] of mutableTileMap) {
       if (prev!.mutableTileMap.get(key)?.owner !== tile.owner) {
         changedKeys.add(key);
-        for (const {
-          dir: [dq, dr],
-        } of ORDERED_EDGES) {
-          const [q, r] = key.split(",").map(Number);
+        const [q, r] = key.split(",").map(Number);
+        for (const { dir: [dq, dr] } of ORDERED_EDGES) {
           changedKeys.add(tileKey(q + dq, r + dr));
         }
       }
@@ -211,10 +208,8 @@ export function computeOuterTerritoryEdges(
     for (const [key] of prev!.mutableTileMap) {
       if (!mutableTileMap.has(key)) {
         changedKeys.add(key);
-        for (const {
-          dir: [dq, dr],
-        } of ORDERED_EDGES) {
-          const [q, r] = key.split(",").map(Number);
+        const [q, r] = key.split(",").map(Number);
+        for (const { dir: [dq, dr] } of ORDERED_EDGES) {
           changedKeys.add(tileKey(q + dq, r + dr));
         }
       }

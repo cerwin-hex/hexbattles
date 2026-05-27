@@ -1405,10 +1405,13 @@ export async function runAiTurn(
       const delta = income - upkeep;
       const newBalance = current + delta;
       if (newBalance < 0) {
+        // Bankruptcy: reserves + income could not cover upkeep, so the balance
+        // is drained to 0 and units (and possibly buildings) are liquidated.
         playerBankruptcyOccurred = true;
         ws.balances = new Map(ws.balances);
         ws.balances.set(territoryId, 0);
         ws.entities = new Map(ws.entities);
+        ws.graveyard = new Set(ws.graveyard);
         let unitUpkeepSaved = 0;
         for (const t of territory) {
           const e = ws.entities.get(t.key);
@@ -1421,16 +1424,15 @@ export async function runAiTurn(
             } else {
               ws.entities.delete(t.key);
             }
-            ws.graveyard = new Set(ws.graveyard);
             ws.graveyard.add(t.key);
           }
         }
         if (delta + unitUpkeepSaved < 0) {
+          ws.ruins = new Set(ws.ruins);
           for (const t of territory) {
             const e = ws.entities.get(t.key);
             if (e && !ENTITY_META[e].isUnit && e !== "rebel" && e !== "city") {
               ws.entities.delete(t.key);
-              ws.ruins = new Set(ws.ruins);
               ws.ruins.add(t.key);
             }
           }

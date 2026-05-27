@@ -210,17 +210,22 @@ describe("runAiTurn", () => {
       expect(ws.graveyard.has("1,0")).toBe(true);
     });
 
-    it("clamps the territory balance to 0 after bankruptcy", async () => {
+    it("drains the territory balance to 0 on bankruptcy", async () => {
+      // Reserve of 5 + income 4 = 9g available, upkeep 18g → bankrupt,
+      // reserves are spent paying as much of the bill as possible and the
+      // balance lands at 0; units are liquidated.
       const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
       const ws = makeEmptyWs(makeTileMap(tiles));
       const territoryId = "0,0";
-      ws.balances.set(territoryId, 0);
-      ws.entities.set("0,0", "simple_unit" as EntityType);
-      ws.entities.set("1,0", "simple_unit" as EntityType);
+      ws.balances.set(territoryId, 5);
+      ws.entities.set("0,0", "advanced_unit" as EntityType);
+      ws.entities.set("1,0", "advanced_unit" as EntityType);
 
       const cbs = makeCbs();
       await runAiTurn(ws, cbs, [], 2, "easy");
 
+      expect(ws.entities.has("0,0")).toBe(false);
+      expect(ws.entities.has("1,0")).toBe(false);
       expect(ws.balances.get(territoryId)).toBe(0);
     });
 

@@ -75,7 +75,8 @@ export default function GameModals({
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Leave Game?</Text>
             <Text style={styles.modalBody}>
-              Return to the main menu? Your progress will be lost.
+              Return to the main menu? You can resume from this point later,
+              unless you start a new game.
             </Text>
             <View style={styles.modalRow}>
               <TouchableOpacity
@@ -238,20 +239,20 @@ export default function GameModals({
               your conquest and take it all?
             </Text>
             <TouchableOpacity
-              style={[styles.gameResultBtn, styles.dominanceContinueBtn]}
+              style={[styles.gameResultBtn, styles.gameResultMenuBtn]}
               onPress={() => setShowDominancePopup(false)}
             >
               <Text
                 style={[
                   styles.gameResultBtnText,
-                  styles.dominanceContinueBtnText,
+                  styles.gameResultMenuBtnText,
                 ]}
               >
                 Keep Playing
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.gameResultBtn, styles.gameResultMenuBtn]}
+              style={[styles.gameResultBtn, styles.dominanceContinueBtn]}
               onPress={() => {
                 setShowDominancePopup(false);
                 setGameResult("victory");
@@ -260,7 +261,7 @@ export default function GameModals({
               <Text
                 style={[
                   styles.gameResultBtnText,
-                  styles.gameResultMenuBtnText,
+                  styles.dominanceContinueBtnText,
                 ]}
               >
                 Claim Victory

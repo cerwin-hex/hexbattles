@@ -120,6 +120,14 @@ import { useEndTurnPulse } from "@/hooks/useEndTurnPulse";
 import { handleTileTapLogic } from "@/logic/tileTapHandler";
 import { handleEndTurnLogic } from "@/logic/endTurnHandler";
 import { checkWinLossLogic } from "@/logic/winLossChecker";
+import {
+  clearSavedGame,
+  getSavedGameSync,
+  setSavedGame,
+} from "@/utils/savedGame";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const SPLASH_SEEN_KEY = "hex_battles_splash_seen";
 
 export default function GameScreen() {
 
@@ -127,13 +135,25 @@ export default function GameScreen() {
     tileCount: string;
     opponentCount: string;
     difficulty: string;
+    resume: string;
   }>();
-  const numTiles = Math.min(200, Math.max(40, Number(params.tileCount) || 100));
-  const numOpponents = Math.min(
-    4,
-    Math.max(1, Number(params.opponentCount) || 3),
+
+  // Capture the resume snapshot once at mount. After this, the in-memory
+  // saved game can be overwritten freely without disturbing initialization.
+  const resumeSnapshotRef = useRef<ReturnType<typeof getSavedGameSync>>(
+    params.resume === "1" ? getSavedGameSync() : null,
   );
-  const aiDifficulty = (params.difficulty as Difficulty) || "medium";
+  const resumeSnapshot = resumeSnapshotRef.current;
+
+  const numTiles = resumeSnapshot
+    ? resumeSnapshot.config.numTiles
+    : Math.min(200, Math.max(40, Number(params.tileCount) || 100));
+  const numOpponents = resumeSnapshot
+    ? resumeSnapshot.config.numOpponents
+    : Math.min(4, Math.max(1, Number(params.opponentCount) || 3));
+  const aiDifficulty: Difficulty = resumeSnapshot
+    ? resumeSnapshot.config.difficulty
+    : ((params.difficulty as Difficulty) || "medium");
   const aiDifficultyRef = useRef<Difficulty>(aiDifficulty);
   useEffect(() => {
     aiDifficultyRef.current = aiDifficulty;
@@ -155,10 +175,24 @@ export default function GameScreen() {
 
   const [gameKey, setGameKey] = useState(0);
 
-  const [showSplash, setShowSplash] = useState(true);
+  const [showSplash, setShowSplash] = useState(false);
   const splashOpacity = useSharedValue(1);
 
   useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(SPLASH_SEEN_KEY).then((val) => {
+      if (cancelled) return;
+      if (val !== null) return;
+      setShowSplash(true);
+      AsyncStorage.setItem(SPLASH_SEEN_KEY, "1").catch(() => {});
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!showSplash) return;
     const timer = setTimeout(() => {
       splashOpacity.value = withTiming(0, { duration: 600 }, (finished) => {
         if (finished) {
@@ -167,15 +201,18 @@ export default function GameScreen() {
       });
     }, 2000);
     return () => clearTimeout(timer);
-  }, []);
+  }, [showSplash]);
 
   const splashAnimStyle = useAnimatedStyle(() => ({
     opacity: splashOpacity.value,
   }));
 
   const tiles = useMemo(
-    () => generateHexGrid(numTiles, numOpponents + 1),
-    [numTiles, numOpponents, gameKey],
+    () =>
+      resumeSnapshot
+        ? resumeSnapshot.tiles
+        : generateHexGrid(numTiles, numOpponents + 1),
+    [numTiles, numOpponents, gameKey, resumeSnapshot],
   );
 
   const tileMap = useMemo(() => {
@@ -415,45 +452,66 @@ export default function GameScreen() {
   }, []);
 
   useEffect(() => {
-    if (tiles.length > 0) {
-      setTerritoryBalances(initTerritoryBalances(tiles, tileMap));
+    if (tiles.length === 0) return;
+
+    if (resumeSnapshot) {
+      const s = resumeSnapshot.state;
+      setMutableTileMap(s.mutableTileMap);
+      setEntities(s.entities);
+      setTerritoryBalances(s.territoryBalances);
+      setSpentUnits(s.spentUnits);
+      setCombatSpentUnits(s.combatSpentUnits);
+      setPartialMoves(s.partialMoves);
+      setLiveOwnerMap(s.liveOwnerMap);
+      setGraveyard(s.graveyard);
+      setRuins(s.ruins);
+      setCities(s.cities);
+      setFreeTowerUsedTiles(s.freeTowerUsedTiles);
+      setTurn(s.turn);
       setSelectedTileKey(null);
       setArmedEntityId(null);
       setSelectedEntityKey(null);
-      setSpentUnits(new Set());
-      setCombatSpentUnits(new Set());
-      setPartialMoves(new Map());
-      setMutableTileMap(new Map(tileMap));
-      setLiveOwnerMap(new Map());
-      setGraveyard(new Set());
-      setRuins(new Set());
-      setFreeTowerUsedTiles(new Map());
-
-      const initialEntities = new Map<string, EntityType>();
-      // Cities are tracked purely via the cities Set<string> (permanent tile keys).
-      // No "city" entity is stored in the entities map — units can occupy city
-      // tiles without erasing the city, and built cities work identically.
-      const initialCities = new Set(tiles.filter((t) => t.isCity).map((t) => t.key));
-      setCities(initialCities);
-      const owners: TerritoryOwner[] = [
-        "player",
-        "ai1",
-        "ai2",
-        "ai3",
-        "ai4",
-        "ai5",
-      ];
-      for (const tile of tiles) {
-        if (!owners.includes(tile.owner)) continue;
-        if (tile.terrain === "mountain" || tile.terrain === "lake") continue;
-        if (initialEntities.has(tile.key)) continue;
-        if (Math.random() < 0.1) {
-          initialEntities.set(tile.key, "rebel");
-        }
-      }
-      setEntities(initialEntities);
+      setIsAiTurn(false);
+      return;
     }
-  }, [tiles, tileMap]);
+
+    setTerritoryBalances(initTerritoryBalances(tiles, tileMap));
+    setSelectedTileKey(null);
+    setArmedEntityId(null);
+    setSelectedEntityKey(null);
+    setSpentUnits(new Set());
+    setCombatSpentUnits(new Set());
+    setPartialMoves(new Map());
+    setMutableTileMap(new Map(tileMap));
+    setLiveOwnerMap(new Map());
+    setGraveyard(new Set());
+    setRuins(new Set());
+    setFreeTowerUsedTiles(new Map());
+
+    const initialEntities = new Map<string, EntityType>();
+    // Cities are tracked purely via the cities Set<string> (permanent tile keys).
+    // No "city" entity is stored in the entities map — units can occupy city
+    // tiles without erasing the city, and built cities work identically.
+    const initialCities = new Set(tiles.filter((t) => t.isCity).map((t) => t.key));
+    setCities(initialCities);
+    const owners: TerritoryOwner[] = [
+      "player",
+      "ai1",
+      "ai2",
+      "ai3",
+      "ai4",
+      "ai5",
+    ];
+    for (const tile of tiles) {
+      if (!owners.includes(tile.owner)) continue;
+      if (tile.terrain === "mountain" || tile.terrain === "lake") continue;
+      if (initialEntities.has(tile.key)) continue;
+      if (Math.random() < 0.1) {
+        initialEntities.set(tile.key, "rebel");
+      }
+    }
+    setEntities(initialEntities);
+  }, [tiles, tileMap, resumeSnapshot]);
 
   const activeTileMap = mutableTileMap.size > 0 ? mutableTileMap : tileMap;
 
@@ -553,6 +611,61 @@ export default function GameScreen() {
     },
     [aiOwners, checkWinLoss, awaitStep, triggerUnitAnimation],
   );
+
+  // Once a game ends we must NEVER auto-save again, even if some handler
+  // transiently flips gameResult back to null (see onReturnToMenu).
+  const gameEndedRef = useRef(false);
+  useEffect(() => {
+    if (gameResult !== null) {
+      gameEndedRef.current = true;
+      clearSavedGame();
+    }
+  }, [gameResult]);
+
+  useEffect(() => {
+    if (gameEndedRef.current) return;
+    if (gameResult !== null) return;
+    if (isAiTurn) return;
+    if (mutableTileMap.size === 0) return;
+
+    setSavedGame({
+      tiles,
+      config: { numTiles, numOpponents, difficulty: aiDifficulty },
+      state: {
+        mutableTileMap,
+        entities,
+        territoryBalances,
+        spentUnits,
+        combatSpentUnits,
+        partialMoves,
+        liveOwnerMap,
+        cities,
+        graveyard,
+        ruins,
+        freeTowerUsedTiles,
+        turn,
+      },
+    });
+  }, [
+    tiles,
+    numTiles,
+    numOpponents,
+    aiDifficulty,
+    mutableTileMap,
+    entities,
+    territoryBalances,
+    spentUnits,
+    combatSpentUnits,
+    partialMoves,
+    liveOwnerMap,
+    cities,
+    graveyard,
+    ruins,
+    freeTowerUsedTiles,
+    turn,
+    isAiTurn,
+    gameResult,
+  ]);
 
   const {
     selectedTerritory,

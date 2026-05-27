@@ -84,7 +84,7 @@ export function applySingleHexPenalty(
         if (lt?.terrain === "lake") {
           tileMap.set(singleKey, { ...lt, owner: "neutral" });
         }
-      } else if (entity !== "rebel" && entity !== "city") {
+      } else if (entity !== "city") {
         ruins.add(singleKey);
         // Bridge removed: lake tile must lose owner.
         if (entity === "bridge" && lt?.terrain === "lake") {

@@ -2,7 +2,7 @@ kind = "mobile"
 previewPath = "/"
 title = "Hex Battles"
 version = "1.0.0"
-id = "artifacts/hex-strategy"
+id = "artifacts/hex-battles"
 router = "expo-domain"
 
 [[integratedSkills]]
@@ -16,11 +16,11 @@ paths = [ "/" ]
 localPort = 24998
 
 [services.development]
-run = "pnpm --filter @workspace/hex-strategy run dev"
+run = "pnpm --filter @workspace/hex-battles run dev"
 
 [services.production]
-build = [ "pnpm", "--filter", "@workspace/hex-strategy", "run", "build" ]
-run = [ "pnpm", "--filter", "@workspace/hex-strategy", "run", "serve" ]
+build = [ "pnpm", "--filter", "@workspace/hex-battles", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/hex-battles", "run", "serve" ]
 
 [services.env]
 PORT = "24998"

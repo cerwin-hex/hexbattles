@@ -1,13 +1,12 @@
 {
   "expo": {
-    "name": "Hex Battle",
-    "slug": "hex-strategy",
+    "name": "Hex Battles",
+    "slug": "hex-battles",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "hex-strategy",
+    "scheme": "hex-battles",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/images/icon.png",
       "resizeMode": "contain",
@@ -28,12 +27,7 @@
       "favicon": "./assets/images/icon.png"
     },
     "plugins": [
-      [
-        "expo-router",
-        {
-          "origin": "https://hex-battles.replit.app/"
-        }
-      ],
+      "expo-router",
       "expo-font",
       "expo-web-browser"
     ],

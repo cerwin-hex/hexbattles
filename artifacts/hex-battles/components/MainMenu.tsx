@@ -1,7 +1,8 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
+import { WelcomeModal } from '@/components/WelcomeModal';
 import {
   Modal,
   Platform,
@@ -20,6 +21,12 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Difficulty } from '@/types';
+import {
+  clearSavedGame,
+  hasSavedGameSync,
+  hydrateSavedGame,
+  isHydrated,
+} from '@/utils/savedGame';
 
 const TILE_MIN = 40;
 const TILE_MAX = 200;
@@ -59,7 +66,7 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
               <Text style={styles.ruleSectionTitle}>About the Game</Text>
               <View style={styles.ruleDivider} />
               <Text style={styles.ruleBody}>
-                Hex Battle is a turn-based strategy game where you fight to conquer and defend territories on a hexagonal map. You start with a small area and must expand, build your economy, and eliminate all opponents, while keeping an eye on the rebels.
+                Hex Battles is a turn-based strategy game where you fight to conquer and defend territories on a hexagonal map. You start with a small area and must expand, build your economy, and eliminate all opponents, while keeping an eye on the rebels.
               </Text>
             </View>
 
@@ -162,6 +169,25 @@ export default function MainMenu() {
   const [opponentCount, setOpponentCount] = useState(3);
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [rulesVisible, setRulesVisible] = useState(false);
+  const [hasSaved, setHasSaved] = useState<boolean>(() => hasSavedGameSync());
+  const [confirmNewGame, setConfirmNewGame] = useState(false);
+
+  // Only refresh hasSaved when the menu actually gains focus — never live.
+  // This prevents the "New Game" variant from flashing into view during the
+  // transition into a freshly-started game (when game.tsx's first auto-save
+  // would otherwise toggle hasSaved while the menu is still mounted behind).
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      (async () => {
+        if (!isHydrated()) await hydrateSavedGame();
+        if (!cancelled) setHasSaved(hasSavedGameSync());
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, []),
+  );
 
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const botPad = insets.bottom + (Platform.OS === 'web' ? 34 : 0);
@@ -201,12 +227,26 @@ export default function MainMenu() {
     width: thumbX.value + THUMB_SIZE,
   }));
 
-  function handleStart() {
+  function startNewGame() {
+    clearSavedGame();
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push({
       pathname: '/game',
       params: { tileCount: String(tileCount), opponentCount: String(opponentCount), difficulty },
     });
+  }
+
+  function handleStart() {
+    if (hasSaved) {
+      setConfirmNewGame(true);
+      return;
+    }
+    startNewGame();
+  }
+
+  function handleResume() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    router.push({ pathname: '/game', params: { resume: '1' } });
   }
 
   return (
@@ -226,7 +266,7 @@ export default function MainMenu() {
               <Text style={styles.helpBtnText}>?</Text>
             </TouchableOpacity>
           </View>
-          <Text style={styles.title}>HEX BATTLE</Text>
+          <Text style={styles.title}>HEX BATTLES</Text>
           <View style={styles.accentLine} />
         </View>
 
@@ -299,16 +339,73 @@ export default function MainMenu() {
 
         </View>
 
-        <TouchableOpacity style={styles.startOuter} onPress={handleStart} activeOpacity={0.85}>
-          <LinearGradient colors={['#6B4A10', '#4A3008', '#3A2208']} style={styles.startInner}>
-            <Text style={styles.startText}>Commence Battle</Text>
-            <Text style={{ fontSize: 18, color: '#F0D080' }}>›</Text>
-          </LinearGradient>
-        </TouchableOpacity>
+        <View style={styles.startStack}>
+          {hasSaved && (
+            <TouchableOpacity style={styles.startOuter} onPress={handleResume} activeOpacity={0.85}>
+              <LinearGradient colors={['#6B4A10', '#4A3008', '#3A2208']} style={styles.startInner}>
+                <Text style={styles.startText}>Resume Game</Text>
+                <Text style={{ fontSize: 18, color: '#F0D080' }}>›</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={hasSaved ? styles.newGameOuter : styles.startOuter}
+            onPress={handleStart}
+            activeOpacity={0.85}
+          >
+            {hasSaved ? (
+              <View style={styles.newGameInner}>
+                <Text style={styles.newGameText}>New Game</Text>
+              </View>
+            ) : (
+              <LinearGradient colors={['#6B4A10', '#4A3008', '#3A2208']} style={styles.startInner}>
+                <Text style={styles.startText}>Commence Battle</Text>
+                <Text style={{ fontSize: 18, color: '#F0D080' }}>›</Text>
+              </LinearGradient>
+            )}
+          </TouchableOpacity>
+        </View>
 
       </View>
 
       <RulesModal visible={rulesVisible} onClose={() => setRulesVisible(false)} />
+      <WelcomeModal />
+
+      <Modal
+        visible={confirmNewGame}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConfirmNewGame(false)}
+      >
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>Start New Game?</Text>
+            <Text style={styles.confirmBody}>
+              You have a game in progress. Starting a new game will discard it
+              permanently.
+            </Text>
+            <View style={styles.confirmRow}>
+              <TouchableOpacity
+                style={styles.confirmStayBtn}
+                onPress={() => setConfirmNewGame(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.confirmStayText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmGoBtn}
+                onPress={() => {
+                  setConfirmNewGame(false);
+                  startNewGame();
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.confirmGoText}>Discard & Start</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -470,6 +567,9 @@ const styles = StyleSheet.create({
   diffTextActive: {
     color: '#C8A24A',
   },
+  startStack: {
+    gap: 10,
+  },
   startOuter: {
     borderRadius: 5,
     borderWidth: 1,
@@ -487,6 +587,89 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Cinzel_700Bold',
     color: '#F0D080',
+    letterSpacing: 1.5,
+  },
+  newGameOuter: {
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: '#5A4520',
+    overflow: 'hidden',
+  },
+  newGameInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    backgroundColor: '#1E1408',
+  },
+  newGameText: {
+    fontSize: 12,
+    fontFamily: 'Cinzel_400Regular',
+    color: '#A08860',
+    letterSpacing: 1.5,
+  },
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  confirmCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#221A0E',
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#7A6030',
+    padding: 22,
+  },
+  confirmTitle: {
+    fontSize: 16,
+    fontFamily: 'Cinzel_700Bold',
+    color: '#C8A24A',
+    letterSpacing: 1.5,
+    marginBottom: 10,
+  },
+  confirmBody: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: '#D4BF96',
+    lineHeight: 20,
+    marginBottom: 18,
+  },
+  confirmRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  confirmStayBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: '#7A6030',
+    backgroundColor: '#2A1E0C',
+    alignItems: 'center',
+  },
+  confirmStayText: {
+    fontSize: 12,
+    fontFamily: 'Cinzel_700Bold',
+    color: '#C8A24A',
+    letterSpacing: 1.5,
+  },
+  confirmGoBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: '#8A3A20',
+    backgroundColor: '#3A1A10',
+    alignItems: 'center',
+  },
+  confirmGoText: {
+    fontSize: 12,
+    fontFamily: 'Cinzel_700Bold',
+    color: '#E08868',
     letterSpacing: 1.5,
   },
   modalBackdrop: {

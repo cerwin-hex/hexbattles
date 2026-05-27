@@ -11,14 +11,14 @@ pnpm run typecheck
 # Build all packages (runs typecheck first)
 pnpm run build
 
-# Run all tests (hex-strategy vitest)
+# Run all tests (hex-battles vitest)
 pnpm test
 
 # Run a single test file
-pnpm --filter @workspace/hex-strategy exec vitest run logic/aiStrategy.test.ts
+pnpm --filter @workspace/hex-battles exec vitest run logic/aiStrategy.test.ts
 
-# Run hex-strategy dev server (Expo)
-pnpm --filter @workspace/hex-strategy run dev
+# Run hex-battles dev server (Expo)
+pnpm --filter @workspace/hex-battles run dev
 
 # Run API server in dev mode
 pnpm --filter @workspace/api-server run dev
@@ -35,7 +35,7 @@ pnpm --filter @workspace/api-spec run codegen
 pnpm workspaces with TypeScript composite projects. Every package extends `tsconfig.base.json` (composite: true, bundler resolution, es2022). **Always typecheck from root** — running `tsc` inside a single package fails if its dependencies haven't been built.
 
 ```
-artifacts/hex-strategy/   # Main game — Android-first Expo React Native app
+artifacts/hex-battles/    # Main game — Android-first Expo React Native app
 artifacts/api-server/     # Express 5 API server (esbuild CJS bundle)
 lib/api-spec/             # OpenAPI spec + Orval codegen config
 lib/api-client-react/     # Generated React Query hooks (from OpenAPI)
@@ -44,7 +44,7 @@ lib/db/                   # Drizzle ORM schema + PostgreSQL connection
 scripts/                  # One-off .ts utility scripts
 ```
 
-## Hex Battle App Architecture (`artifacts/hex-strategy`)
+## Hex Battles App Architecture (`artifacts/hex-battles`)
 
 Android-first turn-based hexagonal strategy game. Package name: `dk.hextek.hexbattles`. Built with Expo Router (file-based navigation), React Native SVG for the board, and Reanimated for animations.
 
@@ -106,7 +106,7 @@ Grid generation and all game rules (entity metadata, terrain income, movement co
 
 ### Google Play build
 
-See `artifacts/hex-strategy/PLAY_STORE_BUILD.md`. EAS handles cloud builds:
+See `artifacts/hex-battles/PLAY_STORE_BUILD.md`. EAS handles cloud builds:
 - Preview APK: `eas build --platform android --profile preview`
 - Production AAB: `eas build --platform android --profile production`
 - Bump `versionCode` in `app.json` for every Play Store release.
@@ -114,3 +114,9 @@ See `artifacts/hex-strategy/PLAY_STORE_BUILD.md`. EAS handles cloud builds:
 ## Package Management
 
 Use `pnpm` exclusively (enforced by preinstall hook). New packages must be at least 1 day old before installation (`minimumReleaseAge: 1440` in `pnpm-workspace.yaml`) — this is a supply-chain defense, do not disable it. Use the `catalog:` protocol in `pnpm-workspace.yaml` for shared version pinning across packages.
+
+## Working Style
+
+- **All game code must be in English** — variable names, comments, string literals in logic, type names, everything. The user may communicate in Danish; code must always be English.
+- **Act without asking for permission** — proceed autonomously on all implementation decisions. Only stop to ask when there is a genuine, non-obvious choice that changes scope or direction and that the user must decide.
+- **Never push to GitHub unless explicitly asked** — the user is conserving free GitHub Actions minutes and bundles commits before pushing to production manually. Commit freely when asked, but do not run `git push` (or equivalent) without an explicit request.
