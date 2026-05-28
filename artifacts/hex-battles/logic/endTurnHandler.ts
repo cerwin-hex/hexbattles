@@ -15,7 +15,7 @@ import {
   getContiguousTerritory,
   getTerritoryId,
 } from "@/utils/hexGrid";
-import { calcTerritoryUpkeep } from "@/logic/gameLogic";
+import { applySingleHexPenalty, calcTerritoryUpkeep } from "@/logic/gameLogic";
 
 export interface EndTurnParams {
   isAiTurn: boolean;
@@ -95,6 +95,7 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
   if (isAiTurn || gameResult !== null) return;
   setMoveHistory([]);
 
+  const prevTileMapSnapshot = new Map(mutableTileMap);
   const nextBalances = new Map(territoryBalances);
   let nextEntities = new Map(entities);
   const visited = new Set<string>();
@@ -138,7 +139,11 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
           const e = nextEntities.get(t.key);
           if (e && ENTITY_META[e].isUnit) {
             unitUpkeepSaved += ENTITY_META[e].upkeep;
-            nextEntities.delete(t.key);
+            if (mutableTileMap.get(t.key)?.terrain === "lake") {
+              nextEntities.set(t.key, "bridge");
+            } else {
+              nextEntities.delete(t.key);
+            }
             nextGraveyard.add(t.key);
           }
         }
@@ -205,7 +210,11 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
             const e = nextEntities.get(t.key);
             if (e && ENTITY_META[e].isUnit) {
               unitUpkeepSaved += ENTITY_META[e].upkeep;
-              nextEntities.delete(t.key);
+              if (mutableTileMap.get(t.key)?.terrain === "lake") {
+                nextEntities.set(t.key, "bridge");
+              } else {
+                nextEntities.delete(t.key);
+              }
               nextGraveyard.add(t.key);
             }
           }
@@ -227,6 +236,21 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
         }
       }
     }
+  }
+
+  // After bankruptcy, any bridges or buildings demolished mid-territory can
+  // leave single-hex remnants (especially isolated bridges that previously
+  // had a positive balance). Clean those up now so isolated bridges don't
+  // linger on the board with inherited reserves.
+  if (turn !== 1) {
+    applySingleHexPenalty(
+      prevTileMapSnapshot,
+      mutableTileMap,
+      nextBalances,
+      nextEntities,
+      nextGraveyard,
+      nextRuins,
+    );
   }
 
   // Rebel spawning and spreading is suspended in round 1
