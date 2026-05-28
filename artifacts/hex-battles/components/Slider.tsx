@@ -61,10 +61,12 @@ export function Slider({
     () => ({ v: value, w: trackWShared.value }),
     (curr) => {
       if (curr.w > 0) {
-        thumbX.value = valueToX(curr.v, curr.w);
+        const maxX = Math.max(0, curr.w - THUMB_SIZE);
+        const range = max - min || 1;
+        thumbX.value = ((curr.v - min) / range) * maxX;
       }
     },
-    [valueToX, value],
+    [min, max],
   );
 
   const emit = useCallback(
@@ -79,6 +81,8 @@ export function Slider({
   );
 
   const panGesture = Gesture.Pan()
+    .activeOffsetX([-5, 5])
+    .failOffsetY([-15, 15])
     .onBegin(() => {
       startX.value = thumbX.value;
     })

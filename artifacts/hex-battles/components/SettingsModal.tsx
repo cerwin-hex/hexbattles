@@ -3,12 +3,12 @@ import React, { useEffect, useState } from "react";
 import {
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import { GestureHandlerRootView, ScrollView } from "react-native-gesture-handler";
 import { Slider } from "@/components/Slider";
 import { COLOR_PALETTE } from "@/constants/colors";
 import {
@@ -53,7 +53,7 @@ export function SettingsModal({
       animationType="fade"
       onRequestClose={handleClose}
     >
-      <View style={styles.backdrop}>
+      <GestureHandlerRootView style={styles.backdrop}>
         <Pressable style={StyleSheet.absoluteFillObject} onPress={handleClose} />
         <View style={styles.container}>
           <View style={styles.header}>
@@ -150,7 +150,7 @@ export function SettingsModal({
             </View>
           </ScrollView>
         </View>
-      </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
