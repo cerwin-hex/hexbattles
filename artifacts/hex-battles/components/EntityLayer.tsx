@@ -2,7 +2,7 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import Svg, { Circle, Polygon, Rect, Text as SvgText } from "react-native-svg";
 import { ENTITY_META } from "@/utils/hexGrid";
-import { TERRITORY_BORDERS } from "@/constants/colors";
+import { useOwnerColors } from "@/contexts/SettingsContext";
 import { hexCornersString } from "@/utils/hexMath";
 import type { EntityType, HexTile, TerritoryOwner } from "@/types";
 
@@ -35,6 +35,7 @@ function EntityLayerInner({
   boardH,
   HEX_SIZE,
 }: EntityLayerProps) {
+  const { borders: TERRITORY_BORDERS } = useOwnerColors();
   return (
     <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
       <Svg width={boardW} height={boardH}>

@@ -3,6 +3,9 @@ import { router, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import React, { useCallback, useState } from 'react';
 import { WelcomeModal } from '@/components/WelcomeModal';
+import { SettingsModal } from '@/components/SettingsModal';
+import { Slider } from '@/components/Slider';
+import { useSettings } from '@/contexts/SettingsContext';
 import {
   Modal,
   Platform,
@@ -13,12 +16,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, {
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Difficulty } from '@/types';
 import {
@@ -30,7 +27,6 @@ import {
 
 const TILE_MIN = 40;
 const TILE_MAX = 200;
-const THUMB_SIZE = 26;
 
 const UNIT_ROWS = [
   { icon: '⚔️', name: 'Basic Unit', cost: 10, upkeep: 3, strength: 1 },
@@ -165,10 +161,12 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
 
 export default function MainMenu() {
   const insets = useSafeAreaInsets();
+  const { settings, updateSettings } = useSettings();
   const [tileCount, setTileCount] = useState(100);
   const [opponentCount, setOpponentCount] = useState(3);
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [rulesVisible, setRulesVisible] = useState(false);
+  const [settingsVisible, setSettingsVisible] = useState(false);
   const [hasSaved, setHasSaved] = useState<boolean>(() => hasSavedGameSync());
   const [confirmNewGame, setConfirmNewGame] = useState(false);
 
@@ -192,47 +190,21 @@ export default function MainMenu() {
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
   const botPad = insets.bottom + (Platform.OS === 'web' ? 34 : 0);
 
-  const thumbX = useSharedValue(0);
-  const startX = useSharedValue(0);
-  const trackWShared = useSharedValue(0);
-
-  function countToX(count: number, width: number): number {
-    const maxX = Math.max(0, width - THUMB_SIZE);
-    return ((count - TILE_MIN) / (TILE_MAX - TILE_MIN)) * maxX;
-  }
-
-  function handleTrackLayout(width: number) {
-    trackWShared.value = width;
-    thumbX.value = countToX(tileCount, width);
-  }
-
-  const panGesture = Gesture.Pan()
-    .onBegin(() => {
-      startX.value = thumbX.value;
-    })
-    .onUpdate(e => {
-      const maxX = trackWShared.value - THUMB_SIZE;
-      const newX = Math.max(0, Math.min(maxX, startX.value + e.translationX));
-      thumbX.value = newX;
-      const frac = maxX > 0 ? newX / maxX : 0;
-      const tiles = Math.round(TILE_MIN + frac * (TILE_MAX - TILE_MIN));
-      runOnJS(setTileCount)(tiles);
-    });
-
-  const thumbStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: thumbX.value }],
-  }));
-
-  const fillStyle = useAnimatedStyle(() => ({
-    width: thumbX.value + THUMB_SIZE,
-  }));
-
   function startNewGame() {
     clearSavedGame();
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push({
       pathname: '/game',
-      params: { tileCount: String(tileCount), opponentCount: String(opponentCount), difficulty },
+      params: {
+        tileCount: String(tileCount),
+        opponentCount: String(opponentCount),
+        difficulty,
+        mountainPct: String(settings.mountainPct),
+        lakePct: String(settings.lakePct),
+        desertPct: String(settings.desertPct),
+        forestPct: String(settings.forestPct),
+        cityCount: String(settings.cityCount),
+      },
     });
   }
 
@@ -260,6 +232,13 @@ export default function MainMenu() {
           <View style={styles.helpRow}>
             <TouchableOpacity
               style={styles.helpBtn}
+              onPress={() => { Haptics.selectionAsync(); setSettingsVisible(true); }}
+              activeOpacity={0.75}
+            >
+              <Text style={styles.helpBtnText}>⚙</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.helpBtn}
               onPress={() => { Haptics.selectionAsync(); setRulesVisible(true); }}
               activeOpacity={0.75}
             >
@@ -271,25 +250,16 @@ export default function MainMenu() {
         </View>
 
         <View style={styles.sections}>
-          <View style={styles.section}>
-            <View style={styles.labelRow}>
-              <Text style={styles.label}>Map Size</Text>
-              <Text style={styles.tileCountDisplay}>{tileCount} Tiles</Text>
-            </View>
-            <GestureDetector gesture={panGesture}>
-              <View
-                style={styles.sliderTrack}
-                onLayout={e => handleTrackLayout(e.nativeEvent.layout.width)}
-              >
-                <Animated.View style={[styles.sliderFill, fillStyle]} />
-                <Animated.View style={[styles.sliderThumb, thumbStyle]} />
-              </View>
-            </GestureDetector>
-            <View style={styles.sliderLabels}>
-              <Text style={styles.sliderLabelText}>{TILE_MIN}</Text>
-              <Text style={styles.sliderLabelText}>{TILE_MAX}</Text>
-            </View>
-          </View>
+          <Slider
+            label="Map Size"
+            value={tileCount}
+            min={TILE_MIN}
+            max={TILE_MAX}
+            onChange={setTileCount}
+            formatValue={(v) => `${v} Tiles`}
+            leftLabel={String(TILE_MIN)}
+            rightLabel={String(TILE_MAX)}
+          />
 
           <View style={styles.section}>
             <Text style={styles.label}>AI Opponents</Text>
@@ -369,6 +339,14 @@ export default function MainMenu() {
       </View>
 
       <RulesModal visible={rulesVisible} onClose={() => setRulesVisible(false)} />
+      <SettingsModal
+        visible={settingsVisible}
+        initialSettings={settings}
+        onClose={(next) => {
+          updateSettings(next);
+          setSettingsVisible(false);
+        }}
+      />
       <WelcomeModal />
 
       <Modal
@@ -423,6 +401,7 @@ const styles = StyleSheet.create({
   helpRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    gap: 10,
   },
   title: {
     fontSize: 46,
@@ -465,53 +444,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Cinzel_400Regular',
     color: '#A08A60',
     letterSpacing: 2,
-  },
-  labelRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-  },
-  tileCountDisplay: {
-    fontSize: 22,
-    fontFamily: 'Inter_700Bold',
-    color: '#C8A24A',
-  },
-  sliderTrack: {
-    height: 36,
-    backgroundColor: '#2E2210',
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#7A6030',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  sliderFill: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    backgroundColor: '#7A5418',
-    borderRadius: 18,
-  },
-  sliderThumb: {
-    position: 'absolute',
-    width: THUMB_SIZE,
-    height: THUMB_SIZE,
-    borderRadius: THUMB_SIZE / 2,
-    backgroundColor: '#C8A24A',
-    borderWidth: 2,
-    borderColor: '#F0D080',
-    top: (36 - THUMB_SIZE) / 2,
-  },
-  sliderLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 2,
-  },
-  sliderLabelText: {
-    fontSize: 10,
-    fontFamily: 'Inter_400Regular',
-    color: '#A08A60',
   },
   pills: {
     flexDirection: 'row',

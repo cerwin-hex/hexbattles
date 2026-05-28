@@ -120,6 +120,7 @@ import { useEndTurnPulse } from "@/hooks/useEndTurnPulse";
 import { handleTileTapLogic } from "@/logic/tileTapHandler";
 import { handleEndTurnLogic } from "@/logic/endTurnHandler";
 import { checkWinLossLogic } from "@/logic/winLossChecker";
+import { useOwnerColors } from "@/contexts/SettingsContext";
 import {
   clearSavedGame,
   getSavedGameSync,
@@ -136,7 +137,23 @@ export default function GameScreen() {
     opponentCount: string;
     difficulty: string;
     resume: string;
+    mountainPct: string;
+    lakePct: string;
+    desertPct: string;
+    forestPct: string;
+    cityCount: string;
   }>();
+
+  const clampPctParam = (v: string | undefined, fallback: number) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(0, Math.min(25, Math.round(n)));
+  };
+  const clampCityParam = (v: string | undefined, fallback: number) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(0, Math.min(5, Math.round(n)));
+  };
 
   // Capture the resume snapshot once at mount. After this, the in-memory
   // saved game can be overwritten freely without disturbing initialization.
@@ -154,6 +171,21 @@ export default function GameScreen() {
   const aiDifficulty: Difficulty = resumeSnapshot
     ? resumeSnapshot.config.difficulty
     : ((params.difficulty as Difficulty) || "medium");
+  const mapGenOptions = useMemo(
+    () =>
+      resumeSnapshot
+        ? undefined
+        : {
+            mountainPct: clampPctParam(params.mountainPct, 8),
+            lakePct: clampPctParam(params.lakePct, 10),
+            desertPct: clampPctParam(params.desertPct, 10),
+            forestPct: clampPctParam(params.forestPct, 10),
+            cityCount: clampCityParam(params.cityCount, 2),
+          },
+    // params from useLocalSearchParams are stable per nav and resumeSnapshot is captured once
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
   const aiDifficultyRef = useRef<Difficulty>(aiDifficulty);
   useEffect(() => {
     aiDifficultyRef.current = aiDifficulty;
@@ -211,8 +243,8 @@ export default function GameScreen() {
     () =>
       resumeSnapshot
         ? resumeSnapshot.tiles
-        : generateHexGrid(numTiles, numOpponents + 1),
-    [numTiles, numOpponents, gameKey, resumeSnapshot],
+        : generateHexGrid(numTiles, numOpponents + 1, mapGenOptions),
+    [numTiles, numOpponents, gameKey, resumeSnapshot, mapGenOptions],
   );
 
   const tileMap = useMemo(() => {
@@ -249,10 +281,11 @@ export default function GameScreen() {
   );
 
   const borderEdgesCache = useRef<BorderEdgesCache>(null);
+  const ownerColorMaps = useOwnerColors();
 
   const borderEdges = useMemo<BorderEdge[]>(
-    () => computeBorderEdges(borderEdgesCache, tileData, tileMap, tileDataMap, mutableTileMap, INNER_SIZE, BORDER_W),
-    [tileData, tileMap, tileDataMap, mutableTileMap, INNER_SIZE],
+    () => computeBorderEdges(borderEdgesCache, tileData, tileMap, tileDataMap, mutableTileMap, INNER_SIZE, BORDER_W, ownerColorMaps.borders),
+    [tileData, tileMap, tileDataMap, mutableTileMap, INNER_SIZE, ownerColorMaps.borders],
   );
 
   const outerEdgesCache = useRef<OuterEdgesCache>(null);

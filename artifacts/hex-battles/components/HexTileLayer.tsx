@@ -1,9 +1,6 @@
 import React from "react";
-import {
-  CITY_NEUTRAL_FILL,
-  TERRAIN_FILLS,
-  TERRITORY_FILLS,
-} from "@/constants/colors";
+import { CITY_NEUTRAL_FILL, TERRAIN_FILLS } from "@/constants/colors";
+import { useOwnerColors } from "@/contexts/SettingsContext";
 import type { HexTile } from "@/types";
 import { HexCell } from "@/components/HexCell";
 import {
@@ -57,6 +54,7 @@ function HexTileTerritoryLayerInner({
   cities,
   HEX_SIZE,
 }: HexTileTerritoryLayerProps) {
+  const { fills: TERRITORY_FILLS } = useOwnerColors();
   return (
     <>
       {tileData.map(({ tile, cx, cy }) => {

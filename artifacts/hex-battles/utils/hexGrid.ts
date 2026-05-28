@@ -635,9 +635,31 @@ function getNeighborsOf(q: number, r: number): [number, number][] {
 
 const MIN_CITY_DISTANCE = 5;
 
-export function generateHexGrid(tileCount: number, playerCount: number): HexTile[] {
+export interface MapGenOptions {
+  mountainPct?: number;
+  lakePct?: number;
+  desertPct?: number;
+  forestPct?: number;
+  cityCount?: number;
+}
+
+export function generateHexGrid(
+  tileCount: number,
+  playerCount: number,
+  options: MapGenOptions = {},
+): HexTile[] {
   const clampedCount = Math.min(200, Math.max(40, tileCount));
   const clampedPlayers = Math.min(6, Math.max(1, playerCount));
+
+  const clampPct = (v: number | undefined, fallback: number) => {
+    const n = v ?? fallback;
+    return Math.max(0, Math.min(25, n)) / 100;
+  };
+  const mountainP = clampPct(options.mountainPct, 8);
+  const lakeP = clampPct(options.lakePct, 10);
+  const desertP = clampPct(options.desertPct, 10);
+  const forestP = clampPct(options.forestPct, 10);
+  const cityTarget = Math.max(0, Math.min(5, Math.round(options.cityCount ?? 2)));
 
   const tileMap = new Map<string, HexTile>();
   const frontier: [number, number][] = [[0, 0]];
@@ -687,23 +709,32 @@ export function generateHexGrid(tileCount: number, playerCount: number): HexTile
 
   const tiles = Array.from(tileMap.values());
 
-  const pendingCityKeys = new Set<string>();
-
+  const mThr = mountainP;
+  const lThr = mThr + lakeP;
+  const dThr = lThr + desertP;
+  const fThr = dThr + forestP;
   for (const tile of tiles) {
     const rand = Math.random();
-    if (rand < 0.08) tile.terrain = 'mountain';
-    else if (rand < 0.18) tile.terrain = 'lake';
-    else if (rand < 0.28) tile.terrain = 'desert';
-    else if (rand < 0.38) tile.terrain = 'forest';
-    else if (rand < 0.40) pendingCityKeys.add(tile.key);
+    if (rand < mThr) tile.terrain = 'mountain';
+    else if (rand < lThr) tile.terrain = 'lake';
+    else if (rand < dThr) tile.terrain = 'desert';
+    else if (rand < fThr) tile.terrain = 'forest';
     else tile.terrain = 'grass';
   }
 
+  // Pick exactly `cityTarget` cities from grass/desert tiles with spacing.
+  const cityCandidates = tiles.filter(
+    (t) => t.terrain !== 'mountain' && t.terrain !== 'lake',
+  );
+  for (let i = cityCandidates.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [cityCandidates[i], cityCandidates[j]] = [cityCandidates[j], cityCandidates[i]];
+  }
   const acceptedCities: HexTile[] = [];
-  for (const tile of tiles) {
-    if (!pendingCityKeys.has(tile.key)) continue;
+  for (const tile of cityCandidates) {
+    if (acceptedCities.length >= cityTarget) break;
     const tooClose = acceptedCities.some(
-      c => hexDistance(tile.q, tile.r, c.q, c.r) < MIN_CITY_DISTANCE,
+      (c) => hexDistance(tile.q, tile.r, c.q, c.r) < MIN_CITY_DISTANCE,
     );
     if (!tooClose) {
       acceptedCities.push(tile);

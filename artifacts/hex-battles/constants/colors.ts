@@ -1,3 +1,5 @@
+import type { ColorKey } from "@/utils/settings";
+
 const colors = {
   light: {
     text: '#D4BF96',
@@ -52,35 +54,59 @@ export const TERRAIN_FILLS: Record<string, string> = {
   forest: '#2D6A2D',
 };
 
-export const TERRITORY_FILLS: Record<string, string> = {
-  neutral: '#2A2820',
-  player: '#2E6EE8',
-  ai1: '#E03838',
-  ai2: '#38B838',
-  ai3: '#E08828',
-  ai4: '#C838C8',
-  ai5: '#38C8C8',
-};
-
 export const CITY_NEUTRAL_FILL = '#C0B8B0';
-
-export const TERRITORY_BORDERS: Record<string, string> = {
-  player: '#6AAAF4',
-  ai1: '#F06060',
-  ai2: '#60CC60',
-  ai3: '#F0AA44',
-  ai4: '#E060E0',
-  ai5: '#60E0E0',
-};
-
-export const PLAYER_LABELS: Record<string, string> = {
-  player: 'You',
-  ai1: 'Red',
-  ai2: 'Green',
-  ai3: 'Orange',
-  ai4: 'Purple',
-  ai5: 'Teal',
-};
-
 export const CITY_BORDER_COLOR = '#8B7A5A';
 export const CITY_BUFFER_BORDER = '#B8B8B8';
+
+interface ColorEntry {
+  fill: string;
+  border: string;
+  label: string;
+}
+
+export const COLOR_PALETTE: Record<ColorKey, ColorEntry> = {
+  blue: { fill: '#2E6EE8', border: '#6AAAF4', label: 'Blue' },
+  red: { fill: '#E03838', border: '#F06060', label: 'Red' },
+  green: { fill: '#38B838', border: '#60CC60', label: 'Green' },
+  orange: { fill: '#E08828', border: '#F0AA44', label: 'Orange' },
+  purple: { fill: '#C838C8', border: '#E060E0', label: 'Purple' },
+  teal: { fill: '#38C8C8', border: '#60E0E0', label: 'Teal' },
+};
+
+const AI_OWNER_ORDER = ['ai1', 'ai2', 'ai3', 'ai4', 'ai5'] as const;
+const COLOR_ORDER: ColorKey[] = ['blue', 'red', 'green', 'orange', 'purple', 'teal'];
+
+export interface OwnerColorMaps {
+  fills: Record<string, string>;
+  borders: Record<string, string>;
+  labels: Record<string, string>;
+}
+
+export function buildOwnerColorMaps(playerColor: ColorKey): OwnerColorMaps {
+  const remaining = COLOR_ORDER.filter((c) => c !== playerColor);
+  const fills: Record<string, string> = { neutral: '#2A2820' };
+  const borders: Record<string, string> = {};
+  const labels: Record<string, string> = { player: 'You' };
+
+  const playerEntry = COLOR_PALETTE[playerColor];
+  fills.player = playerEntry.fill;
+  borders.player = playerEntry.border;
+
+  AI_OWNER_ORDER.forEach((aiKey, i) => {
+    const colorKey = remaining[i];
+    if (!colorKey) return;
+    const entry = COLOR_PALETTE[colorKey];
+    fills[aiKey] = entry.fill;
+    borders[aiKey] = entry.border;
+    labels[aiKey] = entry.label;
+  });
+
+  return { fills, borders, labels };
+}
+
+// Backwards-compatible defaults (player = blue) — kept for any consumer that
+// hasn't been migrated to the context-driven maps yet.
+const DEFAULT_MAPS = buildOwnerColorMaps('blue');
+export const TERRITORY_FILLS: Record<string, string> = DEFAULT_MAPS.fills;
+export const TERRITORY_BORDERS: Record<string, string> = DEFAULT_MAPS.borders;
+export const PLAYER_LABELS: Record<string, string> = DEFAULT_MAPS.labels;

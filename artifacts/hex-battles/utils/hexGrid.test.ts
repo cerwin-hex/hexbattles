@@ -12,6 +12,7 @@ import {
   getMoveCost,
   getContiguousTerritory,
   getTerritoryId,
+  generateHexGrid,
 } from "@/utils/hexGrid";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -370,5 +371,56 @@ describe("getTerritoryId", () => {
     const a = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
     const b = [makeTile(1, 0, "player"), makeTile(0, 0, "player")];
     expect(getTerritoryId(a)).toBe(getTerritoryId(b));
+  });
+});
+
+// ─── generateHexGrid options ──────────────────────────────────────────────────
+
+describe("generateHexGrid map options", () => {
+  it("respects zeroed-out terrain and city options", () => {
+    const tiles = generateHexGrid(120, 4, {
+      mountainPct: 0,
+      lakePct: 0,
+      desertPct: 0,
+      forestPct: 0,
+      cityCount: 0,
+    });
+    expect(tiles.some((t) => t.terrain === "mountain")).toBe(false);
+    expect(tiles.some((t) => t.terrain === "lake")).toBe(false);
+    expect(tiles.some((t) => t.terrain === "desert")).toBe(false);
+    expect(tiles.some((t) => t.terrain === "forest")).toBe(false);
+    expect(tiles.some((t) => t.isCity)).toBe(false);
+  });
+
+  it("places exactly the requested number of cities on a large map", () => {
+    const tiles = generateHexGrid(200, 4, {
+      mountainPct: 0,
+      lakePct: 0,
+      cityCount: 5,
+    });
+    expect(tiles.filter((t) => t.isCity).length).toBe(5);
+  });
+
+  it("uses default city count when option is omitted", () => {
+    const tiles = generateHexGrid(150, 4, {
+      mountainPct: 0,
+      lakePct: 0,
+    });
+    expect(tiles.filter((t) => t.isCity).length).toBe(2);
+  });
+
+  it("clamps over-range percentages to 25%", () => {
+    const tiles = generateHexGrid(200, 4, {
+      mountainPct: 100,
+      lakePct: 0,
+      desertPct: 0,
+      forestPct: 0,
+      cityCount: 0,
+    });
+    const mountainShare = tiles.filter((t) => t.terrain === "mountain").length / tiles.length;
+    // ~25% of tiles should be mountain. Allow generous slack for randomness +
+    // post-generation reachability fixup that converts some mountains to grass.
+    expect(mountainShare).toBeGreaterThanOrEqual(0.1);
+    expect(mountainShare).toBeLessThanOrEqual(0.35);
   });
 });

@@ -1,7 +1,7 @@
 import React from "react";
 import { G, Rect, Text as SvgText } from "react-native-svg";
 import { ENTITY_META } from "@/utils/hexGrid";
-import { TERRITORY_BORDERS } from "@/constants/colors";
+import { useOwnerColors } from "@/contexts/SettingsContext";
 import type { HexTile } from "@/types";
 import { areCityOverlayLayerEqual } from "@/components/layerEquality";
 
@@ -18,6 +18,7 @@ function CityOverlayLayerInner({
   tileDataMap,
   HEX_SIZE,
 }: CityOverlayLayerProps) {
+  const { borders: TERRITORY_BORDERS } = useOwnerColors();
   return (
     <G>
       {Array.from(cities).map((key) => {

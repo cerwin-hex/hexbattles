@@ -5,7 +5,7 @@ import Animated, {
   useAnimatedStyle,
 } from "react-native-reanimated";
 import { ENTITY_META } from "@/utils/hexGrid";
-import { TERRITORY_BORDERS } from "@/constants/colors";
+import { useOwnerColors } from "@/contexts/SettingsContext";
 import type { EntityType, TerritoryOwner } from "@/types";
 
 interface AnimatedMovingUnitProps {
@@ -25,6 +25,7 @@ export default function AnimatedMovingUnit({
   hexSize,
   progress,
 }: AnimatedMovingUnitProps) {
+  const { borders: TERRITORY_BORDERS } = useOwnerColors();
   const meta = ENTITY_META[entityId];
   const r = hexSize * 0.5;
   const animStyle = useAnimatedStyle(() => {

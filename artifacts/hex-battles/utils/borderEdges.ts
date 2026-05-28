@@ -1,7 +1,7 @@
 import type { BorderEdge, HexTile, TerritoryOwner } from "@/types";
 import { tileKey, hexCornerPoint } from "@/utils/hexMath";
 import { ORDERED_EDGES } from "@/constants/gameConstants";
-import { CITY_BUFFER_BORDER, TERRITORY_BORDERS } from "@/constants/colors";
+import { CITY_BUFFER_BORDER } from "@/constants/colors";
 
 export type BorderEdgesCache = {
   mutableTileMap: Map<string, HexTile>;
@@ -27,6 +27,7 @@ export function computeBorderEdges(
   mutableTileMap: Map<string, HexTile>,
   INNER_SIZE: number,
   BORDER_W: number,
+  territoryBorders: Record<string, string>,
 ): BorderEdge[] {
   const ownerOf = (key: string, base: HexTile) =>
     mutableTileMap.get(key)?.owner ?? base.owner;
@@ -106,7 +107,7 @@ export function computeBorderEdges(
       }
       return edges;
     }
-    const color = TERRITORY_BORDERS[liveOwner as TerritoryOwner]!;
+    const color = territoryBorders[liveOwner as TerritoryOwner]!;
     if (!color) return edges;
     for (const {
       dir: [dq, dr],

@@ -1,7 +1,7 @@
 import React from "react";
 import { G, Rect, Text as SvgText } from "react-native-svg";
 import { ENTITY_META } from "@/utils/hexGrid";
-import { TERRITORY_BORDERS } from "@/constants/colors";
+import { useOwnerColors } from "@/contexts/SettingsContext";
 import type { HexTile } from "@/types";
 
 export interface BridgeOverlayLayerProps {
@@ -17,6 +17,7 @@ function BridgeOverlayLayerInner({
   selectedEntityKey,
   HEX_SIZE,
 }: BridgeOverlayLayerProps) {
+  const { borders: TERRITORY_BORDERS } = useOwnerColors();
   const bridgeTiles: HexTile[] = [];
   for (const tile of activeTileMap.values()) {
     if (tile.terrain === "lake" && tile.owner !== "neutral") {

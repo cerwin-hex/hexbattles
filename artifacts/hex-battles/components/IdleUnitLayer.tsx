@@ -11,7 +11,7 @@ import Animated, {
 } from "react-native-reanimated";
 import type { SharedValue } from "react-native-reanimated";
 import { ENTITY_META } from "@/utils/hexGrid";
-import { TERRITORY_BORDERS } from "@/constants/colors";
+import { useOwnerColors } from "@/contexts/SettingsContext";
 import type { EntityType, HexTile, TerritoryOwner } from "@/types";
 import AnimatedMovingUnit from "@/components/AnimatedMovingUnit";
 
@@ -46,6 +46,7 @@ export function IdleUnitLayer({
   HEX_SIZE,
   isAiTurn,
 }: IdleUnitLayerProps) {
+  const { borders: TERRITORY_BORDERS } = useOwnerColors();
   const idleBounceY = useSharedValue(0);
 
   useEffect(() => {
