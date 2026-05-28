@@ -53,3 +53,7 @@ Thumbs.db
 
 # pnpm
 .pnpm-store/
+
+# Local backup files
+*backup*
+*.bak
