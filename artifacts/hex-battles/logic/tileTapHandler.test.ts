@@ -340,6 +340,63 @@ describe("armed entity placement on own territory", () => {
     expect(result.get("0,0")).toBe(5); // no deduction for free tower
   });
 
+  it("cannot place a tower on a city tile", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
+    const territory = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: tileMap(tiles),
+      armedEntityId: "tower",
+      selectedTileKeys: new Set(["0,0", "1,0"]),
+      selectedTerritoryId: "0,0",
+      selectedTerritory: territory,
+      entities: new Map(),
+      cities: new Set(["1,0"]),
+      territoryBalances: new Map([["0,0", 100]]),
+    });
+    handleTileTapLogic(params);
+    expect(params.triggerErrorFlash).toHaveBeenCalledWith("1,0");
+    expect(params.setEntities).not.toHaveBeenCalled();
+  });
+
+  it("cannot place a castle on a city tile", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
+    const territory = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: tileMap(tiles),
+      armedEntityId: "castle",
+      selectedTileKeys: new Set(["0,0", "1,0"]),
+      selectedTerritoryId: "0,0",
+      selectedTerritory: territory,
+      entities: new Map(),
+      cities: new Set(["1,0"]),
+      territoryBalances: new Map([["0,0", 100]]),
+    });
+    handleTileTapLogic(params);
+    expect(params.triggerErrorFlash).toHaveBeenCalledWith("1,0");
+    expect(params.setEntities).not.toHaveBeenCalled();
+  });
+
+  it("can still place a unit on an empty city tile", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
+    const territory = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: tileMap(tiles),
+      armedEntityId: "simple_unit",
+      selectedTileKeys: new Set(["0,0", "1,0"]),
+      selectedTerritoryId: "0,0",
+      selectedTerritory: territory,
+      entities: new Map(),
+      cities: new Set(["1,0"]),
+      territoryBalances: new Map([["0,0", 100]]),
+    });
+    handleTileTapLogic(params);
+    expect(params.triggerErrorFlash).not.toHaveBeenCalled();
+    expect(params.setEntities).toHaveBeenCalled();
+  });
+
   it("cannot place on a lake tile without a bridge", () => {
     const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player", "lake")];
     const territory = [makeTile(0, 0, "player"), makeTile(1, 0, "player", "lake")];

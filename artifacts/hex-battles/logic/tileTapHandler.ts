@@ -350,9 +350,12 @@ export function handleTileTapLogic(params: TileTapParams): void {
       armedIsUnit &&
       existingOnTile === "bridge" &&
       activeTileMap.get(key)?.owner === "player";
+    // Cities live in a separate Set from entities, so an empty city tile has
+    // no entity. Block any non-unit armed entity (city/tower/castle/bridge)
+    // from being placed on a city — only units may stand on cities.
     const alreadyOccupied =
       (!!existingOnTile && !canMerge && !canOverwriteRebel && !canOverwriteBuilding && !canPlaceOnBridge) ||
-      (armedEntityId === "city" && cities.has(key));
+      (!armedIsUnit && cities.has(key));
     // Don't allow placement on lake tiles unless there's a bridge (bridges are placed via validBridgePlacementTiles path)
     const tileData = activeTileMap.get(key);
     if (tileData?.terrain === "lake" && existingOnTile !== "bridge") {
