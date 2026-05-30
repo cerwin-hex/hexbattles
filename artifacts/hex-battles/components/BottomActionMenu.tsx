@@ -11,10 +11,10 @@ interface BottomActionMenuProps {
   gameResult: string | null;
   moveHistory: unknown[];
   handleUndo: () => void;
-  showCredits: boolean;
+  showGold: boolean;
   hasSelection: boolean;
   setShowEconModal: (v: boolean) => void;
-  creditsDisplayValue: number;
+  goldDisplayValue: number;
   econBreakdown: EconBreakdown | null;
   canBuild: boolean;
   ribbonMode: "units" | "buildings" | null;
@@ -40,10 +40,10 @@ export default function BottomActionMenu({
   gameResult,
   moveHistory,
   handleUndo,
-  showCredits,
+  showGold,
   hasSelection,
   setShowEconModal,
-  creditsDisplayValue,
+  goldDisplayValue,
   econBreakdown,
   canBuild,
   ribbonMode,
@@ -95,25 +95,25 @@ export default function BottomActionMenu({
           );
         })()}
 
-        {showCredits && (
+        {showGold && (
           <TouchableOpacity
-            style={styles.creditsDisplay}
+            style={styles.goldDisplay}
             onPress={() => {
               if (hasSelection) setShowEconModal(true);
             }}
             activeOpacity={hasSelection ? 0.75 : 1}
           >
-            <View style={styles.creditsTopRow}>
-              <Text style={styles.creditsIcon}>⚜️</Text>
-              <Text style={styles.creditsAmount}>{creditsDisplayValue}</Text>
+            <View style={styles.goldTopRow}>
+              <Text style={styles.goldIcon}>🪙</Text>
+              <Text style={styles.goldAmount}>{goldDisplayValue}</Text>
             </View>
             {hasSelection && econBreakdown !== null ? (
               <Text
                 style={[
-                  styles.creditsNet,
+                  styles.goldNet,
                   econBreakdown.net >= 0
-                    ? styles.creditsNetPos
-                    : styles.creditsNetNeg,
+                    ? styles.goldNetPos
+                    : styles.goldNetNeg,
                 ]}
               >
                 {econBreakdown.net >= 0
@@ -122,7 +122,7 @@ export default function BottomActionMenu({
                 /turn
               </Text>
             ) : (
-              <Text style={[styles.creditsNet, { color: "transparent" }]}>
+              <Text style={[styles.goldNet, { color: "transparent" }]}>
                 +0/turn
               </Text>
             )}

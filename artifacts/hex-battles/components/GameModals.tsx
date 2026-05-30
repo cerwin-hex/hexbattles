@@ -212,7 +212,7 @@ export default function GameModals({
             <View style={styles.econRow}>
               <Text style={styles.econNetLabel}>Current balance</Text>
               <Text style={styles.econNetValue}>
-                ⚜️ {selectedTerritoryBalance}
+                🪙 {selectedTerritoryBalance}
               </Text>
             </View>
             <TouchableOpacity

@@ -106,7 +106,7 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
               <Text style={styles.ruleSectionTitle}>Bridges</Text>
               <View style={styles.ruleDivider} />
               <Text style={styles.ruleBody}>
-                Build a Bridge (➖) on any lake tile adjacent to your territory for 5 gold (1 upkeep per turn). Bridges become part of your territory and allow units to cross the water. Enemies can capture or destroy your bridges, cutting off connections.
+                Build a Bridge (➖) on any lake tile adjacent to your territory for 🪙5 (1 upkeep per turn). Bridges become part of your territory and allow units to cross the water. Enemies can capture or destroy your bridges, cutting off connections.
               </Text>
             </View>
 

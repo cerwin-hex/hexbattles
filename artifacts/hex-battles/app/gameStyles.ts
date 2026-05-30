@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
   buildBtnTextDisabled: {
     color: "#5A4A22",
   },
-  creditsDisplay: {
+  goldDisplay: {
     height: BTN_H,
     flexDirection: "column",
     alignItems: "center",
@@ -179,27 +179,27 @@ const styles = StyleSheet.create({
     borderColor: "#7A6030",
     backgroundColor: "#3A2A10",
   },
-  creditsTopRow: {
+  goldTopRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
   },
-  creditsIcon: {
+  goldIcon: {
     fontSize: 12,
   },
-  creditsAmount: {
+  goldAmount: {
     fontSize: 14,
     fontFamily: "Inter_700Bold",
     color: "#C8A24A",
   },
-  creditsNet: {
+  goldNet: {
     fontSize: 10,
     fontFamily: "Inter_400Regular",
   },
-  creditsNetPos: {
+  goldNetPos: {
     color: "#70C870",
   },
-  creditsNetNeg: {
+  goldNetNeg: {
     color: "#E07060",
   },
   lakeModalOverlay: {

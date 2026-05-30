@@ -95,7 +95,7 @@ export default function PurchaseRibbon({
                 ? "<6 tiles"
                 : playerTowerFree
                   ? "FREE"
-                  : `${item.cost}g`;
+                  : `🪙${item.cost}`;
           const nextUpkeepLabel = (() => {
             if (isTower) {
               const cost = nextDefenseUpkeep("tower", selectedTerritoryDefenseCounts.tower);

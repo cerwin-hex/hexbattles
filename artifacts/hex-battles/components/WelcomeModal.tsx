@@ -110,10 +110,10 @@ export function WelcomeModal() {
                 You earn gold at the start of each turn from every tile you own. Units and buildings cost upkeep — if you run out of gold, your weakest units are disbanded automatically. Keep expanding to fund your army.
               </Text>
               <View style={styles.incomeBox}>
-                <Text style={styles.incomeRow}>🟩 Grass / 🌲 Forest  →  <Text style={styles.gold}>2 gold</Text> per turn</Text>
-                <Text style={styles.incomeRow}>🏜️ Desert  →  <Text style={styles.gold}>1 gold</Text> per turn</Text>
-                <Text style={styles.incomeRow}>🏙️ City  →  <Text style={styles.gold}>+2 bonus</Text> on top of terrain</Text>
-                <Text style={styles.incomeRow}>⛰️ Mountain / 💧 Lake  →  <Text style={styles.dimGold}>0 gold</Text></Text>
+                <Text style={styles.incomeRow}>🟩 Grass / 🌲 Forest  →  <Text style={styles.gold}>🪙2</Text> per turn</Text>
+                <Text style={styles.incomeRow}>🏜️ Desert  →  <Text style={styles.gold}>🪙1</Text> per turn</Text>
+                <Text style={styles.incomeRow}>🏙️ City  →  <Text style={styles.gold}>+🪙2 bonus</Text> on top of terrain</Text>
+                <Text style={styles.incomeRow}>⛰️ Mountain / 💧 Lake  →  <Text style={styles.dimGold}>🪙0</Text></Text>
               </View>
             </Section>
 
@@ -122,8 +122,8 @@ export function WelcomeModal() {
                 <View style={[styles.tableRow, styles.tableHeaderRow]}>
                   <Text style={[styles.tableCell, styles.tableCellIcon, styles.tableHeaderText]}> </Text>
                   <Text style={[styles.tableCell, styles.tableCellName, styles.tableHeaderText]}>Name</Text>
-                  <Text style={[styles.tableCell, styles.tableCellNum, styles.tableHeaderText]}>Cost</Text>
-                  <Text style={[styles.tableCell, styles.tableCellNum, styles.tableHeaderText]}>Upkeep</Text>
+                  <Text style={[styles.tableCell, styles.tableCellNum, styles.tableHeaderText]}>🪙 Cost</Text>
+                  <Text style={[styles.tableCell, styles.tableCellNum, styles.tableHeaderText]}>🪙 Upkeep</Text>
                   <Text style={[styles.tableCell, styles.tableCellNum, styles.tableHeaderText]}>Str</Text>
                 </View>
                 {UNIT_ROWS.map((row, i) => (

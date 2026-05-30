@@ -1066,8 +1066,8 @@ export default function GameScreen() {
   }));
 
   const hasSelection = selectedTerritory.length > 0;
-  const showCredits = hasSelection;
-  const creditsDisplayValue = selectedTerritoryBalance;
+  const showGold = hasSelection;
+  const goldDisplayValue = selectedTerritoryBalance;
 
   return (
     <View style={styles.root}>
@@ -1304,10 +1304,10 @@ export default function GameScreen() {
         gameResult={gameResult}
         moveHistory={moveHistory}
         handleUndo={handleUndo}
-        showCredits={showCredits}
+        showGold={showGold}
         hasSelection={hasSelection}
         setShowEconModal={setShowEconModal}
-        creditsDisplayValue={creditsDisplayValue}
+        goldDisplayValue={goldDisplayValue}
         econBreakdown={econBreakdown as EconBreakdown | null}
         canBuild={canBuild}
         ribbonMode={ribbonMode}
