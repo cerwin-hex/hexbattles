@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { HexTile, EntityType, TerritoryOwner } from "@/types";
 import { handleEndTurnLogic, type EndTurnParams } from "@/logic/endTurnHandler";
 
@@ -153,6 +153,16 @@ describe("income and upkeep", () => {
 // ─── Bankruptcy — unit liquidation ───────────────────────────────────────────
 
 describe("bankruptcy — unit liquidation", () => {
+  // These tests assert about unit/building liquidation, not rebel spawning.
+  // Suppress the end-of-turn rebel spawn (which uses real Math.random) so it
+  // can't randomly repopulate a just-cleared tile and flake the assertions.
+  beforeEach(() => {
+    vi.spyOn(Math, "random").mockReturnValue(0.99);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("kills player units when territory goes bankrupt (balance drains to 0)", () => {
     // Desert tile (income=1) with expert_unit (upkeep=27) — delta is negative
     const tiles = [makeTile(0, 0, "player", "desert")];
@@ -256,13 +266,35 @@ describe("bankruptcy — unit liquidation", () => {
   });
 });
 
-// ─── AI income (turn !== 1) ──────────────────────────────────────────────────
+// ─── AI income (turn > 2) ────────────────────────────────────────────────────
 
 describe("AI income", () => {
-  it("AI earns income from turn 2 onwards (same cadence as player)", () => {
+  it("AI earns NO income in turn 2 (matches player's spend cadence, not just crediting moment)", () => {
+    // The AI plays immediately after this handler, so crediting its income at
+    // turn 2 (like the player) would let it spend in round 2 while the player —
+    // whose turn-2 credit is only spendable in round 3 — cannot. AI income is
+    // therefore delayed one handler (turn > 2) to give it the same one-round
+    // lag. At turn 2 the AI balance must be unchanged.
     const tiles = [makeTile(0, 0, "player"), makeTile(5, 5, "ai1")];
     const params = makeParams({
       turn: 2,
+      activeTileMap: tileMap(tiles),
+      mutableTileMap: tileMap(tiles),
+      aiOwners: ["ai1"],
+      aiDifficulty: "medium",
+      territoryBalances: new Map([["0,0", 0], ["5,5", 5]]),
+      entities: new Map(),
+    });
+    handleEndTurnLogic(params);
+    const newBalances = (params.setTerritoryBalances as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    // AI balance unchanged at turn 2
+    expect(newBalances.get("5,5")).toBe(5);
+  });
+
+  it("AI earns income from turn 3 onwards", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(5, 5, "ai1")];
+    const params = makeParams({
+      turn: 3,
       activeTileMap: tileMap(tiles),
       mutableTileMap: tileMap(tiles),
       aiOwners: ["ai1"],
@@ -296,7 +328,7 @@ describe("AI income", () => {
   it("super_hard AI gets bonus income equal to landTileCount", () => {
     const tiles = [makeTile(0, 0, "player"), makeTile(5, 5, "ai1")];
     const params = makeParams({
-      turn: 2,
+      turn: 3,
       activeTileMap: tileMap(tiles),
       mutableTileMap: tileMap(tiles),
       aiOwners: ["ai1"],

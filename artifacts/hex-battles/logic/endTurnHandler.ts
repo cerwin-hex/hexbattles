@@ -166,11 +166,17 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
     }
   }
 
-  // AI income and upkeep follow the same cadence as the player: suspended in
-  // round 1, then credited at the end of every subsequent end-turn. The player
-  // goes first each round, so income is computed once here for both sides at
-  // the same point in time.
-  if (turn !== 1) {
+  // AI income/upkeep must match the player's SPEND cadence, not merely the same
+  // crediting moment. The player's income is credited here at the end of turn N
+  // but isn't spendable until the player's next turn (round N+1) — a one-round
+  // delay. The AI, however, plays its turn immediately after this handler (see
+  // runAiTurn below), so income credited here would be spent in the SAME round,
+  // putting the AI a full economy cycle ahead (it could e.g. upgrade its free
+  // round-1 tower already in round 2, which the player cannot). To give the AI
+  // the same one-round delay we credit its income one handler later: from turn 3
+  // onward (turn > 2). Net effect: at the start of round R both sides hold
+  // 10 + (R-2) income credits.
+  if (turn > 2) {
     for (const aiOwner of aiOwners) {
       const aiVisited = new Set<string>();
       for (const tile of Array.from(activeTileMap.values())) {
