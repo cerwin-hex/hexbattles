@@ -137,12 +137,16 @@ export function isHydrated(): boolean {
 }
 
 export async function hydrateSavedGame(): Promise<SavedGame | null> {
+  // A saved game must never survive an app restart. On the first hydration of
+  // a fresh JS context (cold start), discard any game persisted by a previous
+  // run so the menu offers "New Game" instead of "Resume". In-session resume
+  // (game -> menu -> resume) still works because the cache is held in memory.
   try {
-    const json = await AsyncStorage.getItem(STORAGE_KEY);
-    cache = json ? deserializeSavedGame(json) : null;
+    await AsyncStorage.removeItem(STORAGE_KEY);
   } catch {
-    cache = null;
+    // ignore — cache stays null either way
   }
+  cache = null;
   hydrated = true;
   notify();
   return cache;

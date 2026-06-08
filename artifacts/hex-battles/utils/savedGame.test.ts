@@ -125,7 +125,7 @@ describe("savedGame module", () => {
     expect(listener).not.toHaveBeenCalled();
   });
 
-  it("hydrateSavedGame populates cache from AsyncStorage", async () => {
+  it("hydrateSavedGame discards a persisted game on cold start", async () => {
     const snap = makeSnapshot();
     setSavedGame(snap);
     // Simulate process restart: reset module cache without touching storage.
@@ -136,10 +136,11 @@ describe("savedGame module", () => {
 
     const loaded = await hydrateSavedGame();
 
+    // A game must never survive an app restart — hydration clears it.
     expect(isHydrated()).toBe(true);
-    expect(loaded).not.toBe(null);
-    expect(loaded?.state.turn).toBe(snap.state.turn);
-    expect(hasSavedGameSync()).toBe(true);
+    expect(loaded).toBe(null);
+    expect(hasSavedGameSync()).toBe(false);
+    expect(storage.has("hex_battles_saved_game_v1")).toBe(false);
   });
 
   it("hydrateSavedGame resolves to null when no save exists", async () => {
