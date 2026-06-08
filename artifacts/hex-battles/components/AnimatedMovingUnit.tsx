@@ -1,11 +1,11 @@
 import React from "react";
-import { Text } from "react-native";
 import Animated, {
   SharedValue,
   useAnimatedStyle,
 } from "react-native-reanimated";
 import { ENTITY_META } from "@/utils/hexGrid";
 import { useOwnerColors } from "@/contexts/SettingsContext";
+import { UnitToken } from "@/components/UnitToken";
 import type { EntityType, TerritoryOwner } from "@/types";
 
 interface AnimatedMovingUnitProps {
@@ -43,25 +43,17 @@ export default function AnimatedMovingUnit({
   return (
     <Animated.View
       style={[
-        {
-          position: "absolute",
-          left: fromPos.cx - r,
-          top: fromPos.cy - r,
-          width: r * 2,
-          height: r * 2,
-          borderRadius: r,
-          backgroundColor: bgColor,
-          borderWidth: 2.2,
-          borderColor,
-          alignItems: "center",
-          justifyContent: "center",
-        },
+        { position: "absolute", left: fromPos.cx - r, top: fromPos.cy - r },
         animStyle,
       ]}
     >
-      <Text style={{ fontSize: r * 1.1, lineHeight: r * 1.6 }}>
-        {meta.icon}
-      </Text>
+      <UnitToken
+        r={r}
+        icon={meta.icon}
+        bgColor={bgColor}
+        borderColor={borderColor}
+        borderWidth={2.2}
+      />
     </Animated.View>
   );
 }

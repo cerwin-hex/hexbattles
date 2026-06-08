@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import Animated, {
   cancelAnimation,
   Easing,
@@ -14,6 +14,7 @@ import { ENTITY_META } from "@/utils/hexGrid";
 import { useOwnerColors } from "@/contexts/SettingsContext";
 import type { EntityType, HexTile, TerritoryOwner } from "@/types";
 import AnimatedMovingUnit from "@/components/AnimatedMovingUnit";
+import { UnitToken } from "@/components/UnitToken";
 
 interface AnimatingUnit {
   fromKey: string;
@@ -113,25 +114,17 @@ export function IdleUnitLayer({
           <Animated.View
             key={`bounce-${key}`}
             style={[
-              {
-                position: "absolute",
-                left: pos.cx - r,
-                top: pos.cy - r,
-                width: r * 2,
-                height: r * 2,
-                borderRadius: r,
-                backgroundColor: "rgba(30,50,120,0.9)",
-                borderWidth: 2.2,
-                borderColor: TERRITORY_BORDERS["player"],
-                alignItems: "center",
-                justifyContent: "center",
-              },
+              { position: "absolute", left: pos.cx - r, top: pos.cy - r },
               idleBounceStyle,
             ]}
           >
-            <Text style={{ fontSize: r * 1.1, lineHeight: r * 1.6 }}>
-              {meta.icon}
-            </Text>
+            <UnitToken
+              r={r}
+              icon={meta.icon}
+              bgColor="rgba(30,50,120,0.9)"
+              borderColor={TERRITORY_BORDERS["player"]}
+              borderWidth={2.2}
+            />
           </Animated.View>
         );
       })}

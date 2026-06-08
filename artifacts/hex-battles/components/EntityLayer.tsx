@@ -1,9 +1,8 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import Svg, { Circle, Polygon, Rect, Text as SvgText } from "react-native-svg";
 import { ENTITY_META } from "@/utils/hexGrid";
 import { useOwnerColors } from "@/contexts/SettingsContext";
-import { hexCornersString } from "@/utils/hexMath";
+import { UnitToken } from "@/components/UnitToken";
 import type { EntityType, HexTile, TerritoryOwner } from "@/types";
 
 export interface EntityLayerProps {
@@ -31,94 +30,67 @@ function EntityLayerInner({
   selectedEntityKey,
   spentUnits,
   animatingUnit,
-  boardW,
-  boardH,
   HEX_SIZE,
 }: EntityLayerProps) {
   const { borders: TERRITORY_BORDERS } = useOwnerColors();
   return (
-    <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
-      <Svg width={boardW} height={boardH}>
-        {Array.from(entities.entries()).map(([key, entityId]) => {
-          if (entityId === "city") return null;
-          if (entityId === "bridge") return null;
-          if (animatingUnit && key === animatingUnit.fromKey) return null;
-          if (
-            animatingUnit &&
-            animatingUnit.hideDestination &&
-            key === animatingUnit.toKey
-          )
-            return null;
-          const pos = tileDataMap.get(key);
-          if (!pos) return null;
-          const meta = ENTITY_META[entityId];
-          const isRebel = entityId === "rebel";
-          const isBuilding = !meta.isUnit && !isRebel;
-          const r = HEX_SIZE * 0.5;
-          const isSelected = selectedEntityKey === key;
-          const isSpent = spentUnits.has(key);
-          const liveTile = activeTileMap.get(key);
-          const isPlayerUnit = liveTile?.owner === "player" && meta.isUnit;
-          const isIdleBouncing = isPlayerUnit && !isSpent && !isSelected;
-          if (isIdleBouncing) return null;
-          const bgColor = isRebel
-            ? "rgba(140,20,20,0.92)"
-            : isSelected
-              ? "rgba(20,80,20,0.95)"
-              : meta.isUnit
-                ? "rgba(30,50,120,0.9)"
-                : "rgba(80,40,10,0.9)";
-          const ownerColor =
-            TERRITORY_BORDERS[liveTile?.owner ?? ""] ?? "#FFD700";
-          const strokeColor = isRebel
-            ? "#FFD700"
-            : isSelected
-              ? "#50FF50"
-              : ownerColor;
-          const strokeWidth = isRebel ? 3.0 : isSelected ? 4.0 : 3.2;
-          const unitOpacity = isSpent && isPlayerUnit ? 0.6 : 1.0;
-          return (
-            <React.Fragment key={`entity-${key}`}>
-              {isBuilding ? (
-                <Rect
-                  x={pos.cx - r}
-                  y={pos.cy - r}
-                  width={r * 2}
-                  height={r * 2}
-                  rx={4}
-                  fill={bgColor}
-                  stroke={strokeColor}
-                  strokeWidth={strokeWidth}
-                />
-              ) : (
-                <Circle
-                  cx={pos.cx}
-                  cy={pos.cy}
-                  r={r}
-                  fill={bgColor}
-                  stroke={strokeColor}
-                  strokeWidth={strokeWidth}
-                  opacity={unitOpacity}
-                />
-              )}
-              <SvgText
-                x={pos.cx}
-                y={pos.cy + r * 0.35}
-                textAnchor="middle"
-                fontSize={r * 1.1}
-                fill="#fff"
-                opacity={unitOpacity}
-              >
-                {meta.icon}
-              </SvgText>
-              <Polygon
-                points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
-                fill="transparent"
-              />
-            </React.Fragment>
-          );
-        })}
-      </Svg>
+    <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+      {Array.from(entities.entries()).map(([key, entityId]) => {
+        if (entityId === "city") return null;
+        if (entityId === "bridge") return null;
+        if (animatingUnit && key === animatingUnit.fromKey) return null;
+        if (
+          animatingUnit &&
+          animatingUnit.hideDestination &&
+          key === animatingUnit.toKey
+        )
+          return null;
+        const pos = tileDataMap.get(key);
+        if (!pos) return null;
+        const meta = ENTITY_META[entityId];
+        const isRebel = entityId === "rebel";
+        const isBuilding = !meta.isUnit && !isRebel;
+        const r = HEX_SIZE * 0.5;
+        const isSelected = selectedEntityKey === key;
+        const isSpent = spentUnits.has(key);
+        const liveTile = activeTileMap.get(key);
+        const isPlayerUnit = liveTile?.owner === "player" && meta.isUnit;
+        // Idle (non-spent, non-selected) player units bounce in IdleUnitLayer.
+        const isIdleBouncing = isPlayerUnit && !isSpent && !isSelected;
+        if (isIdleBouncing) return null;
+        const bgColor = isRebel
+          ? "rgba(140,20,20,0.92)"
+          : isSelected
+            ? "rgba(20,80,20,0.95)"
+            : meta.isUnit
+              ? "rgba(30,50,120,0.9)"
+              : "rgba(80,40,10,0.9)";
+        const ownerColor =
+          TERRITORY_BORDERS[liveTile?.owner ?? ""] ?? "#FFD700";
+        const borderColor = isRebel
+          ? "#FFD700"
+          : isSelected
+            ? "#50FF50"
+            : ownerColor;
+        const borderWidth = isRebel ? 3.0 : isSelected ? 4.0 : 2.2;
+        const opacity = isSpent && isPlayerUnit ? 0.6 : 1.0;
+        return (
+          <View
+            key={`entity-${key}`}
+            style={{ position: "absolute", left: pos.cx - r, top: pos.cy - r }}
+          >
+            <UnitToken
+              r={r}
+              icon={meta.icon}
+              bgColor={bgColor}
+              borderColor={borderColor}
+              borderWidth={borderWidth}
+              square={isBuilding}
+              opacity={opacity}
+            />
+          </View>
+        );
+      })}
     </View>
   );
 }
