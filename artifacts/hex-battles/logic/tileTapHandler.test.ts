@@ -181,7 +181,7 @@ describe("unit move", () => {
     expect(params.setEntities).toHaveBeenCalled();
   });
 
-  it("marks destination as spent after move", () => {
+  it("does NOT mark unit spent after a non-combat partial move; records remaining moves", () => {
     const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
     const map = tileMap(tiles);
     const params = makeParams({
@@ -194,7 +194,49 @@ describe("unit move", () => {
     });
     handleTileTapLogic(params);
     const setSpentUnits = params.setSpentUnits as ReturnType<typeof vi.fn>;
-    expect(setSpentUnits).toHaveBeenCalled();
+    const spent: Set<string> = setSpentUnits.mock.calls[0][0];
+    expect(spent.has("1,0")).toBe(false);
+    // simple_unit has 3 movement; a 1-step move leaves 2 remaining at the destination
+    const setPartialMoves = params.setPartialMoves as ReturnType<typeof vi.fn>;
+    const partial: Map<string, number> = setPartialMoves.mock.calls[0][0];
+    expect(partial.get("1,0")).toBe(2);
+  });
+
+  it("marks unit spent when a non-combat move exhausts its remaining moves", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
+    const map = tileMap(tiles);
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: map,
+      selectedEntityKey: "0,0",
+      validMoveTiles: new Set(["1,0"]),
+      entities: ents([["0,0", "simple_unit"]]),
+      // Only 1 move left → a 1-step move exhausts it
+      partialMoves: new Map([["0,0", 1]]),
+      liveOwnerMap: new Map([["0,0", "player"], ["1,0", "player"]]),
+    });
+    handleTileTapLogic(params);
+    const setSpentUnits = params.setSpentUnits as ReturnType<typeof vi.fn>;
+    const spent: Set<string> = setSpentUnits.mock.calls[0][0];
+    expect(spent.has("1,0")).toBe(true);
+    const setPartialMoves = params.setPartialMoves as ReturnType<typeof vi.fn>;
+    const partial: Map<string, number> = setPartialMoves.mock.calls[0][0];
+    expect(partial.has("1,0")).toBe(false);
+  });
+
+  it("marks unit spent when capturing an empty enemy tile (combat)", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "ai1")];
+    const map = tileMap(tiles);
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: map,
+      selectedEntityKey: "0,0",
+      validMoveTiles: new Set(["1,0"]),
+      entities: ents([["0,0", "simple_unit"]]),
+      liveOwnerMap: new Map([["0,0", "player"], ["1,0", "ai1"]]),
+    });
+    handleTileTapLogic(params);
+    const setSpentUnits = params.setSpentUnits as ReturnType<typeof vi.fn>;
     const spent: Set<string> = setSpentUnits.mock.calls[0][0];
     expect(spent.has("1,0")).toBe(true);
   });

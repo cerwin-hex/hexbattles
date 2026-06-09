@@ -261,6 +261,37 @@ describe("runAiTurn", () => {
     });
   });
 
+  describe("unit move execution (dtExecMove)", () => {
+    it("spends the unit after it captures an enemy tile (combat)", async () => {
+      // AI owns (0,0)+(1,0) with a simple_unit at (0,0); enemy owns empty (2,0).
+      // On "hard" the loop captures (2,0); the real exec runs dtExecMove, and a
+      // combat move must leave the unit spent regardless of remaining movement.
+      const tiles = [
+        makeTile(0, 0, "ai1"),
+        makeTile(1, 0, "ai1"),
+        makeTile(2, 0, "player"),
+      ];
+      const ws = makeEmptyWs(makeTileMap(tiles));
+      ws.entities.set("0,0", "simple_unit" as EntityType);
+      ws.balances.set("0,0", 10);
+      // The move animation gates dtExecMove on a callback; invoke it immediately.
+      const cbs = makeCbs({
+        triggerUnitAnimation: vi.fn(
+          (...args: unknown[]) => {
+            const done = args[args.length - 1];
+            if (typeof done === "function") done();
+          },
+        ) as AiTurnCallbacks["triggerUnitAnimation"],
+      });
+
+      await runAiTurn(ws, cbs, ["ai1"], 2, "hard");
+
+      expect(ws.entities.get("2,0")).toBe("simple_unit");
+      expect(ws.entities.has("0,0")).toBe(false);
+      expect(ws.spentUnits.has("2,0")).toBe(true);
+    });
+  });
+
   describe("checkWinLoss", () => {
     it("is called at the end of every turn regardless of what happened", async () => {
       const tiles = [makeTile(0, 0, "player")];

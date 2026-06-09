@@ -127,3 +127,38 @@ export function mergedUnitType(strA: number, strB: number): EntityType {
   const total = Math.min(strA + strB, 3);
   return STRENGTH_TO_UNIT[total] ?? "expert_unit";
 }
+
+/**
+ * Resolves how a unit's movement budget is recorded at its destination after a
+ * move, so a turn can be split into several individual moves up to the unit's
+ * max movement (3).
+ *
+ * - Plain move: keep the unit active and store its remaining moves. Only spend
+ *   it when no moves are left.
+ * - Combat (attacking enemy units, buildings, or capturing an enemy tile):
+ *   always spend the unit, regardless of remaining moves.
+ * - Merge: never spends on its own; the merged unit keeps the lower of the two
+ *   units' remaining moves and is only spent once that hits zero.
+ *
+ * `remaining` is `null` when the unit is at full range (3) — callers should NOT
+ * store a partialMoves entry in that case (absence means "full").
+ */
+export function resolveMovedUnitMoves(o: {
+  isMerge: boolean;
+  isCombat: boolean;
+  remainingAfterMove: number;
+  destRemaining: number;
+}): { spent: boolean; remaining: number | null } {
+  if (o.isMerge) {
+    const merged = Math.min(o.remainingAfterMove, o.destRemaining);
+    if (merged <= 0) return { spent: true, remaining: null };
+    return { spent: false, remaining: merged < 3 ? merged : null };
+  }
+  if (o.isCombat || o.remainingAfterMove <= 0) {
+    return { spent: true, remaining: null };
+  }
+  return {
+    spent: false,
+    remaining: o.remainingAfterMove < 3 ? o.remainingAfterMove : null,
+  };
+}

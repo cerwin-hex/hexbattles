@@ -16,6 +16,7 @@ import {
   applySingleHexPenalty,
   calcTerritoryUpkeep,
   mergedUnitType,
+  resolveMovedUnitMoves,
 } from "@/logic/gameLogic";
 
 /**
@@ -193,31 +194,32 @@ export function handleTileTapLogic(params: TileTapParams): void {
     const prevRemaining = partialMoves.get(selectedEntityKey) ?? 3;
     const remainingAfterMove = Math.max(0, prevRemaining - stepsUsed);
 
-    const newSpentUnits = new Set(spentUnits);
-    const newPartialMoves = new Map(partialMoves);
-    newPartialMoves.delete(selectedEntityKey);
-    if (isMerge) {
-      const destRemaining =
-        newPartialMoves.get(key) ?? (newSpentUnits.has(key) ? 0 : 3);
-      const mergedRemaining = Math.min(remainingAfterMove, destRemaining);
-      newSpentUnits.delete(key);
-      newPartialMoves.delete(key);
-      if (mergedRemaining <= 0) {
-        newSpentUnits.add(key);
-      } else if (mergedRemaining < 3) {
-        newPartialMoves.set(key, mergedRemaining);
-      }
-    } else {
-      newSpentUnits.add(key);
-      newPartialMoves.delete(key);
-    }
-
     // Combat move: enemy territory OR overwriting a non-bridge entity (rebel/enemy unit).
     // Moving to own bridge tile is NOT combat — bridge is a structure, not an enemy.
     const isCombatMove =
       !isMerge &&
       ((previousOwner !== "neutral" && previousOwner !== "player") ||
        (existingUnit !== undefined && existingUnit !== "bridge"));
+
+    const newSpentUnits = new Set(spentUnits);
+    const newPartialMoves = new Map(partialMoves);
+    newPartialMoves.delete(selectedEntityKey);
+    const destRemaining =
+      newPartialMoves.get(key) ?? (newSpentUnits.has(key) ? 0 : 3);
+    const moved = resolveMovedUnitMoves({
+      isMerge,
+      isCombat: isCombatMove,
+      remainingAfterMove,
+      destRemaining,
+    });
+    newPartialMoves.delete(key);
+    if (moved.spent) {
+      newSpentUnits.add(key);
+    } else {
+      newSpentUnits.delete(key);
+      if (moved.remaining !== null) newPartialMoves.set(key, moved.remaining);
+    }
+
     const newCombatSpentUnits = isCombatMove
       ? new Set([...combatSpentUnits, key])
       : combatSpentUnits;
@@ -392,13 +394,20 @@ export function handleTileTapLogic(params: TileTapParams): void {
           newEntities.set(key, merged);
           const existingRemaining =
             newPartialMoves.get(key) ?? (newSpentUnits.has(key) ? 0 : 3);
-          const mergedRemaining = Math.min(3, existingRemaining);
-          newSpentUnits.delete(key);
+          // A freshly placed/bought unit is at full range (3); the merged unit
+          // keeps the lower of the two remaining-move budgets.
+          const moved = resolveMovedUnitMoves({
+            isMerge: true,
+            isCombat: false,
+            remainingAfterMove: 3,
+            destRemaining: existingRemaining,
+          });
           newPartialMoves.delete(key);
-          if (mergedRemaining <= 0) {
+          if (moved.spent) {
             newSpentUnits.add(key);
-          } else if (mergedRemaining < 3) {
-            newPartialMoves.set(key, mergedRemaining);
+          } else {
+            newSpentUnits.delete(key);
+            if (moved.remaining !== null) newPartialMoves.set(key, moved.remaining);
           }
         }
         unstable_batchedUpdates(() => {

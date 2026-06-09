@@ -5,6 +5,7 @@ import {
   applySingleHexPenalty,
   initTerritoryBalances,
   mergedUnitType,
+  resolveMovedUnitMoves,
 } from "@/logic/gameLogic";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -249,5 +250,79 @@ describe("applySingleHexPenalty", () => {
     applySingleHexPenalty(map, map, balances, entities2, graveyard, ruins);
 
     expect(balances.get("0,0")).toBe(30);
+  });
+});
+
+// ─── resolveMovedUnitMoves ────────────────────────────────────────────────────
+
+describe("resolveMovedUnitMoves", () => {
+  it("plain move with moves left: not spent, stores the remaining moves", () => {
+    const r = resolveMovedUnitMoves({
+      isMerge: false,
+      isCombat: false,
+      remainingAfterMove: 2,
+      destRemaining: 3,
+    });
+    expect(r).toEqual({ spent: false, remaining: 2 });
+  });
+
+  it("plain move at full range: not spent, no partial entry needed (remaining null)", () => {
+    const r = resolveMovedUnitMoves({
+      isMerge: false,
+      isCombat: false,
+      remainingAfterMove: 3,
+      destRemaining: 3,
+    });
+    expect(r).toEqual({ spent: false, remaining: null });
+  });
+
+  it("plain move that exhausts all moves: spent", () => {
+    const r = resolveMovedUnitMoves({
+      isMerge: false,
+      isCombat: false,
+      remainingAfterMove: 0,
+      destRemaining: 3,
+    });
+    expect(r).toEqual({ spent: true, remaining: null });
+  });
+
+  it("combat move always spends, even with moves left", () => {
+    const r = resolveMovedUnitMoves({
+      isMerge: false,
+      isCombat: true,
+      remainingAfterMove: 2,
+      destRemaining: 3,
+    });
+    expect(r).toEqual({ spent: true, remaining: null });
+  });
+
+  it("merge keeps the lower of the two units' remaining moves", () => {
+    const r = resolveMovedUnitMoves({
+      isMerge: true,
+      isCombat: false,
+      remainingAfterMove: 2,
+      destRemaining: 1,
+    });
+    expect(r).toEqual({ spent: false, remaining: 1 });
+  });
+
+  it("merge is not spent even when both are at full range", () => {
+    const r = resolveMovedUnitMoves({
+      isMerge: true,
+      isCombat: false,
+      remainingAfterMove: 3,
+      destRemaining: 3,
+    });
+    expect(r).toEqual({ spent: false, remaining: null });
+  });
+
+  it("merge becomes spent only when the lower remaining hits zero", () => {
+    const r = resolveMovedUnitMoves({
+      isMerge: true,
+      isCombat: false,
+      remainingAfterMove: 0,
+      destRemaining: 2,
+    });
+    expect(r).toEqual({ spent: true, remaining: null });
   });
 });

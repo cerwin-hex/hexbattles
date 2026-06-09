@@ -13,7 +13,7 @@ import {
   recalculateTerritoriesForCapture,
   TerritoryCache,
 } from "@/utils/hexGrid";
-import { calcTerritoryUpkeep, mergedUnitType } from "@/logic/gameLogic";
+import { calcTerritoryUpkeep, mergedUnitType, resolveMovedUnitMoves } from "@/logic/gameLogic";
 import {
   dtSplitScore,
   dtCaptureNegatesIncome,
@@ -1141,27 +1141,36 @@ export async function runAiTurn(
           ws.entities.set(fromKey, 'bridge');
         }
 
-        ws.spentUnits = new Set(ws.spentUnits);
-        if (isAllyMerge) {
-          ws.spentUnits.add(fromKey);
-        } else {
-          ws.spentUnits.add(toKey);
-        }
+        // Capturing an enemy tile or overwriting a non-bridge entity is combat,
+        // which always spends the unit — same rules as the player.
+        const isCombatMove =
+          !isAllyMerge &&
+          ((previousOwner !== "neutral" && previousOwner !== aiOwner) ||
+            (destExisting !== undefined && destExisting !== "bridge"));
 
+        ws.spentUnits = new Set(ws.spentUnits);
+        ws.partialMoves = new Map(ws.partialMoves);
         {
           const stepsUsed = getMoveCost(fromKey, toKey, prevTileMapSnapshot, prevEntitiesSnapshot);
           const prevRemaining = ws.partialMoves.get(fromKey) ?? 3;
           const remainingAfterMove = Math.max(0, prevRemaining - stepsUsed);
-          ws.partialMoves = new Map(ws.partialMoves);
+          const destRemaining = ws.partialMoves.get(toKey) ?? 3;
           ws.partialMoves.delete(fromKey);
-          if (isAllyMerge) {
-            const destRemaining = ws.partialMoves.get(toKey) ?? 3;
-            const mergedRemaining = Math.min(remainingAfterMove, destRemaining);
-            ws.partialMoves.delete(toKey);
-            if (mergedRemaining < 3) ws.partialMoves.set(toKey, mergedRemaining);
+          // For a merge, the source tile empties out; mark it spent so it is not
+          // re-evaluated. The merged unit lives at toKey.
+          if (isAllyMerge) ws.spentUnits.add(fromKey);
+          const moved = resolveMovedUnitMoves({
+            isMerge: isAllyMerge,
+            isCombat: isCombatMove,
+            remainingAfterMove,
+            destRemaining,
+          });
+          ws.partialMoves.delete(toKey);
+          if (moved.spent) {
+            ws.spentUnits.add(toKey);
           } else {
-            ws.partialMoves.delete(toKey);
-            if (remainingAfterMove < 3) ws.partialMoves.set(toKey, remainingAfterMove);
+            ws.spentUnits.delete(toKey);
+            if (moved.remaining !== null) ws.partialMoves.set(toKey, moved.remaining);
           }
         }
 
