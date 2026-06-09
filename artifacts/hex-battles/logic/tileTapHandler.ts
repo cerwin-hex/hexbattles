@@ -511,15 +511,24 @@ export function handleTileTapLogic(params: TileTapParams): void {
         newEntities.delete(key);
         newEntities.set(key, armedEntityId);
       }
-      const newCombatSpent2 = new Set([...combatSpentUnits, key]);
+      // Charge units bought directly into an attack spend one of their attacks
+      // but stay active (with full movement) so they can charge on and attack
+      // again. Other units (and cities) are spent immediately as before.
+      const isChargePlacement = !isCity && unitMaxAttacks(armedEntityId) > 1;
+      const newCombatSpent2 = isChargePlacement
+        ? combatSpentUnits
+        : new Set([...combatSpentUnits, key]);
       const newSpentUnits2 = new Set(spentUnits);
-      newSpentUnits2.add(key);
+      if (!isChargePlacement) newSpentUnits2.add(key);
+      const newAttacksUsed2 = new Map(attacksUsed);
+      if (isChargePlacement) newAttacksUsed2.set(key, 1);
 
       unstable_batchedUpdates(() => {
         setMutableTileMap(new Map(newTileMap));
         setEntities(new Map(newEntities));
         setCombatSpentUnits(newCombatSpent2);
         setSpentUnits(newSpentUnits2);
+        setAttacksUsed(newAttacksUsed2);
         setArmedEntityId(null);
         setSelectedEntityKey(null);
         setSelectedTileKey(key);

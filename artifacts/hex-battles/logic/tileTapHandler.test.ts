@@ -583,6 +583,48 @@ describe("armed entity attack outside own territory", () => {
     handleTileTapLogic(params);
     expect(params.triggerErrorFlash).toHaveBeenCalledWith("1,0");
   });
+
+  it("a cavalry unit bought into an attack is NOT spent and keeps a second attack", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "ai1")];
+    const territory = [makeTile(0, 0, "player")];
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: tileMap(tiles),
+      armedEntityId: "knight",
+      validPlacementAttackTiles: new Set(["1,0"]),
+      selectedTerritoryId: "0,0",
+      selectedTerritory: territory,
+      entities: new Map(),
+      territoryBalances: new Map([["0,0", 60]]),
+      liveOwnerMap: new Map([["0,0", "player"], ["1,0", "ai1"]]),
+    });
+    handleTileTapLogic(params);
+    const spent: Set<string> = (params.setSpentUnits as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(spent.has("1,0")).toBe(false);
+    const combatSpent: Set<string> = (params.setCombatSpentUnits as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(combatSpent.has("1,0")).toBe(false);
+    const attacksUsed: Map<string, number> = (params.setAttacksUsed as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(attacksUsed.get("1,0")).toBe(1);
+  });
+
+  it("a regular infantry unit bought into an attack is spent immediately", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "ai1")];
+    const territory = [makeTile(0, 0, "player")];
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: tileMap(tiles),
+      armedEntityId: "simple_unit",
+      validPlacementAttackTiles: new Set(["1,0"]),
+      selectedTerritoryId: "0,0",
+      selectedTerritory: territory,
+      entities: new Map(),
+      territoryBalances: new Map([["0,0", 60]]),
+      liveOwnerMap: new Map([["0,0", "player"], ["1,0", "ai1"]]),
+    });
+    handleTileTapLogic(params);
+    const spent: Set<string> = (params.setSpentUnits as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(spent.has("1,0")).toBe(true);
+  });
 });
 
 // ─── Tile selection (own territory, no entity) ────────────────────────────────

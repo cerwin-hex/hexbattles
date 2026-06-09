@@ -25,6 +25,17 @@ import {
 import type { AiContext } from "@/logic/aiHelpers";
 import type { AiState, Difficulty } from "@/types";
 
+// Unit purchase candidates for the AI, ordered by strength with cavalry slotted
+// in next to the same-strength infantry. The buy loops pick the first affordable
+// type that meets the strength threshold, so cheaper infantry is preferred over
+// cavalry of equal strength — cavalry are treated as ordinary purchase options.
+const AI_UNIT_BUY_ORDER_ASC: EntityType[] = [
+  "simple_unit", "scout", "advanced_unit", "knight", "expert_unit",
+];
+const AI_UNIT_BUY_ORDER_DESC: EntityType[] = [
+  "expert_unit", "knight", "advanced_unit", "scout", "simple_unit",
+];
+
 export interface AiDecisionExec {
   move(from: string, to: string): Promise<boolean>;
   buy(type: EntityType, target: string, cost: number, outside: boolean): Promise<boolean>;
@@ -231,7 +242,7 @@ export async function runAiTerritoryDecisionLoop(
       }
 
       if (!actionTaken) {
-        for (const uType of (["simple_unit", "advanced_unit", "expert_unit"] as EntityType[])) {
+        for (const uType of AI_UNIT_BUY_ORDER_ASC) {
           if (actionTaken) break;
           if (ENTITY_META[uType].strength < eStr) continue;
           const uCost = ENTITY_META[uType].cost;
@@ -416,7 +427,7 @@ export async function runAiTerritoryDecisionLoop(
             if (mergeB) actionTaken = await exec.move(mergeB.from, mergeB.to);
           }
           if (!actionTaken) {
-            for (const uType of (["simple_unit", "advanced_unit", "expert_unit"] as EntityType[])) {
+            for (const uType of AI_UNIT_BUY_ORDER_ASC) {
               if (actionTaken) break;
               const str = ENTITY_META[uType].strength;
               const cost = ENTITY_META[uType].cost;
@@ -645,7 +656,7 @@ export async function runAiTerritoryDecisionLoop(
         if (mergeE1) actionTaken = await exec.move(mergeE1.from, mergeE1.to);
       }
       if (!actionTaken) {
-        for (const uType of (["expert_unit", "advanced_unit", "simple_unit"] as EntityType[])) {
+        for (const uType of AI_UNIT_BUY_ORDER_DESC) {
           if (actionTaken) break;
           const str = ENTITY_META[uType].strength;
           const cost = ENTITY_META[uType].cost;
@@ -705,7 +716,7 @@ export async function runAiTerritoryDecisionLoop(
           if (mergeE2) actionTaken = await exec.move(mergeE2.from, mergeE2.to);
         }
         if (!actionTaken) {
-          for (const uType of (["simple_unit", "advanced_unit", "expert_unit"] as EntityType[])) {
+          for (const uType of AI_UNIT_BUY_ORDER_ASC) {
             if (actionTaken) break;
             const str = ENTITY_META[uType].strength;
             const cost = ENTITY_META[uType].cost;
@@ -761,7 +772,7 @@ export async function runAiTerritoryDecisionLoop(
           if (mergeE3) actionTaken = await exec.move(mergeE3.from, mergeE3.to);
         }
         if (!actionTaken) {
-          for (const uType of (["simple_unit", "advanced_unit", "expert_unit"] as EntityType[])) {
+          for (const uType of AI_UNIT_BUY_ORDER_ASC) {
             if (actionTaken) break;
             const str = ENTITY_META[uType].strength;
             const cost = ENTITY_META[uType].cost;
