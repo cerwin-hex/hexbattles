@@ -357,6 +357,11 @@ export default function GameScreen() {
   const [partialMoves, setPartialMoves] = useState<Map<string, number>>(
     new Map(),
   );
+  // Combat actions already used this turn, keyed by unit tile. Only charge units
+  // (maxAttacks > 1) accumulate entries here; absence means zero attacks used.
+  const [attacksUsed, setAttacksUsed] = useState<Map<string, number>>(
+    new Map(),
+  );
   const [isDeveloperModeActive, setIsDeveloperModeActive] = useState(false);
   const [isAiPaused, setIsAiPaused] = useState(false);
   const [isAiTurnDone, setIsAiTurnDone] = useState(false);
@@ -495,6 +500,7 @@ export default function GameScreen() {
       setSpentUnits(s.spentUnits);
       setCombatSpentUnits(s.combatSpentUnits);
       setPartialMoves(s.partialMoves);
+      setAttacksUsed(s.attacksUsed ?? new Map());
       setLiveOwnerMap(s.liveOwnerMap);
       setGraveyard(s.graveyard);
       setRuins(s.ruins);
@@ -515,6 +521,7 @@ export default function GameScreen() {
     setSpentUnits(new Set());
     setCombatSpentUnits(new Set());
     setPartialMoves(new Map());
+    setAttacksUsed(new Map());
     setMutableTileMap(new Map(tileMap));
     setLiveOwnerMap(new Map());
     setGraveyard(new Set());
@@ -671,6 +678,7 @@ export default function GameScreen() {
         spentUnits,
         combatSpentUnits,
         partialMoves,
+        attacksUsed,
         liveOwnerMap,
         cities,
         graveyard,
@@ -690,6 +698,7 @@ export default function GameScreen() {
     spentUnits,
     combatSpentUnits,
     partialMoves,
+    attacksUsed,
     liveOwnerMap,
     cities,
     graveyard,
@@ -797,6 +806,7 @@ export default function GameScreen() {
     combatSpentUnits,
     liveOwnerMap,
     partialMoves,
+    attacksUsed,
     freeTowerUsedTiles,
     selectedTileKey,
     isAiTurn,
@@ -811,6 +821,7 @@ export default function GameScreen() {
     setCombatSpentUnits,
     setLiveOwnerMap,
     setPartialMoves,
+    setAttacksUsed,
     setFreeTowerUsedTiles,
     setSelectedTileKey,
     setSelectedEntityKey,
@@ -933,6 +944,7 @@ export default function GameScreen() {
         combatSpentUnits,
         spentUnits,
         partialMoves,
+        attacksUsed,
         validBridgePlacementTiles,
         validPlacementAttackTiles,
         ribbonOpen,
@@ -943,6 +955,7 @@ export default function GameScreen() {
         setSpentUnits,
         setCombatSpentUnits,
         setPartialMoves,
+        setAttacksUsed,
         setTerritoryBalances,
         setSelectedEntityKey,
         setSelectedTileKey,
@@ -973,6 +986,8 @@ export default function GameScreen() {
       validPlacementAttackTiles,
       spentUnits,
       combatSpentUnits,
+      partialMoves,
+      attacksUsed,
       liveOwnerMap,
       isAiTurn,
       gameResult,
@@ -1017,6 +1032,7 @@ export default function GameScreen() {
       setSpentUnits,
       setCombatSpentUnits,
       setPartialMoves,
+      setAttacksUsed,
       setIsAiTurn,
       checkWinLoss,
       runAiTurn,

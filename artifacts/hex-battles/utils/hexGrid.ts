@@ -20,6 +20,8 @@ export const ENTITY_META: Record<EntityType, EntityMeta> = {
   simple_unit:   { name: 'Peasant',   icon: '⚒️',  cost: 10, upkeep: 3,  isUnit: true,  strength: 1 },
   advanced_unit: { name: 'Warrior',   icon: '🗡️',  cost: 20, upkeep: 9,  isUnit: true,  strength: 2 },
   expert_unit:   { name: 'Swordsman', icon: '⚔️',  cost: 30, upkeep: 27, isUnit: true,  strength: 3 },
+  scout:         { name: 'Scout',     icon: '🐎',  cost: 15, upkeep: 6,  isUnit: true,  strength: 1, movement: 5, maxAttacks: 2 },
+  knight:        { name: 'Knight',    icon: '⚜️',  cost: 25, upkeep: 18, isUnit: true,  strength: 2, movement: 5, maxAttacks: 2 },
   // NOTE: tower/castle upkeep here is the per-building BASE rate only.
   // Actual territory upkeep is LINEAR (n-th building costs n×base); use calcDefenseUpkeep/nextDefenseUpkeep.
   tower:         { name: 'Tower',     icon: '🛕',  cost: 15, upkeep: 1,  isUnit: false, strength: 1 },
@@ -28,6 +30,29 @@ export const ENTITY_META: Record<EntityType, EntityMeta> = {
   rebel:         { name: 'Rebel',     icon: '✊',   cost: 0,  upkeep: 0,  isUnit: false, strength: 0 },
   city:          { name: 'City',      icon: '🏘️',  cost: 10, upkeep: 0,  isUnit: false, strength: 0 },
 };
+
+/** Default movement budget for units without an explicit `movement` in ENTITY_META. */
+export const DEFAULT_MOVEMENT = 3;
+
+/** Max movement budget for an entity type (falls back to DEFAULT_MOVEMENT). */
+export function unitMovement(entity: EntityType): number {
+  return ENTITY_META[entity].movement ?? DEFAULT_MOVEMENT;
+}
+
+/** Max combat actions an entity may perform per turn (1 unless it has the charge ability). */
+export function unitMaxAttacks(entity: EntityType): number {
+  return ENTITY_META[entity].maxAttacks ?? 1;
+}
+
+/**
+ * Whether two units may merge. Merging maps combined strength back onto an
+ * infantry type via STRENGTH_TO_UNIT, so special units (e.g. cavalry with the
+ * charge ability) are excluded — merging them would silently convert them into
+ * plain infantry.
+ */
+export function unitCanMerge(entity: EntityType): boolean {
+  return ENTITY_META[entity].isUnit && unitMaxAttacks(entity) === 1;
+}
 
 export const TERRAIN_INCOME: Record<TerrainType, number> = {
   grass:    2,
@@ -160,17 +185,19 @@ export function getValidMoves(
   entities: Map<string, EntityType>,
   tileMap: Map<string, HexTile>,
   spentUnits: Set<string>,
-  maxRange: number = 3,
+  maxRange?: number,
 ): Set<string> {
   const result = new Set<string>();
   if (spentUnits.has(unitKey)) return result;
-  if (maxRange <= 0) return result;
 
   const unitTile = tileMap.get(unitKey);
   if (!unitTile) return result;
   const unitEntity = entities.get(unitKey);
   if (!unitEntity) return result;
   const unitStrength = ENTITY_META[unitEntity].strength;
+  // When no explicit budget is passed, fall back to the unit's full movement.
+  const range = maxRange ?? unitMovement(unitEntity);
+  if (range <= 0) return result;
 
   const bestCost = new Map<string, number>([[unitKey, 0]]);
   const queue: Array<{ key: string; cost: number }> = [{ key: unitKey, cost: 0 }];
@@ -192,7 +219,7 @@ export function getValidMoves(
       const moveCost = TERRAIN_MOVE_COST[neighbor.terrain] ?? 1;
       const newCost = cost + moveCost;
 
-      if (newCost > maxRange) continue;
+      if (newCost > range) continue;
       const prev = bestCost.get(nk) ?? Infinity;
       if (newCost >= prev) continue;
       bestCost.set(nk, newCost);

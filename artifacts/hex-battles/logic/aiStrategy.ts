@@ -12,6 +12,7 @@ import {
   CITY_BONUS,
   recalculateTerritoriesForCapture,
   TerritoryCache,
+  unitMovement,
 } from "@/utils/hexGrid";
 import { calcTerritoryUpkeep, mergedUnitType, resolveMovedUnitMoves } from "@/logic/gameLogic";
 import {
@@ -134,7 +135,7 @@ export async function runAiTerritoryDecisionLoop(
       type SplitCand = { fk: string; tk: string; score: number; neg: boolean; oneHex: boolean };
       const cands: SplitCand[] = [];
       for (const [uk, ue] of availUnits) {
-        const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? 3);
+        const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!));
         for (const mk of vm) {
           const mt = aiCtx.tileMap.get(mk);
           if (!mt || mt.owner !== eOwner) continue;
@@ -172,7 +173,7 @@ export async function runAiTerritoryDecisionLoop(
       if (!actionTaken) {
         let bestAttack: { fk: string; tk: string; sz: number } | null = null;
         for (const [uk, ue] of availUnits) {
-          const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? 3);
+          const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!));
           for (const mk of vm) {
             const mt = aiCtx.tileMap.get(mk);
             if (!mt || mt.owner !== eOwner) continue;
@@ -312,7 +313,7 @@ export async function runAiTerritoryDecisionLoop(
       type SplitCandA = { fk: string; tk: string; score: number; neg: boolean; oneHex: boolean };
       const candsA: SplitCandA[] = [];
       for (const [uk, ue] of availUnits) {
-        const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? 3);
+        const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!));
         for (const mk of vm) {
           const mt = aiCtx.tileMap.get(mk);
           if (!mt || mt.owner === aiOwner || mt.owner === "neutral") continue;
@@ -406,7 +407,7 @@ export async function runAiTerritoryDecisionLoop(
           for (const [uk, ue] of availUnits) {
             if (actionTaken) break;
             if (ENTITY_META[ue].strength <= zoc) continue;
-            const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? 3);
+            const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!));
             if (!vm.has(bridge.tile)) continue;
             actionTaken = await exec.move(uk, bridge.tile);
           }
@@ -600,7 +601,7 @@ export async function runAiTerritoryDecisionLoop(
     if (!actionTaken) {
       const entityAttacks: { fk: string; tk: string; eStr: number; aStr: number; oneHex: boolean; neg: boolean; score: number }[] = [];
       for (const [uk, ue] of availUnits) {
-        const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? 3);
+        const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!));
         for (const mk of vm) {
           const mt = aiCtx.tileMap.get(mk);
           if (!mt || mt.owner === aiOwner || mt.owner === "neutral") continue;
@@ -673,7 +674,7 @@ export async function runAiTerritoryDecisionLoop(
       if (!actionTaken) {
         const emptyEnemyMoves: { fk: string; tk: string; sz: number }[] = [];
         for (const [uk, ue] of availUnits) {
-          const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? 3);
+          const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!));
           for (const mk of vm) {
             const mt = aiCtx.tileMap.get(mk);
             if (!mt || mt.owner === aiOwner || mt.owner === "neutral") continue;
@@ -736,7 +737,7 @@ export async function runAiTerritoryDecisionLoop(
         const neutralPrio = (t: HexTile): number => aiCtx.cities.has(t.key) ? 3 : (t.terrain === "grass" || t.terrain === "forest") ? 2 : 1;
         const neutralMoves: { fk: string; tk: string; prio: number }[] = [];
         for (const [uk, ue] of availUnits) {
-          const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? 3);
+          const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!));
           for (const mk of vm) {
             const mt = aiCtx.tileMap.get(mk);
             if (!mt || mt.owner !== "neutral") continue;
@@ -794,7 +795,7 @@ export async function runAiTerritoryDecisionLoop(
       );
       for (const [uk, ue] of availUnits) {
         if (actionTaken) break;
-        const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? 3);
+        const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!));
         if (vm.size === 0) continue;
         const movesArr = Array.from(vm);
         const [uq, ur] = uk.split(",").map(Number);
@@ -836,7 +837,7 @@ export async function runAiTerritoryDecisionLoop(
       for (const rt of rebelTiles) {
         if (actionTaken) break;
         for (const [uk] of unitsAsc) {
-          const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? 3);
+          const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!));
           if (!vm.has(rt.key)) continue;
           actionTaken = await exec.move(uk, rt.key);
           break;
@@ -1151,10 +1152,11 @@ export async function runAiTurn(
         ws.spentUnits = new Set(ws.spentUnits);
         ws.partialMoves = new Map(ws.partialMoves);
         {
+          const maxRange = unitMovement(unitEntity);
           const stepsUsed = getMoveCost(fromKey, toKey, prevTileMapSnapshot, prevEntitiesSnapshot);
-          const prevRemaining = ws.partialMoves.get(fromKey) ?? 3;
+          const prevRemaining = ws.partialMoves.get(fromKey) ?? maxRange;
           const remainingAfterMove = Math.max(0, prevRemaining - stepsUsed);
-          const destRemaining = ws.partialMoves.get(toKey) ?? 3;
+          const destRemaining = ws.partialMoves.get(toKey) ?? maxRange;
           ws.partialMoves.delete(fromKey);
           // For a merge, the source tile empties out; mark it spent so it is not
           // re-evaluated. The merged unit lives at toKey.
@@ -1164,6 +1166,7 @@ export async function runAiTurn(
             isCombat: isCombatMove,
             remainingAfterMove,
             destRemaining,
+            maxRange,
           });
           ws.partialMoves.delete(toKey);
           if (moved.spent) {

@@ -262,6 +262,7 @@ describe("resolveMovedUnitMoves", () => {
       isCombat: false,
       remainingAfterMove: 2,
       destRemaining: 3,
+      maxRange: 3,
     });
     expect(r).toEqual({ spent: false, remaining: 2 });
   });
@@ -272,6 +273,7 @@ describe("resolveMovedUnitMoves", () => {
       isCombat: false,
       remainingAfterMove: 3,
       destRemaining: 3,
+      maxRange: 3,
     });
     expect(r).toEqual({ spent: false, remaining: null });
   });
@@ -282,6 +284,7 @@ describe("resolveMovedUnitMoves", () => {
       isCombat: false,
       remainingAfterMove: 0,
       destRemaining: 3,
+      maxRange: 3,
     });
     expect(r).toEqual({ spent: true, remaining: null });
   });
@@ -292,6 +295,7 @@ describe("resolveMovedUnitMoves", () => {
       isCombat: true,
       remainingAfterMove: 2,
       destRemaining: 3,
+      maxRange: 3,
     });
     expect(r).toEqual({ spent: true, remaining: null });
   });
@@ -302,6 +306,7 @@ describe("resolveMovedUnitMoves", () => {
       isCombat: false,
       remainingAfterMove: 2,
       destRemaining: 1,
+      maxRange: 3,
     });
     expect(r).toEqual({ spent: false, remaining: 1 });
   });
@@ -312,6 +317,7 @@ describe("resolveMovedUnitMoves", () => {
       isCombat: false,
       remainingAfterMove: 3,
       destRemaining: 3,
+      maxRange: 3,
     });
     expect(r).toEqual({ spent: false, remaining: null });
   });
@@ -322,6 +328,7 @@ describe("resolveMovedUnitMoves", () => {
       isCombat: false,
       remainingAfterMove: 0,
       destRemaining: 2,
+      maxRange: 3,
     });
     expect(r).toEqual({ spent: true, remaining: null });
   });

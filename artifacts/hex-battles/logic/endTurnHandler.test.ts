@@ -51,6 +51,7 @@ function makeParams(overrides: Partial<EndTurnParams> = {}): EndTurnParams {
     setSpentUnits: vi.fn(),
     setCombatSpentUnits: vi.fn(),
     setPartialMoves: vi.fn(),
+    setAttacksUsed: vi.fn(),
     setIsAiTurn: vi.fn(),
     checkWinLoss: vi.fn().mockReturnValue(false),
     runAiTurn: vi.fn(),

@@ -64,6 +64,7 @@ function makeSnapshot(): SavedGame {
       spentUnits: new Set([tile1.key]),
       combatSpentUnits: new Set([tile2.key]),
       partialMoves: new Map([[tile1.key, 1]]),
+      attacksUsed: new Map([[tile2.key, 1]]),
       liveOwnerMap: new Map([[tile2.key, "player"]]),
       cities: new Set([tile1.key]),
       graveyard: new Set([tile2.key]),
@@ -191,6 +192,11 @@ describe("serialize / deserialize round-trip", () => {
     expect(restored.state.partialMoves).toBeInstanceOf(Map);
     expect([...restored.state.partialMoves.entries()]).toEqual(
       [...snap.state.partialMoves.entries()],
+    );
+
+    expect(restored.state.attacksUsed).toBeInstanceOf(Map);
+    expect([...restored.state.attacksUsed.entries()]).toEqual(
+      [...snap.state.attacksUsed.entries()],
     );
 
     expect(restored.state.liveOwnerMap).toBeInstanceOf(Map);

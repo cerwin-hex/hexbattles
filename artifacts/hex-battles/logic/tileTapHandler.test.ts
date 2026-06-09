@@ -46,6 +46,7 @@ function makeParams(overrides: Partial<TileTapParams> = {}): TileTapParams {
     combatSpentUnits: new Set(),
     spentUnits: new Set(),
     partialMoves: new Map(),
+    attacksUsed: new Map(),
     validBridgePlacementTiles: new Set(),
     validPlacementAttackTiles: new Set(),
     ribbonOpen: false,
@@ -56,6 +57,7 @@ function makeParams(overrides: Partial<TileTapParams> = {}): TileTapParams {
     setSpentUnits: vi.fn(),
     setCombatSpentUnits: vi.fn(),
     setPartialMoves: vi.fn(),
+    setAttacksUsed: vi.fn(),
     setTerritoryBalances: vi.fn(),
     setSelectedEntityKey: vi.fn(),
     setSelectedTileKey: vi.fn(),
@@ -298,6 +300,92 @@ describe("unit move", () => {
     // After merge: "0,0" (source) is gone, "1,0" has the merged unit
     expect(newEntities.has("0,0")).toBe(false);
     expect(newEntities.get("1,0")).toBe("advanced_unit");
+  });
+
+  // ─── Cavalry charge ability (maxAttacks > 1) ─────────────────────────────────
+
+  it("charge unit is NOT spent after its first attack and records one attack used", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "ai1")];
+    const map = tileMap(tiles);
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: map,
+      selectedEntityKey: "0,0",
+      validMoveTiles: new Set(["1,0"]),
+      entities: ents([["0,0", "knight"]]),
+      liveOwnerMap: new Map([["0,0", "player"], ["1,0", "ai1"]]),
+    });
+    handleTileTapLogic(params);
+    // Knight has 5 movement + 2 attacks. First attack costs 1 step → still active.
+    const spent: Set<string> = (params.setSpentUnits as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(spent.has("1,0")).toBe(false);
+    const combatSpent = (params.setCombatSpentUnits as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(combatSpent.has("1,0")).toBe(false);
+    const attacksUsed: Map<string, number> = (params.setAttacksUsed as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(attacksUsed.get("1,0")).toBe(1);
+    // 1 step used out of 5 → 4 remaining recorded at destination
+    const partial: Map<string, number> = (params.setPartialMoves as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(partial.get("1,0")).toBe(4);
+  });
+
+  it("charge unit IS spent on its second attack", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "ai1")];
+    const map = tileMap(tiles);
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: map,
+      selectedEntityKey: "0,0",
+      validMoveTiles: new Set(["1,0"]),
+      entities: ents([["0,0", "knight"]]),
+      // Already used one attack, plenty of movement left
+      attacksUsed: new Map([["0,0", 1]]),
+      partialMoves: new Map([["0,0", 4]]),
+      liveOwnerMap: new Map([["0,0", "player"], ["1,0", "ai1"]]),
+    });
+    handleTileTapLogic(params);
+    const spent: Set<string> = (params.setSpentUnits as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(spent.has("1,0")).toBe(true);
+    const combatSpent = (params.setCombatSpentUnits as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(combatSpent.has("1,0")).toBe(true);
+  });
+
+  it("charge unit IS spent on its first attack when movement is exhausted reaching the enemy", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "ai1")];
+    const map = tileMap(tiles);
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: map,
+      selectedEntityKey: "0,0",
+      validMoveTiles: new Set(["1,0"]),
+      entities: ents([["0,0", "scout"]]),
+      // Only 1 move left → the attack step exhausts the shared budget
+      partialMoves: new Map([["0,0", 1]]),
+      liveOwnerMap: new Map([["0,0", "player"], ["1,0", "ai1"]]),
+    });
+    handleTileTapLogic(params);
+    const spent: Set<string> = (params.setSpentUnits as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(spent.has("1,0")).toBe(true);
+  });
+
+  it("does NOT merge a cavalry unit onto an allied unit (overwrite-protection via combat)", () => {
+    // A knight moving onto an allied peasant must NOT merge into a Swordsman.
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
+    const map = tileMap(tiles);
+    const entityMap = ents([["0,0", "knight"], ["1,0", "simple_unit"]]);
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: map,
+      selectedEntityKey: "0,0",
+      // validMoveTiles intentionally allows the tap; the handler must treat it as
+      // a non-merge move and keep the knight as a distinct entity.
+      validMoveTiles: new Set(["1,0"]),
+      entities: entityMap,
+      liveOwnerMap: new Map([["0,0", "player"], ["1,0", "player"]]),
+    });
+    handleTileTapLogic(params);
+    const newEntities: Map<string, EntityType> = (params.setEntities as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    // No merge → no Swordsman is ever produced.
+    expect([...newEntities.values()]).not.toContain("expert_unit");
   });
 });
 

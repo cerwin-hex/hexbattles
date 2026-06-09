@@ -15,6 +15,7 @@ export interface SavedGameState {
   spentUnits: Set<string>;
   combatSpentUnits: Set<string>;
   partialMoves: Map<string, number>;
+  attacksUsed: Map<string, number>;
   liveOwnerMap: Map<string, TerritoryOwner>;
   cities: Set<string>;
   graveyard: Set<string>;
@@ -46,6 +47,7 @@ interface Serialized {
     spentUnits: string[];
     combatSpentUnits: string[];
     partialMoves: [string, number][];
+    attacksUsed: [string, number][];
     liveOwnerMap: [string, TerritoryOwner][];
     cities: string[];
     graveyard: string[];
@@ -67,6 +69,7 @@ export function serializeSavedGame(g: SavedGame): string {
       spentUnits: [...g.state.spentUnits],
       combatSpentUnits: [...g.state.combatSpentUnits],
       partialMoves: [...g.state.partialMoves.entries()],
+      attacksUsed: [...g.state.attacksUsed.entries()],
       liveOwnerMap: [...g.state.liveOwnerMap.entries()],
       cities: [...g.state.cities],
       graveyard: [...g.state.graveyard],
@@ -94,6 +97,7 @@ export function deserializeSavedGame(json: string): SavedGame | null {
         spentUnits: new Set(parsed.state.spentUnits),
         combatSpentUnits: new Set(parsed.state.combatSpentUnits),
         partialMoves: new Map(parsed.state.partialMoves),
+        attacksUsed: new Map(parsed.state.attacksUsed ?? []),
         liveOwnerMap: new Map(parsed.state.liveOwnerMap),
         cities: new Set(parsed.state.cities),
         graveyard: new Set(parsed.state.graveyard),

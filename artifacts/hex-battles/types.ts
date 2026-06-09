@@ -1,6 +1,6 @@
 export type TerrainType = 'grass' | 'desert' | 'mountain' | 'lake' | 'forest';
 export type TerritoryOwner = 'neutral' | 'player' | 'ai1' | 'ai2' | 'ai3' | 'ai4' | 'ai5';
-export type EntityType = 'simple_unit' | 'advanced_unit' | 'expert_unit' | 'tower' | 'castle' | 'city' | 'rebel' | 'bridge';
+export type EntityType = 'simple_unit' | 'advanced_unit' | 'expert_unit' | 'scout' | 'knight' | 'tower' | 'castle' | 'city' | 'rebel' | 'bridge';
 
 export interface HexTile {
   q: number;
@@ -19,6 +19,10 @@ export interface EntityMeta {
   upkeep: number;
   isUnit: boolean;
   strength: number;
+  /** Max movement budget per turn. Defaults to DEFAULT_MOVEMENT (3) when absent. */
+  movement?: number;
+  /** Max combat actions per turn. Defaults to 1 when absent; >1 enables the charge ability. */
+  maxAttacks?: number;
 }
 
 export interface BoardBounds {
@@ -51,6 +55,7 @@ export type MoveHistorySnapshot = {
   combatSpentUnits: Set<string>;
   liveOwnerMap: Map<string, TerritoryOwner>;
   partialMoves: Map<string, number>;
+  attacksUsed: Map<string, number>;
   freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
   selectedTileKey: string | null;
 };

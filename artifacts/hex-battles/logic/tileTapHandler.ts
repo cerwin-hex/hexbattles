@@ -11,6 +11,9 @@ import {
   getMoveCost,
   recalculateTerritories,
   recalculateTerritoriesForCapture,
+  unitMovement,
+  unitMaxAttacks,
+  unitCanMerge,
 } from "@/utils/hexGrid";
 import {
   applySingleHexPenalty,
@@ -64,6 +67,7 @@ export interface TileTapParams {
   combatSpentUnits: Set<string>;
   spentUnits: Set<string>;
   partialMoves: Map<string, number>;
+  attacksUsed: Map<string, number>;
   validBridgePlacementTiles: Set<string>;
   validPlacementAttackTiles: Set<string>;
   ribbonOpen: boolean;
@@ -74,6 +78,7 @@ export interface TileTapParams {
   setSpentUnits: Dispatch<SetStateAction<Set<string>>>;
   setCombatSpentUnits: (s: Set<string>) => void;
   setPartialMoves: (m: Map<string, number>) => void;
+  setAttacksUsed: (m: Map<string, number>) => void;
   setTerritoryBalances: Dispatch<SetStateAction<Map<string, number>>>;
   setSelectedEntityKey: (k: string | null) => void;
   setSelectedTileKey: (k: string | null) => void;
@@ -112,6 +117,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
     combatSpentUnits,
     spentUnits,
     partialMoves,
+    attacksUsed,
     validBridgePlacementTiles,
     validPlacementAttackTiles,
     ribbonOpen,
@@ -122,6 +128,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
     setSpentUnits,
     setCombatSpentUnits,
     setPartialMoves,
+    setAttacksUsed,
     setTerritoryBalances,
     setSelectedEntityKey,
     setSelectedTileKey,
@@ -165,6 +172,8 @@ export function handleTileTapLogic(params: TileTapParams): void {
       existingUnit !== "rebel" &&
       existingUnit !== "bridge" &&
       ENTITY_META[existingUnit].isUnit &&
+      unitCanMerge(movingUnit) &&
+      unitCanMerge(existingUnit) &&
       activeTileMap.get(key)?.owner === "player" &&
       ENTITY_META[movingUnit].strength +
         ENTITY_META[existingUnit].strength <=
@@ -190,8 +199,9 @@ export function handleTileTapLogic(params: TileTapParams): void {
       newEntities.set(selectedEntityKey, 'bridge');
     }
 
+    const maxRange = unitMovement(movingUnit);
     const stepsUsed = getMoveCost(selectedEntityKey, key, activeTileMap, entities);
-    const prevRemaining = partialMoves.get(selectedEntityKey) ?? 3;
+    const prevRemaining = partialMoves.get(selectedEntityKey) ?? maxRange;
     const remainingAfterMove = Math.max(0, prevRemaining - stepsUsed);
 
     // Combat move: enemy territory OR overwriting a non-bridge entity (rebel/enemy unit).
@@ -201,16 +211,31 @@ export function handleTileTapLogic(params: TileTapParams): void {
       ((previousOwner !== "neutral" && previousOwner !== "player") ||
        (existingUnit !== undefined && existingUnit !== "bridge"));
 
+    // Charge ability: a unit with maxAttacks > 1 keeps acting after a combat move
+    // (instead of being spent) as long as it has attacks AND movement left. The
+    // attack budget is shared with movement — once movement is gone the unit is
+    // spent even if attacks remain.
+    const maxAttacks = unitMaxAttacks(movingUnit);
+    const attacksUsedSoFar = attacksUsed.get(selectedEntityKey) ?? 0;
+    const isChargeAttack =
+      isCombatMove &&
+      maxAttacks > 1 &&
+      attacksUsedSoFar + 1 < maxAttacks &&
+      remainingAfterMove > 0;
+
     const newSpentUnits = new Set(spentUnits);
     const newPartialMoves = new Map(partialMoves);
     newPartialMoves.delete(selectedEntityKey);
     const destRemaining =
-      newPartialMoves.get(key) ?? (newSpentUnits.has(key) ? 0 : 3);
+      newPartialMoves.get(key) ?? (newSpentUnits.has(key) ? 0 : maxRange);
     const moved = resolveMovedUnitMoves({
       isMerge,
-      isCombat: isCombatMove,
+      // A charge attack with attacks/movement to spare behaves like a normal move
+      // for the movement budget; combat-spending is deferred to the final attack.
+      isCombat: isCombatMove && !isChargeAttack,
       remainingAfterMove,
       destRemaining,
+      maxRange,
     });
     newPartialMoves.delete(key);
     if (moved.spent) {
@@ -220,7 +245,15 @@ export function handleTileTapLogic(params: TileTapParams): void {
       if (moved.remaining !== null) newPartialMoves.set(key, moved.remaining);
     }
 
-    const newCombatSpentUnits = isCombatMove
+    // Carry/advance the per-turn attack counter to the destination tile.
+    const newAttacksUsed = new Map(attacksUsed);
+    newAttacksUsed.delete(selectedEntityKey);
+    if (!moved.spent) {
+      const attacksNow = isCombatMove ? attacksUsedSoFar + 1 : attacksUsedSoFar;
+      if (attacksNow > 0) newAttacksUsed.set(key, attacksNow);
+    }
+
+    const newCombatSpentUnits = (isCombatMove && !isChargeAttack)
       ? new Set([...combatSpentUnits, key])
       : combatSpentUnits;
 
@@ -231,6 +264,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
       setSpentUnits(newSpentUnits);
       setCombatSpentUnits(newCombatSpentUnits);
       setPartialMoves(newPartialMoves);
+      setAttacksUsed(newAttacksUsed);
       setSelectedEntityKey(null);
       setSelectedTileKey(key);
       if (ribbonOpen) closeRibbon();
@@ -332,6 +366,8 @@ export function handleTileTapLogic(params: TileTapParams): void {
     const canMerge =
       armedIsUnit &&
       existingIsAllyUnit &&
+      unitCanMerge(armedEntityId) &&
+      unitCanMerge(existingOnTile!) &&
       ENTITY_META[armedEntityId].strength +
         ENTITY_META[existingOnTile!].strength <=
         3;
@@ -392,15 +428,17 @@ export function handleTileTapLogic(params: TileTapParams): void {
             ENTITY_META[existingOnTile!].strength,
           );
           newEntities.set(key, merged);
+          const placedRange = unitMovement(armedEntityId);
           const existingRemaining =
-            newPartialMoves.get(key) ?? (newSpentUnits.has(key) ? 0 : 3);
-          // A freshly placed/bought unit is at full range (3); the merged unit
+            newPartialMoves.get(key) ?? (newSpentUnits.has(key) ? 0 : placedRange);
+          // A freshly placed/bought unit is at full range; the merged unit
           // keeps the lower of the two remaining-move budgets.
           const moved = resolveMovedUnitMoves({
             isMerge: true,
             isCombat: false,
-            remainingAfterMove: 3,
+            remainingAfterMove: placedRange,
             destRemaining: existingRemaining,
+            maxRange: placedRange,
           });
           newPartialMoves.delete(key);
           if (moved.spent) {

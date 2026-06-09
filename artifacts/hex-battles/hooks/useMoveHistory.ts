@@ -17,6 +17,7 @@ interface UseMoveHistoryParams {
   combatSpentUnits: Set<string>;
   liveOwnerMap: Map<string, TerritoryOwner>;
   partialMoves: Map<string, number>;
+  attacksUsed: Map<string, number>;
   freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
   selectedTileKey: string | null;
   isAiTurn: boolean;
@@ -31,6 +32,7 @@ interface UseMoveHistoryParams {
   setCombatSpentUnits: (s: Set<string>) => void;
   setLiveOwnerMap: (m: Map<string, TerritoryOwner>) => void;
   setPartialMoves: (m: Map<string, number>) => void;
+  setAttacksUsed: (m: Map<string, number>) => void;
   setFreeTowerUsedTiles: (m: Map<TerritoryOwner, Set<string>>) => void;
   setSelectedTileKey: (k: string | null) => void;
   setSelectedEntityKey: (k: string | null) => void;
@@ -46,6 +48,7 @@ export function useMoveHistory({
   combatSpentUnits,
   liveOwnerMap,
   partialMoves,
+  attacksUsed,
   freeTowerUsedTiles,
   selectedTileKey,
   isAiTurn,
@@ -60,6 +63,7 @@ export function useMoveHistory({
   setCombatSpentUnits,
   setLiveOwnerMap,
   setPartialMoves,
+  setAttacksUsed,
   setFreeTowerUsedTiles,
   setSelectedTileKey,
   setSelectedEntityKey,
@@ -79,6 +83,7 @@ export function useMoveHistory({
         combatSpentUnits: new Set(combatSpentUnits),
         liveOwnerMap: new Map(liveOwnerMap),
         partialMoves: new Map(partialMoves),
+        attacksUsed: new Map(attacksUsed),
         freeTowerUsedTiles: new Map(
           [...freeTowerUsedTiles.entries()].map(([k, v]) => [k, new Set(v)]),
         ),
@@ -94,6 +99,7 @@ export function useMoveHistory({
     combatSpentUnits,
     liveOwnerMap,
     partialMoves,
+    attacksUsed,
     freeTowerUsedTiles,
     selectedTileKey,
   ]);
@@ -111,6 +117,7 @@ export function useMoveHistory({
       setCombatSpentUnits(snapshot.combatSpentUnits ?? new Set());
       setLiveOwnerMap(snapshot.liveOwnerMap);
       setPartialMoves(snapshot.partialMoves);
+      setAttacksUsed(snapshot.attacksUsed ?? new Map());
       setFreeTowerUsedTiles(snapshot.freeTowerUsedTiles);
       setSelectedTileKey(snapshot.selectedTileKey);
       setSelectedEntityKey(null);
@@ -131,6 +138,7 @@ export function useMoveHistory({
     setCombatSpentUnits,
     setLiveOwnerMap,
     setPartialMoves,
+    setAttacksUsed,
     setFreeTowerUsedTiles,
     setSelectedTileKey,
     setSelectedEntityKey,

@@ -261,6 +261,18 @@ describe("getValidMoves", () => {
     expect(moves.has("1,0")).toBe(true);
     expect(moves.has("2,0")).toBe(false);
   });
+
+  it("uses the unit's own movement when no explicit range is given (cavalry reaches 5)", () => {
+    // Six player tiles in a row (traversable). A scout (movement 5) reaches the 5th
+    // tile; a peasant (movement 3) stops at the 3rd.
+    const row = [0, 1, 2, 3, 4, 5].map((q) => makeTile(q, 0, "player"));
+    const map = tileMap(row);
+    const scoutMoves = getValidMoves("0,0", "player", entities([["0,0", "scout"]]), map, new Set());
+    expect(scoutMoves.has("5,0")).toBe(true);
+    const peasantMoves = getValidMoves("0,0", "player", entities([["0,0", "simple_unit"]]), map, new Set());
+    expect(peasantMoves.has("3,0")).toBe(true);
+    expect(peasantMoves.has("4,0")).toBe(false);
+  });
 });
 
 // ─── getMoveCost ─────────────────────────────────────────────────────────────

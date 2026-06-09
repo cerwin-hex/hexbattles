@@ -44,6 +44,7 @@ export interface EndTurnParams {
   setSpentUnits: (s: Set<string>) => void;
   setCombatSpentUnits: (s: Set<string>) => void;
   setPartialMoves: (m: Map<string, number>) => void;
+  setAttacksUsed: (m: Map<string, number>) => void;
   setIsAiTurn: (b: boolean) => void;
   checkWinLoss: (map: Map<string, HexTile>) => boolean;
   runAiTurn: (
@@ -86,6 +87,7 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
     setSpentUnits,
     setCombatSpentUnits,
     setPartialMoves,
+    setAttacksUsed,
     setIsAiTurn,
     checkWinLoss,
     runAiTurn,
@@ -323,6 +325,7 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
   setSpentUnits(new Set());
   setCombatSpentUnits(new Set());
   setPartialMoves(new Map());
+  setAttacksUsed(new Map());
   closeRibbon();
 
   if (!checkWinLoss(mutableTileMap)) {
