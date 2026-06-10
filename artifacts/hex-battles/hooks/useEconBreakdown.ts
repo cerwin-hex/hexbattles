@@ -7,6 +7,7 @@ import {
   calcDefenseUpkeep,
   nextDefenseUpkeep,
 } from "@/utils/hexGrid";
+import { ENTITY_UPKEEP_ORDER } from "@/constants/gameConstants";
 
 export interface EconBreakdownResult {
   grassCount: number;
@@ -67,15 +68,7 @@ export function useEconBreakdown({
         }
       }
     }
-    const UPKEEP_ORDER: EntityType[] = [
-      "simple_unit",
-      "advanced_unit",
-      "expert_unit",
-      "bridge",
-      "tower",
-      "castle",
-    ];
-    const upkeepGroups = UPKEEP_ORDER.filter((type) =>
+    const upkeepGroups = ENTITY_UPKEEP_ORDER.filter((type) =>
       upkeepGroupMap.has(type),
     ).map((type) => {
       const count = upkeepGroupMap.get(type)!;

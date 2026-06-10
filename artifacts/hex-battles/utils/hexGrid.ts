@@ -75,6 +75,7 @@ export const CITY_BONUS = 2;
 export const UNIT_UPGRADE: Partial<Record<EntityType, EntityType>> = {
   simple_unit: 'advanced_unit',
   advanced_unit: 'expert_unit',
+  scout: 'knight',
   tower: 'castle',
 };
 

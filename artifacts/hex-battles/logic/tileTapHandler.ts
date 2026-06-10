@@ -204,11 +204,12 @@ export function handleTileTapLogic(params: TileTapParams): void {
     const prevRemaining = partialMoves.get(selectedEntityKey) ?? maxRange;
     const remainingAfterMove = Math.max(0, prevRemaining - stepsUsed);
 
-    // Combat move: enemy territory OR overwriting a non-bridge entity (rebel/enemy unit).
-    // Moving to own bridge tile is NOT combat — bridge is a structure, not an enemy.
+    // Combat move: capturing any non-owned tile (neutral OR enemy) OR overwriting a
+    // non-bridge entity (rebel/enemy unit). Only repositioning within your own
+    // territory (and moving onto your own bridge) is a free, non-combat move.
     const isCombatMove =
       !isMerge &&
-      ((previousOwner !== "neutral" && previousOwner !== "player") ||
+      (previousOwner !== "player" ||
        (existingUnit !== undefined && existingUnit !== "bridge"));
 
     // Charge ability: a unit with maxAttacks > 1 keeps acting after a combat move

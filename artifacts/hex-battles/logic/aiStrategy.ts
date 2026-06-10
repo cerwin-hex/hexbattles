@@ -25,16 +25,18 @@ import {
 import type { AiContext } from "@/logic/aiHelpers";
 import type { AiState, Difficulty } from "@/types";
 
-// Unit purchase candidates for the AI, ordered by strength with cavalry slotted
-// in next to the same-strength infantry. The buy loops pick the first affordable
-// type that meets the strength threshold, so cheaper infantry is preferred over
-// cavalry of equal strength — cavalry are treated as ordinary purchase options.
-const AI_UNIT_BUY_ORDER_ASC: EntityType[] = [
-  "simple_unit", "scout", "advanced_unit", "knight", "expert_unit",
-];
-const AI_UNIT_BUY_ORDER_DESC: EntityType[] = [
-  "expert_unit", "knight", "advanced_unit", "scout", "simple_unit",
-];
+// Unit purchase candidates for the AI, derived from ENTITY_META so new units are
+// picked up automatically. Ordered by strength then cost (ascending); the buy
+// loops take the first affordable type meeting the strength threshold, so cheaper
+// units of equal strength are preferred. New units need no changes here.
+const AI_UNIT_BUY_ORDER_ASC: EntityType[] = (Object.keys(ENTITY_META) as EntityType[])
+  .filter((e) => ENTITY_META[e].isUnit)
+  .sort(
+    (a, b) =>
+      ENTITY_META[a].strength - ENTITY_META[b].strength ||
+      ENTITY_META[a].cost - ENTITY_META[b].cost,
+  );
+const AI_UNIT_BUY_ORDER_DESC: EntityType[] = [...AI_UNIT_BUY_ORDER_ASC].reverse();
 
 export interface AiDecisionExec {
   move(from: string, to: string): Promise<boolean>;
@@ -275,7 +277,7 @@ export async function runAiTerritoryDecisionLoop(
           if (!canAfford(bCost, bUpk)) continue;
           if (bType === "castle" && !currTerr.some((t) => {
             const e = aiCtx.entities.get(t.key);
-            return e === "advanced_unit" || e === "expert_unit";
+            return !!e && ENTITY_META[e].isUnit && ENTITY_META[e].strength >= 2;
           })) continue;
           const rawPlacements = currTerr.filter((t) => {
             if (t.terrain === "mountain" || t.terrain === "lake") return false;
@@ -301,7 +303,7 @@ export async function runAiTerritoryDecisionLoop(
           if (!canAfford(bCost, bUpk)) continue;
           if (bType === "castle" && !currTerr.some((t) => {
             const e = aiCtx.entities.get(t.key);
-            return e === "advanced_unit" || e === "expert_unit";
+            return !!e && ENTITY_META[e].isUnit && ENTITY_META[e].strength >= 2;
           })) continue;
           const rawPlacements = currTerr.filter((t) => {
             if (t.terrain === "mountain" || t.terrain === "lake") return false;
@@ -481,7 +483,7 @@ export async function runAiTerritoryDecisionLoop(
           if (!canAfford(bCost, bUpk)) continue;
           if (bType === "castle" && !currTerr.some((t) => {
             const e = aiCtx.entities.get(t.key);
-            return e === "advanced_unit" || e === "expert_unit";
+            return !!e && ENTITY_META[e].isUnit && ENTITY_META[e].strength >= 2;
           })) continue;
           actionTaken = await exec.build(bType, placementsC[0].key, bCost);
         }
@@ -1153,11 +1155,12 @@ export async function runAiTurn(
           ws.entities.set(fromKey, 'bridge');
         }
 
-        // Capturing an enemy tile or overwriting a non-bridge entity is combat,
-        // which always spends the unit — same rules as the player.
+        // Capturing any non-owned tile (neutral OR enemy) or overwriting a
+        // non-bridge entity is combat, which always spends the unit — same rules
+        // as the player.
         const isCombatMove =
           !isAllyMerge &&
-          ((previousOwner !== "neutral" && previousOwner !== aiOwner) ||
+          (previousOwner !== aiOwner ||
             (destExisting !== undefined && destExisting !== "bridge"));
 
         ws.spentUnits = new Set(ws.spentUnits);

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { HexTile, EntityType, TerritoryOwner } from "@/types";
 import {
   ENTITY_META,
+  UNIT_UPGRADE,
   TERRAIN_INCOME,
   CITY_BONUS,
   calcDefenseUpkeep,
@@ -43,6 +44,18 @@ describe("ENTITY_META", () => {
   it("rebel is not a unit", () => expect(ENTITY_META.rebel.isUnit).toBe(false));
   it("city has zero upkeep", () => expect(ENTITY_META.city.upkeep).toBe(0));
   it("bridge has zero strength", () => expect(ENTITY_META.bridge.strength).toBe(0));
+  it("scout is a fast cavalry unit with the charge ability", () => {
+    expect(ENTITY_META.scout.isUnit).toBe(true);
+    expect(ENTITY_META.scout.strength).toBe(1);
+    expect(ENTITY_META.scout.movement).toBe(5);
+    expect(ENTITY_META.scout.maxAttacks).toBe(2);
+  });
+  it("knight is a fast cavalry unit with the charge ability", () => {
+    expect(ENTITY_META.knight.strength).toBe(2);
+    expect(ENTITY_META.knight.movement).toBe(5);
+    expect(ENTITY_META.knight.maxAttacks).toBe(2);
+  });
+  it("scouts upgrade to knights", () => expect(UNIT_UPGRADE.scout).toBe("knight"));
 });
 
 // ─── TERRAIN_INCOME ───────────────────────────────────────────────────────────

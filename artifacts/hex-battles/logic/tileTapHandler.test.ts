@@ -243,6 +243,43 @@ describe("unit move", () => {
     expect(spent.has("1,0")).toBe(true);
   });
 
+  it("capturing a neutral tile counts as combat and spends an infantry unit", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "neutral")];
+    const map = tileMap(tiles);
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: map,
+      selectedEntityKey: "0,0",
+      validMoveTiles: new Set(["1,0"]),
+      entities: ents([["0,0", "simple_unit"]]),
+      liveOwnerMap: new Map([["0,0", "player"], ["1,0", "neutral"]]),
+    });
+    handleTileTapLogic(params);
+    const spent: Set<string> = (params.setSpentUnits as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    // Previously a neutral capture was a free move; it is now combat → spent.
+    expect(spent.has("1,0")).toBe(true);
+    const combatSpent: Set<string> = (params.setCombatSpentUnits as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(combatSpent.has("1,0")).toBe(true);
+  });
+
+  it("a cavalry unit capturing a neutral tile spends one attack but stays active", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "neutral")];
+    const map = tileMap(tiles);
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: map,
+      selectedEntityKey: "0,0",
+      validMoveTiles: new Set(["1,0"]),
+      entities: ents([["0,0", "knight"]]),
+      liveOwnerMap: new Map([["0,0", "player"], ["1,0", "neutral"]]),
+    });
+    handleTileTapLogic(params);
+    const spent: Set<string> = (params.setSpentUnits as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(spent.has("1,0")).toBe(false);
+    const attacksUsed: Map<string, number> = (params.setAttacksUsed as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(attacksUsed.get("1,0")).toBe(1);
+  });
+
   it("marks move as combat when capturing an enemy tile", () => {
     const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "ai1")];
     const map = tileMap(tiles);

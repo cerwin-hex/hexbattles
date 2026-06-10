@@ -9,18 +9,12 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { INFO_TABLE_ROWS } from '@/constants/gameConstants';
 
 const STORAGE_KEY = 'hex_battles_welcome_seen';
 
-const UNIT_ROWS = [
-  { icon: '⚔️', name: 'Basic Unit', cost: 10, upkeep: 3, strength: 1 },
-  { icon: '🛡️', name: 'Advanced Unit', cost: 20, upkeep: 9, strength: 2 },
-  { icon: '🗡️', name: 'Expert Unit', cost: 30, upkeep: 27, strength: 3 },
-  { icon: '🗼', name: 'Tower', cost: 15, upkeep: 1, strength: 1 },
-  { icon: '🏰', name: 'Castle', cost: 30, upkeep: 5, strength: 2 },
-  { icon: '🏙️', name: 'City', cost: 10, upkeep: 0, strength: 0 },
-  { icon: '➖', name: 'Bridge', cost: 5, upkeep: 1, strength: 0 },
-];
+// Reference table for the welcome guide — single source derived from ENTITY_META.
+const UNIT_ROWS = INFO_TABLE_ROWS;
 
 export function WelcomeModal() {
   const [visible, setVisible] = useState(false);

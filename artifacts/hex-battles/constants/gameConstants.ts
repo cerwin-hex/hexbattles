@@ -34,3 +34,23 @@ export const PURCHASABLES = (Object.keys(ENTITY_META) as EntityType[])
 
 export const UNIT_PURCHASABLES = PURCHASABLES.filter((p) => p.isUnit);
 export const BUILDING_PURCHASABLES = PURCHASABLES.filter((p) => !p.isUnit);
+
+/**
+ * Rows shown in the "Units & Buildings" reference tables (welcome + rules modals).
+ * Derived from ENTITY_META so any new entity appears automatically.
+ */
+export const INFO_TABLE_ROWS = PURCHASABLES.map((p) => ({
+  icon: p.icon,
+  name: p.name,
+  cost: p.cost,
+  upkeep: p.upkeep,
+  strength: p.strength,
+}));
+
+/**
+ * Entity types that carry upkeep, in display order, for the economy breakdown.
+ * Derived from ENTITY_META; defense buildings scale separately at render time.
+ */
+export const ENTITY_UPKEEP_ORDER: EntityType[] = PURCHASABLES
+  .filter((p) => p.upkeep > 0)
+  .map((p) => p.id);
