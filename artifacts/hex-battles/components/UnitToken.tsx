@@ -25,6 +25,15 @@ export interface UnitTokenProps {
  * same emoji at different sizes, so units visibly changed size when spent.
  * Keep all callers routing through this component to prevent that drift.
  */
+/**
+ * GLYPH_SCALE is the single knob for glyph size, as a fraction of the token
+ * diameter (2r). Units fill more of the circle; buildings stay deliberately
+ * smaller inside their rounded square. Tweak these two constants to resize
+ * every unit/building glyph at once.
+ */
+const UNIT_GLYPH_SCALE = 1.15;
+const BUILDING_GLYPH_SCALE = 0.9;
+
 export function UnitToken({
   r,
   icon,
@@ -34,6 +43,7 @@ export function UnitToken({
   square = false,
   opacity = 1,
 }: UnitTokenProps) {
+  const fontSize = r * (square ? BUILDING_GLYPH_SCALE : UNIT_GLYPH_SCALE);
   return (
     <View
       style={{
@@ -49,12 +59,22 @@ export function UnitToken({
       }}
     >
       {/*
-       * GLYPH_SCALE calibrates the emoji to the larger size units used to have
-       * when spent/AI units were drawn with SVG <Text>. RN <Text> renders the
-       * same emoji smaller than react-native-svg at an identical fontSize, so
-       * we scale up here. Tweak this single factor to resize every unit glyph.
+       * Centering: keep lineHeight == fontSize and disable Android's font
+       * padding so the emoji's line box has no asymmetric top/bottom bias —
+       * otherwise the glyph baseline-positions low and looks crooked inside
+       * the circle. The parent View handles horizontal+vertical centering.
        */}
-      <Text style={{ fontSize: r * 1.45, lineHeight: r * 1.95 }}>{icon}</Text>
+      <Text
+        style={{
+          fontSize,
+          lineHeight: fontSize,
+          textAlign: "center",
+          textAlignVertical: "center",
+          includeFontPadding: false,
+        }}
+      >
+        {icon}
+      </Text>
     </View>
   );
 }

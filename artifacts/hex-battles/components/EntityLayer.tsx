@@ -58,10 +58,13 @@ function EntityLayerInner({
         // Idle (non-spent, non-selected) player units bounce in IdleUnitLayer.
         const isIdleBouncing = isPlayerUnit && !isSpent && !isSelected;
         if (isIdleBouncing) return null;
+        // Background alpha is uniform (0.9) across every status; only the hue
+        // changes (red rebel / green selected / blue unit / brown building) so
+        // tokens don't drift in apparent opacity from one state to the next.
         const bgColor = isRebel
-          ? "rgba(140,20,20,0.92)"
+          ? "rgba(140,20,20,0.9)"
           : isSelected
-            ? "rgba(20,80,20,0.95)"
+            ? "rgba(20,80,20,0.9)"
             : meta.isUnit
               ? "rgba(30,50,120,0.9)"
               : "rgba(80,40,10,0.9)";
