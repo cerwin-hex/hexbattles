@@ -1,7 +1,8 @@
 import React from "react";
-import { G, Rect, Text as SvgText } from "react-native-svg";
+import { StyleSheet, View } from "react-native";
 import { ENTITY_META } from "@/utils/hexGrid";
 import { useOwnerColors } from "@/contexts/SettingsContext";
+import { UnitToken } from "@/components/UnitToken";
 import type { HexTile } from "@/types";
 
 export interface BridgeOverlayLayerProps {
@@ -11,6 +12,11 @@ export interface BridgeOverlayLayerProps {
   HEX_SIZE: number;
 }
 
+/**
+ * Bridges render through the shared building UnitToken (square, owner-coloured
+ * border, building glyph scale) so they match towers/castles and cities in
+ * border weight and icon size.
+ */
 function BridgeOverlayLayerInner({
   activeTileMap,
   tileDataMap,
@@ -27,42 +33,33 @@ function BridgeOverlayLayerInner({
   if (bridgeTiles.length === 0) return null;
   const r = HEX_SIZE * 0.5;
   return (
-    <G>
+    <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
       {bridgeTiles.map((tile) => {
         const pos = tileDataMap.get(tile.key);
         if (!pos) return null;
-        const { cx, cy } = pos;
         const isSelected = selectedEntityKey === tile.key;
-        const bgColor = isSelected ? "rgba(20,80,20,0.95)" : "rgba(80,40,10,0.9)";
-        const strokeColor = isSelected
+        const bgColor = isSelected ? "rgba(20,80,20,1)" : "rgba(80,40,10,0.9)";
+        const borderColor = isSelected
           ? "#50FF50"
-          : (TERRITORY_BORDERS[tile.owner] ?? "#888888");
-        const strokeWidth = isSelected ? 4.0 : 3.2;
+          : TERRITORY_BORDERS[tile.owner] ?? "#888888";
+        const borderWidth = isSelected ? 2.6 : 2.2;
         return (
-          <React.Fragment key={`bridge-${tile.key}`}>
-            <Rect
-              x={cx - r}
-              y={cy - r}
-              width={r * 2}
-              height={r * 2}
-              rx={4}
-              fill={bgColor}
-              stroke={strokeColor}
-              strokeWidth={strokeWidth}
+          <View
+            key={`bridge-${tile.key}`}
+            style={{ position: "absolute", left: pos.cx - r, top: pos.cy - r }}
+          >
+            <UnitToken
+              r={r}
+              icon={ENTITY_META.bridge.icon}
+              bgColor={bgColor}
+              borderColor={borderColor}
+              borderWidth={borderWidth}
+              square
             />
-            <SvgText
-              x={cx}
-              y={cy + r * 0.35}
-              textAnchor="middle"
-              fontSize={r * 1.1}
-              fill="#fff"
-            >
-              {ENTITY_META.bridge.icon}
-            </SvgText>
-          </React.Fragment>
+          </View>
         );
       })}
-    </G>
+    </View>
   );
 }
 

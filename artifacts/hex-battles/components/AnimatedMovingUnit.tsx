@@ -53,6 +53,7 @@ export default function AnimatedMovingUnit({
         bgColor={bgColor}
         borderColor={borderColor}
         borderWidth={2.2}
+        opacity={0.9}
       />
     </Animated.View>
   );

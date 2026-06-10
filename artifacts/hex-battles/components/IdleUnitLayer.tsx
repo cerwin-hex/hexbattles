@@ -124,6 +124,7 @@ export function IdleUnitLayer({
               bgColor="rgba(30,50,120,0.9)"
               borderColor={TERRITORY_BORDERS["player"]}
               borderWidth={2.2}
+              opacity={0.9}
             />
           </Animated.View>
         );

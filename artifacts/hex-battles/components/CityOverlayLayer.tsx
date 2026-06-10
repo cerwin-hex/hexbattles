@@ -1,7 +1,8 @@
 import React from "react";
-import { G, Rect, Text as SvgText } from "react-native-svg";
+import { StyleSheet, View } from "react-native";
 import { ENTITY_META } from "@/utils/hexGrid";
 import { useOwnerColors } from "@/contexts/SettingsContext";
+import { UnitToken } from "@/components/UnitToken";
 import type { HexTile } from "@/types";
 import { areCityOverlayLayerEqual } from "@/components/layerEquality";
 
@@ -12,6 +13,11 @@ export interface CityOverlayLayerProps {
   HEX_SIZE: number;
 }
 
+/**
+ * Cities render through the shared building UnitToken (square, owner-coloured
+ * border, building glyph scale) so they match towers/castles and bridges in
+ * border weight and icon size. Only the background hue distinguishes them.
+ */
 function CityOverlayLayerInner({
   cities,
   activeTileMap,
@@ -19,42 +25,32 @@ function CityOverlayLayerInner({
   HEX_SIZE,
 }: CityOverlayLayerProps) {
   const { borders: TERRITORY_BORDERS } = useOwnerColors();
+  const r = HEX_SIZE * 0.5;
   return (
-    <G>
+    <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
       {Array.from(cities).map((key) => {
         const pos = tileDataMap.get(key);
         if (!pos) return null;
-        const { cx, cy } = pos;
         const liveTile = activeTileMap.get(key);
-        const cityBorderColor =
+        const borderColor =
           TERRITORY_BORDERS[liveTile?.owner ?? "neutral"] ?? "#888888";
-        const cr = HEX_SIZE * 0.46;
         return (
-          <React.Fragment key={`city-${key}`}>
-            <Rect
-              x={cx - cr}
-              y={cy - cr}
-              width={cr * 2}
-              height={cr * 2}
-              rx={4}
-              fill="rgba(0,0,0,0.25)"
-              stroke={cityBorderColor}
-              strokeWidth={3.2}
+          <View
+            key={`city-${key}`}
+            style={{ position: "absolute", left: pos.cx - r, top: pos.cy - r }}
+          >
+            <UnitToken
+              r={r}
+              icon={ENTITY_META.city.icon}
+              bgColor="rgba(205,205,212,0.9)"
+              borderColor={borderColor}
+              borderWidth={2.2}
+              square
             />
-            <SvgText
-              x={cx}
-              y={cy + HEX_SIZE * 0.28}
-              textAnchor="middle"
-              fontSize={HEX_SIZE * 0.72}
-              fill="#fff"
-              opacity={0.9}
-            >
-              {ENTITY_META.city.icon}
-            </SvgText>
-          </React.Fragment>
+          </View>
         );
       })}
-    </G>
+    </View>
   );
 }
 

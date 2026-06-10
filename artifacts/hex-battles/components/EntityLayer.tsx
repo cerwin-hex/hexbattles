@@ -64,7 +64,7 @@ function EntityLayerInner({
         const bgColor = isRebel
           ? "rgba(140,20,20,0.9)"
           : isSelected
-            ? "rgba(20,80,20,0.9)"
+            ? "rgba(20,80,20,1)" // selected unit is fully opaque
             : meta.isUnit
               ? "rgba(30,50,120,0.9)"
               : "rgba(80,40,10,0.9)";
@@ -75,8 +75,18 @@ function EntityLayerInner({
           : isSelected
             ? "#50FF50"
             : ownerColor;
-        const borderWidth = isRebel ? 3.0 : isSelected ? 4.0 : 2.2;
-        const opacity = isSpent && isPlayerUnit ? 0.6 : 1.0;
+        // Selection ring is only slightly heavier than a normal token (was 4.0,
+        // which read as too thick); the green colour carries the cue.
+        const borderWidth = isRebel ? 3.0 : isSelected ? 2.6 : 2.2;
+        // Per-state unit opacity: selected 100%, spent (player) 60%, any other
+        // unit 90%. Non-units (buildings, rebels) stay fully opaque.
+        const opacity = !meta.isUnit
+          ? 1.0
+          : isSelected
+            ? 1.0
+            : isSpent && isPlayerUnit
+              ? 0.6
+              : 0.9;
         return (
           <View
             key={`entity-${key}`}

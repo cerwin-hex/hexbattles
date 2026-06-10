@@ -1139,20 +1139,6 @@ export default function GameScreen() {
 
               <MountainImageLayer tileData={tileData} HEX_SIZE={HEX_SIZE} />
 
-              <CityOverlayLayer
-                cities={cities}
-                activeTileMap={activeTileMap}
-                tileDataMap={tileDataMap}
-                HEX_SIZE={HEX_SIZE}
-              />
-
-              <BridgeOverlayLayer
-                activeTileMap={activeTileMap}
-                tileDataMap={tileDataMap}
-                selectedEntityKey={selectedEntityKey}
-                HEX_SIZE={HEX_SIZE}
-              />
-
               <BorderEdgeLayer
                 outerEdges={outerTerritoryEdges}
                 innerEdges={borderEdges}
@@ -1178,6 +1164,23 @@ export default function GameScreen() {
               />
 
             </Svg>
+
+            {/* Cities and bridges render as RN building tokens (like
+                towers/castles) so they match in border weight and icon size;
+                kept below the unit layers so a unit standing on one shows. */}
+            <CityOverlayLayer
+              cities={cities}
+              activeTileMap={activeTileMap}
+              tileDataMap={tileDataMap}
+              HEX_SIZE={HEX_SIZE}
+            />
+
+            <BridgeOverlayLayer
+              activeTileMap={activeTileMap}
+              tileDataMap={tileDataMap}
+              selectedEntityKey={selectedEntityKey}
+              HEX_SIZE={HEX_SIZE}
+            />
 
             <AffordableTerritoryLayer
               affordableTerritoryTileKeys={affordableTerritoryTileKeys}
