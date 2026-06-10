@@ -97,6 +97,10 @@ export function WelcomeModal() {
                 <Text style={styles.highlight}>strictly higher</Text>
                 {' '}than whatever defends it. Merge two units of equal strength on the same tile to create a stronger one.
               </Text>
+              <Text style={[styles.body, { marginTop: 8 }]}>
+                Cavalry — the Scout (🐎) and Knight (⚜️) — move up to 5 tiles and can attack{' '}
+                <Text style={styles.highlight}>twice per turn</Text>: charge in, strike, then ride on and strike again while moves remain. They cannot merge.
+              </Text>
             </Section>
 
             <Section title="Economy">
