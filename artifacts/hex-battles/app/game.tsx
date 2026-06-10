@@ -616,6 +616,7 @@ export default function GameScreen() {
         cities: new Set(initialCities ?? citiesRef.current),
         spentUnits: new Set<string>(),
         partialMoves: new Map<string, number>(),
+        attacksUsed: new Map<string, number>(),
         freeTowerUsed: new Map(freeTowerUsedTilesRef.current),
       };
 

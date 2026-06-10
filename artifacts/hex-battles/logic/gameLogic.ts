@@ -7,6 +7,7 @@ import {
   getContiguousTerritory,
   getTerritoryId,
   TERRAIN_INCOME,
+  unitMaxAttacks,
 } from "@/utils/hexGrid";
 import { STRENGTH_TO_UNIT } from "@/constants/gameConstants";
 
@@ -145,6 +146,55 @@ export function mergedUnitType(strA: number, strB: number): EntityType {
  * `remaining` is `null` when the unit is at full range — callers should NOT
  * store a partialMoves entry in that case (absence means "full").
  */
+/**
+ * Charge ability: a unit with maxAttacks > 1 (cavalry) keeps acting after a
+ * combat move instead of being spent, as long as it still has an attack AND
+ * movement left. The attack budget is shared with movement — once movement is
+ * gone the unit is spent even if attacks remain.
+ *
+ * This is the single source of truth for charge, shared by the player tap
+ * handler and the AI exec, so both sides resolve cavalry charges identically
+ * (the original bug was the rebel path drifting from the capture path).
+ */
+export function isChargeAttack(o: {
+  isCombatMove: boolean;
+  entity: EntityType;
+  attacksUsedSoFar: number;
+  remainingAfterMove: number;
+}): boolean {
+  const maxAttacks = unitMaxAttacks(o.entity);
+  return (
+    o.isCombatMove &&
+    maxAttacks > 1 &&
+    o.attacksUsedSoFar + 1 < maxAttacks &&
+    o.remainingAfterMove > 0
+  );
+}
+
+/**
+ * Advance the per-turn attack counter when a unit moves from `fromKey` to
+ * `toKey`. A combat move increments the count; a non-combat move carries it.
+ * The source key is always cleared (so a stale count can't attach to a unit
+ * that later lands there). Spent units drop their counter entirely. Returns a
+ * new map; shared by the player tap handler and the AI exec.
+ */
+export function advanceAttacksUsed(o: {
+  attacksUsed: Map<string, number>;
+  fromKey: string;
+  toKey: string;
+  isCombatMove: boolean;
+  spent: boolean;
+}): Map<string, number> {
+  const next = new Map(o.attacksUsed);
+  const used = next.get(o.fromKey) ?? 0;
+  next.delete(o.fromKey);
+  if (!o.spent) {
+    const now = o.isCombatMove ? used + 1 : used;
+    if (now > 0) next.set(o.toKey, now);
+  }
+  return next;
+}
+
 export function resolveMovedUnitMoves(o: {
   isMerge: boolean;
   isCombat: boolean;

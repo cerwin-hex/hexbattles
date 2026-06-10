@@ -15,7 +15,7 @@ import {
   unitMovement,
   unitMaxAttacks,
 } from "@/utils/hexGrid";
-import { calcTerritoryUpkeep, mergedUnitType, resolveMovedUnitMoves } from "@/logic/gameLogic";
+import { advanceAttacksUsed, calcTerritoryUpkeep, isChargeAttack, mergedUnitType, resolveMovedUnitMoves } from "@/logic/gameLogic";
 import {
   dtSplitScore,
   dtCaptureNegatesIncome,
@@ -924,6 +924,8 @@ export interface AiWorkingState {
   cities: Set<string>;
   spentUnits: Set<string>;
   partialMoves: Map<string, number>;
+  /** Per-turn charge counter, keyed by unit tile; transient to the AI turn. */
+  attacksUsed: Map<string, number>;
   freeTowerUsed: Map<TerritoryOwner, Set<string>>;
 }
 
@@ -1180,9 +1182,18 @@ export async function runAiTurn(
           // For a merge, the source tile empties out; mark it spent so it is not
           // re-evaluated. The merged unit lives at toKey.
           if (isAllyMerge) ws.spentUnits.add(fromKey);
+          // Charge: cavalry keeps acting after a combat move instead of being
+          // spent on its first attack — same shared predicate as the player, so
+          // the loop re-evaluates the unit next iteration for its second attack.
+          const isCharge = isChargeAttack({
+            isCombatMove,
+            entity: unitEntity,
+            attacksUsedSoFar: ws.attacksUsed.get(fromKey) ?? 0,
+            remainingAfterMove,
+          });
           const moved = resolveMovedUnitMoves({
             isMerge: isAllyMerge,
-            isCombat: isCombatMove,
+            isCombat: isCombatMove && !isCharge,
             remainingAfterMove,
             destRemaining,
             maxRange,
@@ -1194,6 +1205,13 @@ export async function runAiTurn(
             ws.spentUnits.delete(toKey);
             if (moved.remaining !== null) ws.partialMoves.set(toKey, moved.remaining);
           }
+          ws.attacksUsed = advanceAttacksUsed({
+            attacksUsed: ws.attacksUsed,
+            fromKey,
+            toKey,
+            isCombatMove,
+            spent: moved.spent,
+          });
         }
 
         ws.balances = cbs.recalculateTerritoriesForCapture(
@@ -1255,8 +1273,15 @@ export async function runAiTurn(
           const buyTid = getTerritoryId(buyTerr);
           if (buyTid) ws.balances.set(buyTid, (ws.balances.get(buyTid) ?? 0) - cost);
           if (wasRebel) {
-            ws.spentUnits = new Set(ws.spentUnits);
-            ws.spentUnits.add(target);
+            // Overwriting a rebel is combat: a charge unit spends one attack but
+            // stays active to charge on, others are spent immediately.
+            if (unitMaxAttacks(unitType) > 1) {
+              ws.attacksUsed = new Map(ws.attacksUsed);
+              ws.attacksUsed.set(target, 1);
+            } else {
+              ws.spentUnits = new Set(ws.spentUnits);
+              ws.spentUnits.add(target);
+            }
           }
         } else {
           const previousOwner = (ws.tileMap.get(target)?.owner ?? "neutral") as TerritoryOwner;
@@ -1283,8 +1308,15 @@ export async function runAiTurn(
           cbs.state.setRuins(new Set(ws.ruins));
           ws.liveOwnerMap = new Map(ws.liveOwnerMap);
           ws.liveOwnerMap.set(target, aiOwner);
-          ws.spentUnits = new Set(ws.spentUnits);
-          ws.spentUnits.add(target);
+          // Charge unit bought into an attack spends one attack but stays active
+          // to charge on; others are spent immediately.
+          if (unitMaxAttacks(unitType) > 1) {
+            ws.attacksUsed = new Map(ws.attacksUsed);
+            ws.attacksUsed.set(target, 1);
+          } else {
+            ws.spentUnits = new Set(ws.spentUnits);
+            ws.spentUnits.add(target);
+          }
           cbs.state.setMutableTileMap(new Map(ws.tileMap));
           cbs.state.setLiveOwnerMap(new Map(ws.liveOwnerMap));
         }
@@ -1366,6 +1398,10 @@ export async function runAiTurn(
         const removedEntity = ws.entities.get(targetKey);
         ws.entities = new Map(ws.entities);
         ws.entities.delete(targetKey);
+        if (ws.attacksUsed.has(targetKey)) {
+          ws.attacksUsed = new Map(ws.attacksUsed);
+          ws.attacksUsed.delete(targetKey);
+        }
         // Bridge removed: lake tile must lose owner (non-occupiable without bridge)
         if (removedEntity === "bridge") {
           const lt = ws.tileMap.get(targetKey);

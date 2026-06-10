@@ -6,6 +6,8 @@ import {
   initTerritoryBalances,
   mergedUnitType,
   resolveMovedUnitMoves,
+  isChargeAttack,
+  advanceAttacksUsed,
 } from "@/logic/gameLogic";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -331,5 +333,103 @@ describe("resolveMovedUnitMoves", () => {
       maxRange: 3,
     });
     expect(r).toEqual({ spent: true, remaining: null });
+  });
+});
+
+// ─── isChargeAttack ───────────────────────────────────────────────────────────
+
+describe("isChargeAttack", () => {
+  it("charges: cavalry combat move with an attack and movement to spare", () => {
+    expect(
+      isChargeAttack({
+        isCombatMove: true,
+        entity: "scout",
+        attacksUsedSoFar: 0,
+        remainingAfterMove: 4,
+      }),
+    ).toBe(true);
+  });
+
+  it("does NOT charge when movement is exhausted reaching the target", () => {
+    expect(
+      isChargeAttack({
+        isCombatMove: true,
+        entity: "scout",
+        attacksUsedSoFar: 0,
+        remainingAfterMove: 0,
+      }),
+    ).toBe(false);
+  });
+
+  it("does NOT charge on the final (second) attack", () => {
+    expect(
+      isChargeAttack({
+        isCombatMove: true,
+        entity: "scout",
+        attacksUsedSoFar: 1,
+        remainingAfterMove: 4,
+      }),
+    ).toBe(false);
+  });
+
+  it("does NOT charge on a non-combat move", () => {
+    expect(
+      isChargeAttack({
+        isCombatMove: false,
+        entity: "scout",
+        attacksUsedSoFar: 0,
+        remainingAfterMove: 4,
+      }),
+    ).toBe(false);
+  });
+
+  it("does NOT charge for a single-attack infantry unit", () => {
+    expect(
+      isChargeAttack({
+        isCombatMove: true,
+        entity: "simple_unit",
+        attacksUsedSoFar: 0,
+        remainingAfterMove: 4,
+      }),
+    ).toBe(false);
+  });
+});
+
+// ─── advanceAttacksUsed ───────────────────────────────────────────────────────
+
+describe("advanceAttacksUsed", () => {
+  it("increments the counter onto the destination after a combat move", () => {
+    const r = advanceAttacksUsed({
+      attacksUsed: new Map([["0,0", 0]]),
+      fromKey: "0,0",
+      toKey: "1,0",
+      isCombatMove: true,
+      spent: false,
+    });
+    expect(r.has("0,0")).toBe(false);
+    expect(r.get("1,0")).toBe(1);
+  });
+
+  it("carries (does not increment) the counter after a non-combat move", () => {
+    const r = advanceAttacksUsed({
+      attacksUsed: new Map([["0,0", 1]]),
+      fromKey: "0,0",
+      toKey: "1,0",
+      isCombatMove: false,
+      spent: false,
+    });
+    expect(r.get("1,0")).toBe(1);
+  });
+
+  it("drops the counter entirely when the unit is spent", () => {
+    const r = advanceAttacksUsed({
+      attacksUsed: new Map([["0,0", 1]]),
+      fromKey: "0,0",
+      toKey: "1,0",
+      isCombatMove: true,
+      spent: true,
+    });
+    expect(r.has("0,0")).toBe(false);
+    expect(r.has("1,0")).toBe(false);
   });
 });

@@ -16,8 +16,10 @@ import {
   unitCanMerge,
 } from "@/utils/hexGrid";
 import {
+  advanceAttacksUsed,
   applySingleHexPenalty,
   calcTerritoryUpkeep,
+  isChargeAttack,
   mergedUnitType,
   resolveMovedUnitMoves,
 } from "@/logic/gameLogic";
@@ -212,17 +214,15 @@ export function handleTileTapLogic(params: TileTapParams): void {
       (previousOwner !== "player" ||
        (existingUnit !== undefined && existingUnit !== "bridge"));
 
-    // Charge ability: a unit with maxAttacks > 1 keeps acting after a combat move
-    // (instead of being spent) as long as it has attacks AND movement left. The
-    // attack budget is shared with movement — once movement is gone the unit is
-    // spent even if attacks remain.
-    const maxAttacks = unitMaxAttacks(movingUnit);
-    const attacksUsedSoFar = attacksUsed.get(selectedEntityKey) ?? 0;
-    const isChargeAttack =
-      isCombatMove &&
-      maxAttacks > 1 &&
-      attacksUsedSoFar + 1 < maxAttacks &&
-      remainingAfterMove > 0;
+    // Charge ability (shared with the AI via isChargeAttack): a cavalry unit
+    // keeps acting after a combat move instead of being spent, as long as it
+    // still has an attack and movement left.
+    const isCharge = isChargeAttack({
+      isCombatMove,
+      entity: movingUnit,
+      attacksUsedSoFar: attacksUsed.get(selectedEntityKey) ?? 0,
+      remainingAfterMove,
+    });
 
     const newSpentUnits = new Set(spentUnits);
     const newPartialMoves = new Map(partialMoves);
@@ -233,7 +233,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
       isMerge,
       // A charge attack with attacks/movement to spare behaves like a normal move
       // for the movement budget; combat-spending is deferred to the final attack.
-      isCombat: isCombatMove && !isChargeAttack,
+      isCombat: isCombatMove && !isCharge,
       remainingAfterMove,
       destRemaining,
       maxRange,
@@ -247,14 +247,15 @@ export function handleTileTapLogic(params: TileTapParams): void {
     }
 
     // Carry/advance the per-turn attack counter to the destination tile.
-    const newAttacksUsed = new Map(attacksUsed);
-    newAttacksUsed.delete(selectedEntityKey);
-    if (!moved.spent) {
-      const attacksNow = isCombatMove ? attacksUsedSoFar + 1 : attacksUsedSoFar;
-      if (attacksNow > 0) newAttacksUsed.set(key, attacksNow);
-    }
+    const newAttacksUsed = advanceAttacksUsed({
+      attacksUsed,
+      fromKey: selectedEntityKey,
+      toKey: key,
+      isCombatMove,
+      spent: moved.spent,
+    });
 
-    const newCombatSpentUnits = (isCombatMove && !isChargeAttack)
+    const newCombatSpentUnits = (isCombatMove && !isCharge)
       ? new Set([...combatSpentUnits, key])
       : combatSpentUnits;
 
@@ -373,6 +374,11 @@ export function handleTileTapLogic(params: TileTapParams): void {
         ENTITY_META[existingOnTile!].strength <=
         3;
     const canOverwriteRebel = armedIsUnit && existingOnTile === "rebel";
+    // A charge unit (maxAttacks > 1) bought directly onto a rebel spends one
+    // attack but stays active so it can charge on and attack again, mirroring
+    // the buy-into-attack capture path. Other units are spent immediately.
+    const isChargeRebelOverwrite =
+      canOverwriteRebel && unitMaxAttacks(armedEntityId) > 1;
     const existingIsBuilding =
       !!existingOnTile &&
       !ENTITY_META[existingOnTile].isUnit &&
@@ -455,10 +461,16 @@ export function handleTileTapLogic(params: TileTapParams): void {
           } else {
             if (!canMerge) {
               newEntities.set(key, armedEntityId);
-              if (canOverwriteRebel) {
+              if (canOverwriteRebel && !isChargeRebelOverwrite) {
                 newSpentUnits.add(key);
               }
             }
+          }
+          if (isChargeRebelOverwrite) {
+            const newAttacksUsed = new Map(attacksUsed);
+            newAttacksUsed.set(key, 1);
+            setAttacksUsed(newAttacksUsed);
+            setSelectedTileKey(key);
           }
           setEntities(newEntities);
           setTerritoryBalances((prev) => {

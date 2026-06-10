@@ -25,6 +25,7 @@ function makeEmptyWs(tileMap: Map<string, HexTile>): AiWorkingState {
     cities: new Set(),
     spentUnits: new Set(),
     partialMoves: new Map(),
+    attacksUsed: new Map(),
     freeTowerUsed: new Map(),
   };
 }
@@ -289,6 +290,38 @@ describe("runAiTurn", () => {
       expect(ws.entities.get("2,0")).toBe("simple_unit");
       expect(ws.entities.has("0,0")).toBe(false);
       expect(ws.spentUnits.has("2,0")).toBe(true);
+    });
+
+    it("a cavalry scout clears two adjacent rebels in one turn via charge, then is spent", async () => {
+      // AI owns a 3-tile row with a scout at (0,0) and rebels squatting on
+      // (1,0) and (2,0). Charge lets the scout overwrite the first rebel and
+      // ride on to the second in the same turn; the second attack spends it.
+      // Without charge the scout would clear only one rebel and stop.
+      const tiles = [
+        makeTile(0, 0, "ai1"),
+        makeTile(1, 0, "ai1"),
+        makeTile(2, 0, "ai1"),
+      ];
+      const ws = makeEmptyWs(makeTileMap(tiles));
+      ws.entities.set("0,0", "scout" as EntityType);
+      ws.entities.set("1,0", "rebel" as EntityType);
+      ws.entities.set("2,0", "rebel" as EntityType);
+      ws.balances.set("0,0", 0); // too poor to buy anything
+      const cbs = makeCbs({
+        triggerUnitAnimation: vi.fn((...args: unknown[]) => {
+          const done = args[args.length - 1];
+          if (typeof done === "function") done();
+        }) as AiTurnCallbacks["triggerUnitAnimation"],
+      });
+
+      await runAiTurn(ws, cbs, ["ai1"], 2, "hard");
+
+      // Both rebels gone, scout ended on the far tile and is spent (2nd attack).
+      expect(ws.entities.get("1,0")).not.toBe("rebel");
+      expect(ws.entities.get("2,0")).toBe("scout");
+      expect(ws.spentUnits.has("2,0")).toBe(true);
+      // Charge counter is cleared once the unit is spent.
+      expect(ws.attacksUsed.has("2,0")).toBe(false);
     });
   });
 

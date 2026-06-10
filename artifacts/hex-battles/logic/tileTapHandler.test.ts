@@ -465,6 +465,44 @@ describe("armed entity placement on own territory", () => {
     expect(params.pushHistory).not.toHaveBeenCalled();
   });
 
+  it("a cavalry unit bought directly onto a rebel is NOT spent and keeps a second attack", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
+    const territory = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: tileMap(tiles),
+      armedEntityId: "scout",
+      selectedTileKeys: new Set(["0,0", "1,0"]),
+      selectedTerritoryId: "0,0",
+      selectedTerritory: territory,
+      entities: ents([["1,0", "rebel"]]),
+      territoryBalances: new Map([["0,0", 60]]),
+    });
+    handleTileTapLogic(params);
+    const spent: Set<string> = (params.setSpentUnits as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(spent.has("1,0")).toBe(false);
+    const attacksUsed: Map<string, number> = (params.setAttacksUsed as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(attacksUsed.get("1,0")).toBe(1);
+  });
+
+  it("a regular infantry unit bought directly onto a rebel is spent immediately", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
+    const territory = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: tileMap(tiles),
+      armedEntityId: "simple_unit",
+      selectedTileKeys: new Set(["0,0", "1,0"]),
+      selectedTerritoryId: "0,0",
+      selectedTerritory: territory,
+      entities: ents([["1,0", "rebel"]]),
+      territoryBalances: new Map([["0,0", 60]]),
+    });
+    handleTileTapLogic(params);
+    const spent: Set<string> = (params.setSpentUnits as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(spent.has("1,0")).toBe(true);
+  });
+
   it("triggers error flash when placing on an already occupied tile", () => {
     const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
     const territory = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
