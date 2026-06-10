@@ -391,7 +391,8 @@ describe("runAiTerritoryDecisionLoop", () => {
   it("buys a unit when the territory income can cover its upkeep", async () => {
     // AI owns (0,0) and (1,0) — income = 4 (2 grass tiles × 2), upkeep = 0, balance = 50.
     // Enemy owns (2,0) with no entity, adjacent to (1,0).
-    // canAfford(simple_unit cost=10, upkeep=3): 4 - 3 = 1 ≥ 0 → affordable.
+    // Cavalry is preferred within a strength tier, so the AI buys a Scout
+    // (cost=15, upkeep=6) when affordable: balance 50 ≥ 15 and 50 + 4 − 6 ≥ 0.
     // No AI units to move, so Priority E fires a buy directly onto the enemy tile.
     const tiles = [
       makeTile(0, 0, "ai1"),
@@ -410,7 +411,7 @@ describe("runAiTerritoryDecisionLoop", () => {
 
     expect(exec.buy).toHaveBeenCalledTimes(1);
     const [unitType, targetKey, , outside] = (exec.buy as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(unitType).toBe("simple_unit");
+    expect(unitType).toBe("scout");
     expect(targetKey).toBe("2,0");
     expect(outside).toBe(true);
   });
@@ -576,12 +577,12 @@ describe("runAiTerritoryDecisionLoop", () => {
       // Priority 1: no availUnits → no candidates.
       // Priority 2 first/second loops: no entities → skip.
       // Priority 2 third loop (buy unit):
-      //   simple_unit str 1 < eStr 2 → skip.
-      //   advanced_unit str 2 ≥ 2 ✓, cost=20, upkeep=9
-      //   canAfford(20, 9): 50≥20 && income(10) − (0+9)=1≥0 ✓
+      //   simple_unit / scout str 1 < eStr 2 → skip.
+      //   Within tier 2, cavalry is preferred: knight str 2 ≥ 2 ✓, cost=25, upkeep=18
+      //   canAfford(25, 18): 50≥25 && income(10) − (0+18) = −8 → 50 + (−8) = 42 ≥ 0 ✓
       //   borderPlacements: (3,0) is border tile adjacent to (4,0), empty,
       //     hexDistance(3,0, 4,0)=1 ≤ 5 ✓ → sorted closest first → (3,0)
-      //   → exec.buy("advanced_unit", "3,0", 20, false)
+      //   → exec.buy("knight", "3,0", 25, false)
       const { aiCtx } = makeDefendingSetup(
         new Map<string, EntityType>(),
         "advanced_unit",
@@ -596,9 +597,9 @@ describe("runAiTerritoryDecisionLoop", () => {
       expect(exec.buy).toHaveBeenCalledTimes(1);
       const [unitType, targetKey, cost, outside] =
         (exec.buy as ReturnType<typeof vi.fn>).mock.calls[0];
-      expect(unitType).toBe("advanced_unit");
+      expect(unitType).toBe("knight");
       expect(targetKey).toBe("3,0");
-      expect(cost).toBe(20);
+      expect(cost).toBe(25);
       expect(outside).toBe(false);
     });
   });

@@ -13,6 +13,7 @@ import {
   recalculateTerritoriesForCapture,
   TerritoryCache,
   unitMovement,
+  unitMaxAttacks,
 } from "@/utils/hexGrid";
 import { calcTerritoryUpkeep, mergedUnitType, resolveMovedUnitMoves } from "@/logic/gameLogic";
 import {
@@ -26,17 +27,21 @@ import type { AiContext } from "@/logic/aiHelpers";
 import type { AiState, Difficulty } from "@/types";
 
 // Unit purchase candidates for the AI, derived from ENTITY_META so new units are
-// picked up automatically. Ordered by strength then cost (ascending); the buy
-// loops take the first affordable type meeting the strength threshold, so cheaper
-// units of equal strength are preferred. New units need no changes here.
-const AI_UNIT_BUY_ORDER_ASC: EntityType[] = (Object.keys(ENTITY_META) as EntityType[])
-  .filter((e) => ENTITY_META[e].isUnit)
-  .sort(
-    (a, b) =>
-      ENTITY_META[a].strength - ENTITY_META[b].strength ||
-      ENTITY_META[a].cost - ENTITY_META[b].cost,
-  );
-const AI_UNIT_BUY_ORDER_DESC: EntityType[] = [...AI_UNIT_BUY_ORDER_ASC].reverse();
+// picked up automatically. The buy loops take the first affordable type meeting
+// the strength threshold. Within a strength tier, cavalry (more attacks) is
+// preferred over plain infantry, so the AI buys a Scout/Knight when it can afford
+// one and falls back to cheaper infantry otherwise.
+const aiUnitBuyOrder = (strengthDir: 1 | -1): EntityType[] =>
+  (Object.keys(ENTITY_META) as EntityType[])
+    .filter((e) => ENTITY_META[e].isUnit)
+    .sort(
+      (a, b) =>
+        strengthDir * (ENTITY_META[a].strength - ENTITY_META[b].strength) ||
+        unitMaxAttacks(b) - unitMaxAttacks(a) || // cavalry first within a tier
+        ENTITY_META[a].cost - ENTITY_META[b].cost,
+    );
+const AI_UNIT_BUY_ORDER_ASC: EntityType[] = aiUnitBuyOrder(1);
+const AI_UNIT_BUY_ORDER_DESC: EntityType[] = aiUnitBuyOrder(-1);
 
 export interface AiDecisionExec {
   move(from: string, to: string): Promise<boolean>;
