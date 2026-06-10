@@ -67,7 +67,7 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
                 Units and buildings have a strength value from 1 to 3. A unit can only move onto a tile if its strength is higher than that of the enemy. Move a unit onto an enemy tile to capture it.
               </Text>
               <Text style={[styles.ruleBody, { marginTop: 8 }]}>
-                Cavalry — the Scout (🐎) and Knight (⚜️) — move up to 5 tiles and can attack twice per turn: charge in, strike, then ride on and strike again while moves remain. They cannot be merged.
+                Cavalry — the Scout (🐎) and Knight (⚜️) — move up to 5 tiles and take two open tiles per turn, or strike a unit/rebel once and then ride on to one more open tile before stopping. They never assault towers or castles, and cannot be merged.
               </Text>
             </View>
 

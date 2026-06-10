@@ -617,6 +617,7 @@ export default function GameScreen() {
         spentUnits: new Set<string>(),
         partialMoves: new Map<string, number>(),
         attacksUsed: new Map<string, number>(),
+        combatSpentUnits: new Set<string>(),
         freeTowerUsed: new Map(freeTowerUsedTilesRef.current),
       };
 
@@ -750,6 +751,7 @@ export default function GameScreen() {
     entities,
     activeTileMap,
     spentUnits,
+    combatSpentUnits,
     territoryBalances,
     minUnitCost,
     isAiTurn,

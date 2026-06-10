@@ -8,6 +8,7 @@ import {
   resolveMovedUnitMoves,
   isChargeAttack,
   advanceAttacksUsed,
+  advanceCombatSpent,
 } from "@/logic/gameLogic";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -428,6 +429,42 @@ describe("advanceAttacksUsed", () => {
       toKey: "1,0",
       isCombatMove: true,
       spent: true,
+    });
+    expect(r.has("0,0")).toBe(false);
+    expect(r.has("1,0")).toBe(false);
+  });
+});
+
+// ─── advanceCombatSpent ───────────────────────────────────────────────────────
+
+describe("advanceCombatSpent", () => {
+  it("locks the destination when the move locks (e.g. a strike)", () => {
+    const r = advanceCombatSpent({
+      combatSpentUnits: new Set(),
+      fromKey: "0,0",
+      toKey: "1,0",
+      locks: true,
+    });
+    expect(r.has("1,0")).toBe(true);
+  });
+
+  it("carries an existing lock to the destination on a later (non-locking) move", () => {
+    const r = advanceCombatSpent({
+      combatSpentUnits: new Set(["0,0"]),
+      fromKey: "0,0",
+      toKey: "1,0",
+      locks: false,
+    });
+    expect(r.has("0,0")).toBe(false);
+    expect(r.has("1,0")).toBe(true);
+  });
+
+  it("leaves an unlocked unit unlocked and clears the vacated tile", () => {
+    const r = advanceCombatSpent({
+      combatSpentUnits: new Set(),
+      fromKey: "0,0",
+      toKey: "1,0",
+      locks: false,
     });
     expect(r.has("0,0")).toBe(false);
     expect(r.has("1,0")).toBe(false);

@@ -26,6 +26,7 @@ function makeEmptyWs(tileMap: Map<string, HexTile>): AiWorkingState {
     spentUnits: new Set(),
     partialMoves: new Map(),
     attacksUsed: new Map(),
+    combatSpentUnits: new Set(),
     freeTowerUsed: new Map(),
   };
 }
@@ -292,11 +293,11 @@ describe("runAiTurn", () => {
       expect(ws.spentUnits.has("2,0")).toBe(true);
     });
 
-    it("a cavalry scout clears two adjacent rebels in one turn via charge, then is spent", async () => {
-      // AI owns a 3-tile row with a scout at (0,0) and rebels squatting on
-      // (1,0) and (2,0). Charge lets the scout overwrite the first rebel and
-      // ride on to the second in the same turn; the second attack spends it.
-      // Without charge the scout would clear only one rebel and stop.
+    it("a cavalry scout strikes only one of two adjacent rebels (no second strike)", async () => {
+      // AI owns a 3-tile row with a scout at (0,0) and rebels on (1,0) and
+      // (2,0), and is too poor to buy. The scout may strike a defender only
+      // once: it clears the first rebel and is combat-locked, so the second
+      // rebel survives (it could only ride on to an OPEN tile, not strike).
       const tiles = [
         makeTile(0, 0, "ai1"),
         makeTile(1, 0, "ai1"),
@@ -316,12 +317,11 @@ describe("runAiTurn", () => {
 
       await runAiTurn(ws, cbs, ["ai1"], 2, "hard");
 
-      // Both rebels gone, scout ended on the far tile and is spent (2nd attack).
-      expect(ws.entities.get("1,0")).not.toBe("rebel");
-      expect(ws.entities.get("2,0")).toBe("scout");
-      expect(ws.spentUnits.has("2,0")).toBe(true);
-      // Charge counter is cleared once the unit is spent.
-      expect(ws.attacksUsed.has("2,0")).toBe(false);
+      // First rebel struck and replaced by the scout; it is combat-locked.
+      expect(ws.entities.get("1,0")).toBe("scout");
+      expect(ws.combatSpentUnits.has("1,0")).toBe(true);
+      // Second rebel survives — the scout cannot strike a second defender.
+      expect(ws.entities.get("2,0")).toBe("rebel");
     });
   });
 
@@ -378,6 +378,7 @@ function makeAiCtx(
     cities: new Set(),
     spentUnits: new Set(),
     partialMoves: new Map(),
+    combatSpentUnits: new Set(),
     aiOwner,
   };
 }

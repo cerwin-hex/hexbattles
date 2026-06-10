@@ -20,6 +20,7 @@ interface UseEndTurnPulseParams {
   entities: Map<string, EntityType>;
   activeTileMap: Map<string, HexTile>;
   spentUnits: Set<string>;
+  combatSpentUnits: Set<string>;
   territoryBalances: Map<string, number>;
   minUnitCost: number;
   isAiTurn: boolean;
@@ -33,6 +34,7 @@ export function useEndTurnPulse({
   entities,
   activeTileMap,
   spentUnits,
+  combatSpentUnits,
   territoryBalances,
   minUnitCost,
   isAiTurn,
@@ -94,6 +96,8 @@ export function useEndTurnPulse({
             entities,
             activeTileMap,
             spentUnits,
+            undefined,
+            combatSpentUnits,
           );
           return moves.size > 0;
         },
@@ -132,6 +136,7 @@ export function useEndTurnPulse({
     entities,
     activeTileMap,
     spentUnits,
+    combatSpentUnits,
     territoryBalances,
     minUnitCost,
     isAiTurn,

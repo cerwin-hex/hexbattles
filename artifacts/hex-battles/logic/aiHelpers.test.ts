@@ -44,6 +44,7 @@ function makeCtx(
     cities: new Set(),
     spentUnits: new Set(),
     partialMoves: new Map(),
+    combatSpentUnits: new Set(),
     aiOwner,
   };
 }
@@ -139,6 +140,7 @@ describe("dtCaptureNegatesIncome", () => {
       cities: new Set(),
       spentUnits: new Set(),
       partialMoves: new Map(),
+      combatSpentUnits: new Set(),
       aiOwner: "ai1",
     };
     // Capture "0,0": remaining ai2 territory has 2 grass tiles = 4 income, 0 upkeep
@@ -317,6 +319,7 @@ describe("dtFindMergeMove", () => {
       cities: new Set(),
       spentUnits: new Set(),
       partialMoves: new Map(),
+      combatSpentUnits: new Set(),
       aiOwner: "ai1",
     };
     const result = dtFindMergeMove(2, new Set(["2,0"]), [["0,0", "simple_unit"], ["1,0", "simple_unit"]], ctx);
@@ -334,6 +337,7 @@ describe("dtFindMergeMove", () => {
       cities: new Set(),
       spentUnits: new Set(),
       partialMoves: new Map(),
+      combatSpentUnits: new Set(),
       aiOwner: "ai1",
     };
     const result = dtFindMergeMove(3, new Set(["2,0"]), [["0,0", "advanced_unit"], ["1,0", "advanced_unit"]], ctx);

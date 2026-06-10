@@ -195,6 +195,28 @@ export function advanceAttacksUsed(o: {
   return next;
 }
 
+/**
+ * Carry the "combat-locked" flag with a unit as it moves from `fromKey` to
+ * `toKey`. A unit is combat-locked once it has struck a defender (cavalry, who
+ * may then still take one open tile) or finished its combat for the turn
+ * (everyone else). The flag follows the unit so cavalry can't strike a second
+ * defender after repositioning, and so a stale entry never lingers on the
+ * vacated tile. Returns a new set; shared by the player tap handler and the AI.
+ */
+export function advanceCombatSpent(o: {
+  combatSpentUnits: Set<string>;
+  fromKey: string;
+  toKey: string;
+  /** True if this move leaves the unit combat-locked (struck or spent-by-combat). */
+  locks: boolean;
+}): Set<string> {
+  const next = new Set(o.combatSpentUnits);
+  const wasLocked = next.has(o.fromKey);
+  next.delete(o.fromKey);
+  if (wasLocked || o.locks) next.add(o.toKey);
+  return next;
+}
+
 export function resolveMovedUnitMoves(o: {
   isMerge: boolean;
   isCombat: boolean;

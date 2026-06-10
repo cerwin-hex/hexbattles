@@ -9,6 +9,8 @@ import {
   getMaxEnemyZoC,
   unitMovement,
   unitCanMerge,
+  isCavalry,
+  cavalryMoveKind,
 } from "@/utils/hexGrid";
 import { computeSelectionBorderEdges } from "@/utils/borderEdges";
 
@@ -106,6 +108,7 @@ export function useSelectionState({
       activeTileMap,
       spentUnits,
       remaining,
+      combatSpentUnits,
     );
     // Remove ally unit tiles that aren't a legal merge target: combined strength > 3,
     // dest is combat-spent, or either unit can't merge (e.g. cavalry). Landing on an
@@ -229,6 +232,9 @@ export function useSelectionState({
         if (neighbor.terrain === "mountain") continue;
         if (neighbor.terrain === "lake" && entities.get(nk) !== "bridge") continue;
         const existingEntity = entities.get(nk);
+        // Cavalry can never assault a fortification, even when buying into combat.
+        if (isCavalry(armedEntityId) && cavalryMoveKind(existingEntity) === "building")
+          continue;
         if (existingEntity && existingEntity !== "rebel") {
           // buildings with higher strength can't be captured
           if (

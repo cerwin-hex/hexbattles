@@ -286,6 +286,53 @@ describe("getValidMoves", () => {
     expect(peasantMoves.has("3,0")).toBe(true);
     expect(peasantMoves.has("4,0")).toBe(false);
   });
+
+  // ─── Cavalry combat gating ─────────────────────────────────────────────────
+  it("cavalry can never enter an enemy fortification tile", () => {
+    const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "ai1")]);
+    const ents = entities([["0,0", "scout"], ["1,0", "tower"]]);
+    const moves = getValidMoves("0,0", "player", ents, map, new Set());
+    expect(moves.has("1,0")).toBe(false);
+  });
+
+  it("infantry can still target an enemy fortification (cavalry rule is cavalry-only)", () => {
+    const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "ai1")]);
+    // expert_unit (str 3) vs tower (str 1): allowed for infantry.
+    const ents = entities([["0,0", "expert_unit"], ["1,0", "tower"]]);
+    const moves = getValidMoves("0,0", "player", ents, map, new Set());
+    expect(moves.has("1,0")).toBe(true);
+  });
+
+  it("a cavalry that has struck cannot enter another defender tile, but can still take an open tile", () => {
+    const map = tileMap([
+      makeTile(0, 0, "player"),
+      makeTile(1, 0, "ai1"), // enemy defender, adjacent
+      makeTile(0, 1, "neutral"), // open tile, adjacent via a different direction
+    ]);
+    // Knight (str 2) at (0,0) already struck this turn (in combatSpentUnits).
+    const ents = entities([["0,0", "knight"], ["1,0", "simple_unit"]]);
+    const struck = new Set(["0,0"]);
+    const moves = getValidMoves("0,0", "player", ents, map, new Set(), undefined, struck);
+    expect(moves.has("1,0")).toBe(false); // no second strike
+    expect(moves.has("0,1")).toBe(true); // open capture still allowed
+  });
+
+  it("a cavalry that has not yet struck can enter a defender tile", () => {
+    const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "ai1")]);
+    // Knight (str 2) outranks the defender's ZoC (str 1), so only the cavalry
+    // gating — not strength — decides eligibility here.
+    const ents = entities([["0,0", "knight"], ["1,0", "simple_unit"]]);
+    const moves = getValidMoves("0,0", "player", ents, map, new Set(), undefined, new Set());
+    expect(moves.has("1,0")).toBe(true);
+  });
+
+  it("a struck cavalry can no longer enter an owned rebel tile", () => {
+    const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "player")]);
+    const ents = entities([["0,0", "scout"], ["1,0", "rebel"]]);
+    const struck = new Set(["0,0"]);
+    const moves = getValidMoves("0,0", "player", ents, map, new Set(), undefined, struck);
+    expect(moves.has("1,0")).toBe(false);
+  });
 });
 
 // ─── getMoveCost ─────────────────────────────────────────────────────────────

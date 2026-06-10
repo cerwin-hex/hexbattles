@@ -365,6 +365,44 @@ describe("unit move", () => {
     expect(partial.get("1,0")).toBe(4);
   });
 
+  it("a cavalry strike on an enemy unit combat-locks it but does not spend it", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "ai1")];
+    const map = tileMap(tiles);
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: map,
+      selectedEntityKey: "0,0",
+      validMoveTiles: new Set(["1,0"]),
+      // (1,0) holds an enemy defender → this move is a strike, not an open capture.
+      entities: ents([["0,0", "knight"], ["1,0", "simple_unit"]]),
+      liveOwnerMap: new Map([["0,0", "player"], ["1,0", "ai1"]]),
+    });
+    handleTileTapLogic(params);
+    const spent: Set<string> = (params.setSpentUnits as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(spent.has("1,0")).toBe(false); // can still ride on to one open tile
+    const combatSpent = (params.setCombatSpentUnits as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(combatSpent.has("1,0")).toBe(true); // but no second strike
+    const attacksUsed: Map<string, number> = (params.setAttacksUsed as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(attacksUsed.get("1,0")).toBe(1);
+  });
+
+  it("a cavalry open capture does NOT combat-lock it (free to strike later)", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "ai1")];
+    const map = tileMap(tiles);
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: map,
+      selectedEntityKey: "0,0",
+      validMoveTiles: new Set(["1,0"]),
+      // (1,0) is an empty enemy tile → an open capture, not a strike.
+      entities: ents([["0,0", "knight"]]),
+      liveOwnerMap: new Map([["0,0", "player"], ["1,0", "ai1"]]),
+    });
+    handleTileTapLogic(params);
+    const combatSpent = (params.setCombatSpentUnits as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(combatSpent.has("1,0")).toBe(false);
+  });
+
   it("charge unit IS spent on its second attack", () => {
     const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "ai1")];
     const map = tileMap(tiles);

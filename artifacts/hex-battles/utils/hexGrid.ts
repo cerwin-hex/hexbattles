@@ -44,6 +44,42 @@ export function unitMaxAttacks(entity: EntityType): number {
   return ENTITY_META[entity].maxAttacks ?? 1;
 }
 
+/** Cavalry (charge units) follow special combat rules: a free 2-action budget,
+ * at most one strike against a unit/rebel, and they can never assault buildings. */
+export function isCavalry(entity: EntityType): boolean {
+  return unitMaxAttacks(entity) > 1;
+}
+
+/**
+ * Classify what a cavalry unit would be doing by entering a tile that holds
+ * `destEntity`: striking a defender ("entity"), assaulting a fortification
+ * ("building" — forbidden for cavalry), or taking an open tile ("empty",
+ * which includes cities and bridges that hold no defender).
+ */
+export function cavalryMoveKind(
+  destEntity: EntityType | undefined,
+): "empty" | "entity" | "building" {
+  if (!destEntity || destEntity === "bridge" || destEntity === "city") return "empty";
+  if (destEntity === "rebel") return "entity";
+  return ENTITY_META[destEntity].isUnit ? "entity" : "building";
+}
+
+/**
+ * Whether a cavalry unit may enter a tile for combat, given whether it has
+ * already used its one strike this turn. Buildings are always off-limits;
+ * defenders are off-limits once the cavalry has already struck; open tiles are
+ * always allowed (subject to the caller's range/ZoC checks).
+ */
+export function cavalryMayEnter(
+  destEntity: EntityType | undefined,
+  hasStruck: boolean,
+): boolean {
+  const kind = cavalryMoveKind(destEntity);
+  if (kind === "building") return false;
+  if (kind === "entity" && hasStruck) return false;
+  return true;
+}
+
 /**
  * Whether two units may merge. Merging maps combined strength back onto an
  * infantry type via STRENGTH_TO_UNIT, so special units (e.g. cavalry with the
@@ -187,6 +223,7 @@ export function getValidMoves(
   tileMap: Map<string, HexTile>,
   spentUnits: Set<string>,
   maxRange?: number,
+  combatSpentUnits?: Set<string>,
 ): Set<string> {
   const result = new Set<string>();
   if (spentUnits.has(unitKey)) return result;
@@ -196,6 +233,11 @@ export function getValidMoves(
   const unitEntity = entities.get(unitKey);
   if (!unitEntity) return result;
   const unitStrength = ENTITY_META[unitEntity].strength;
+  // Cavalry combat gating: a cavalry unit can never enter a building tile, and
+  // once it has struck a defender (tracked via combatSpentUnits) it can no
+  // longer enter unit/rebel tiles — only open captures and friendly moves.
+  const cav = isCavalry(unitEntity);
+  const cavHasStruck = cav && (combatSpentUnits?.has(unitKey) ?? false);
   // When no explicit budget is passed, fall back to the unit's full movement.
   const range = maxRange ?? unitMovement(unitEntity);
   if (range <= 0) return result;
@@ -236,7 +278,8 @@ export function getValidMoves(
           bfsInsert(queue, { key: nk, cost: newCost });
         } else if (allyIsRebel) {
           // Can move ONTO a rebel tile to clear it, but cannot pass THROUGH it.
-          result.add(nk);
+          // A cavalry that has already struck this turn may not strike again.
+          if (!cavHasStruck) result.add(nk);
         } else if (allyIsCity || allyIsBridge) {
           result.add(nk);
           bfsInsert(queue, { key: nk, cost: newCost });
@@ -247,8 +290,13 @@ export function getValidMoves(
           bfsInsert(queue, { key: nk, cost: newCost });
         }
       } else if (neighbor.owner === 'neutral') {
+        // Neutral tiles are open captures; cavalry building/strike limits never
+        // apply (a neutral tile holds no enemy defender or fortification).
         result.add(nk);
       } else {
+        // Enemy tile: cavalry cannot assault buildings, nor strike a defender
+        // once it has already struck this turn.
+        if (cav && !cavalryMayEnter(entities.get(nk), cavHasStruck)) continue;
         const enemyZoC = getMaxEnemyZoC(nk, owner, entities, tileMap);
         if (unitStrength > enemyZoC) {
           result.add(nk);

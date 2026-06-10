@@ -19,6 +19,8 @@ export interface AiContext {
   cities: Set<string>;
   spentUnits: Set<string>;
   partialMoves: Map<string, number>;
+  /** Units that have struck a defender this turn (cavalry: no second strike). */
+  combatSpentUnits: Set<string>;
   aiOwner: TerritoryOwner;
   territoryCache?: TerritoryCache;
 }
@@ -199,7 +201,7 @@ export function dtFindMergeMove(
       const mergedStr = str1 + str2;
       if (mergedStr > 3 || mergedStr < requiredStr) continue;
       const range1 = ctx.partialMoves.get(uk1) ?? 3;
-      const vm1 = getValidMoves(uk1, ctx.aiOwner, ctx.entities, ctx.tileMap, ctx.spentUnits, range1);
+      const vm1 = getValidMoves(uk1, ctx.aiOwner, ctx.entities, ctx.tileMap, ctx.spentUnits, range1, ctx.combatSpentUnits);
       if (!vm1.has(uk2)) continue;
       const stepsUsed = getMoveCost(uk1, uk2, ctx.tileMap);
       const remainingAfterMerge = Math.max(0, range1 - stepsUsed);

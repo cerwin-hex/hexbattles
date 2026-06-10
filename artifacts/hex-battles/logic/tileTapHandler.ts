@@ -14,9 +14,11 @@ import {
   unitMovement,
   unitMaxAttacks,
   unitCanMerge,
+  cavalryMoveKind,
 } from "@/utils/hexGrid";
 import {
   advanceAttacksUsed,
+  advanceCombatSpent,
   applySingleHexPenalty,
   calcTerritoryUpkeep,
   isChargeAttack,
@@ -255,9 +257,16 @@ export function handleTileTapLogic(params: TileTapParams): void {
       spent: moved.spent,
     });
 
-    const newCombatSpentUnits = (isCombatMove && !isCharge)
-      ? new Set([...combatSpentUnits, key])
-      : combatSpentUnits;
+    // Combat-lock the unit when it strikes a defender (cavalry: blocks a second
+    // strike while it may still take one open tile) or finishes its combat.
+    const isEntityStrike =
+      isCombatMove && cavalryMoveKind(existingUnit) === "entity";
+    const newCombatSpentUnits = advanceCombatSpent({
+      combatSpentUnits,
+      fromKey: selectedEntityKey,
+      toKey: key,
+      locks: isEntityStrike || (isCombatMove && !isCharge),
+    });
 
     // Phase 1: immediate visual feedback
     unstable_batchedUpdates(() => {
@@ -470,6 +479,9 @@ export function handleTileTapLogic(params: TileTapParams): void {
             const newAttacksUsed = new Map(attacksUsed);
             newAttacksUsed.set(key, 1);
             setAttacksUsed(newAttacksUsed);
+            // Buying onto a rebel is the cavalry's one strike: combat-lock it so
+            // it can take one more open tile but not strike a second defender.
+            setCombatSpentUnits(new Set([...combatSpentUnits, key]));
             setSelectedTileKey(key);
           }
           setEntities(newEntities);
@@ -524,13 +536,16 @@ export function handleTileTapLogic(params: TileTapParams): void {
         newEntities.delete(key);
         newEntities.set(key, armedEntityId);
       }
-      // Charge units bought directly into an attack spend one of their attacks
-      // but stay active (with full movement) so they can charge on and attack
-      // again. Other units (and cities) are spent immediately as before.
+      // Charge units bought directly into an attack spend one of their actions
+      // but stay active (with full movement) so they can ride on. Striking a
+      // defender also combat-locks them (no second strike); taking an open enemy
+      // tile leaves them free to strike later. Other units (and cities) spend.
       const isChargePlacement = !isCity && unitMaxAttacks(armedEntityId) > 1;
-      const newCombatSpent2 = isChargePlacement
-        ? combatSpentUnits
-        : new Set([...combatSpentUnits, key]);
+      const isEntityStrike = cavalryMoveKind(entities.get(key)) === "entity";
+      const newCombatSpent2 =
+        !isChargePlacement || isEntityStrike
+          ? new Set([...combatSpentUnits, key])
+          : combatSpentUnits;
       const newSpentUnits2 = new Set(spentUnits);
       if (!isChargePlacement) newSpentUnits2.add(key);
       const newAttacksUsed2 = new Map(attacksUsed);

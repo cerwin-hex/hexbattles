@@ -14,8 +14,10 @@ import {
   TerritoryCache,
   unitMovement,
   unitMaxAttacks,
+  isCavalry,
+  cavalryMoveKind,
 } from "@/utils/hexGrid";
-import { advanceAttacksUsed, calcTerritoryUpkeep, isChargeAttack, mergedUnitType, resolveMovedUnitMoves } from "@/logic/gameLogic";
+import { advanceAttacksUsed, advanceCombatSpent, calcTerritoryUpkeep, isChargeAttack, mergedUnitType, resolveMovedUnitMoves } from "@/logic/gameLogic";
 import {
   dtSplitScore,
   dtCaptureNegatesIncome,
@@ -153,7 +155,7 @@ export async function runAiTerritoryDecisionLoop(
       type SplitCand = { fk: string; tk: string; score: number; neg: boolean; oneHex: boolean };
       const cands: SplitCand[] = [];
       for (const [uk, ue] of availUnits) {
-        const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!));
+        const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!), aiCtx.combatSpentUnits);
         for (const mk of vm) {
           const mt = aiCtx.tileMap.get(mk);
           if (!mt || mt.owner !== eOwner) continue;
@@ -191,7 +193,7 @@ export async function runAiTerritoryDecisionLoop(
       if (!actionTaken) {
         let bestAttack: { fk: string; tk: string; sz: number } | null = null;
         for (const [uk, ue] of availUnits) {
-          const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!));
+          const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!), aiCtx.combatSpentUnits);
           for (const mk of vm) {
             const mt = aiCtx.tileMap.get(mk);
             if (!mt || mt.owner !== eOwner) continue;
@@ -331,7 +333,7 @@ export async function runAiTerritoryDecisionLoop(
       type SplitCandA = { fk: string; tk: string; score: number; neg: boolean; oneHex: boolean };
       const candsA: SplitCandA[] = [];
       for (const [uk, ue] of availUnits) {
-        const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!));
+        const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!), aiCtx.combatSpentUnits);
         for (const mk of vm) {
           const mt = aiCtx.tileMap.get(mk);
           if (!mt || mt.owner === aiOwner || mt.owner === "neutral") continue;
@@ -425,7 +427,7 @@ export async function runAiTerritoryDecisionLoop(
           for (const [uk, ue] of availUnits) {
             if (actionTaken) break;
             if (ENTITY_META[ue].strength <= zoc) continue;
-            const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!));
+            const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!), aiCtx.combatSpentUnits);
             if (!vm.has(bridge.tile)) continue;
             actionTaken = await exec.move(uk, bridge.tile);
           }
@@ -619,7 +621,7 @@ export async function runAiTerritoryDecisionLoop(
     if (!actionTaken) {
       const entityAttacks: { fk: string; tk: string; eStr: number; aStr: number; oneHex: boolean; neg: boolean; score: number }[] = [];
       for (const [uk, ue] of availUnits) {
-        const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!));
+        const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!), aiCtx.combatSpentUnits);
         for (const mk of vm) {
           const mt = aiCtx.tileMap.get(mk);
           if (!mt || mt.owner === aiOwner || mt.owner === "neutral") continue;
@@ -679,6 +681,8 @@ export async function runAiTerritoryDecisionLoop(
               const ne = aiCtx.entities.get(nk);
               if (!ne || ne === "rebel") continue;
               if (nt.terrain === "lake") continue;
+              // Cavalry can never assault a fortification.
+              if (isCavalry(uType) && cavalryMoveKind(ne) === "building") continue;
               const zoc = getMaxEnemyZoC(nk, aiOwner, aiCtx.entities, aiCtx.tileMap);
               if (str > zoc) {
                 actionTaken = await exec.buy(uType, nk, cost, true);
@@ -692,7 +696,7 @@ export async function runAiTerritoryDecisionLoop(
       if (!actionTaken) {
         const emptyEnemyMoves: { fk: string; tk: string; sz: number }[] = [];
         for (const [uk, ue] of availUnits) {
-          const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!));
+          const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!), aiCtx.combatSpentUnits);
           for (const mk of vm) {
             const mt = aiCtx.tileMap.get(mk);
             if (!mt || mt.owner === aiOwner || mt.owner === "neutral") continue;
@@ -755,7 +759,7 @@ export async function runAiTerritoryDecisionLoop(
         const neutralPrio = (t: HexTile): number => aiCtx.cities.has(t.key) ? 3 : (t.terrain === "grass" || t.terrain === "forest") ? 2 : 1;
         const neutralMoves: { fk: string; tk: string; prio: number }[] = [];
         for (const [uk, ue] of availUnits) {
-          const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!));
+          const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!), aiCtx.combatSpentUnits);
           for (const mk of vm) {
             const mt = aiCtx.tileMap.get(mk);
             if (!mt || mt.owner !== "neutral") continue;
@@ -813,7 +817,7 @@ export async function runAiTerritoryDecisionLoop(
       );
       for (const [uk, ue] of availUnits) {
         if (actionTaken) break;
-        const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!));
+        const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!), aiCtx.combatSpentUnits);
         if (vm.size === 0) continue;
         const movesArr = Array.from(vm);
         const [uq, ur] = uk.split(",").map(Number);
@@ -855,7 +859,7 @@ export async function runAiTerritoryDecisionLoop(
       for (const rt of rebelTiles) {
         if (actionTaken) break;
         for (const [uk] of unitsAsc) {
-          const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!));
+          const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!), aiCtx.combatSpentUnits);
           if (!vm.has(rt.key)) continue;
           actionTaken = await exec.move(uk, rt.key);
           break;
@@ -933,6 +937,8 @@ export interface AiWorkingState {
   partialMoves: Map<string, number>;
   /** Per-turn charge counter, keyed by unit tile; transient to the AI turn. */
   attacksUsed: Map<string, number>;
+  /** Units that have struck a defender this turn (cavalry: no second strike). */
+  combatSpentUnits: Set<string>;
   freeTowerUsed: Map<TerritoryOwner, Set<string>>;
 }
 
@@ -1084,6 +1090,7 @@ export async function runAiTurn(
         get cities() { return ws.cities; },
         get spentUnits() { return ws.spentUnits; },
         get partialMoves() { return ws.partialMoves; },
+        get combatSpentUnits() { return ws.combatSpentUnits; },
         get aiOwner() { return aiOwner; },
         territoryCache: cache,
       };
@@ -1219,6 +1226,16 @@ export async function runAiTurn(
             isCombatMove,
             spent: moved.spent,
           });
+          // Combat-lock the unit when it strikes a defender (cavalry: no second
+          // strike) or finishes its combat; carries with it on later moves.
+          const isEntityStrike =
+            isCombatMove && cavalryMoveKind(destExisting) === "entity";
+          ws.combatSpentUnits = advanceCombatSpent({
+            combatSpentUnits: ws.combatSpentUnits,
+            fromKey,
+            toKey,
+            locks: isEntityStrike || (isCombatMove && !isCharge),
+          });
         }
 
         ws.balances = cbs.recalculateTerritoriesForCapture(
@@ -1280,11 +1297,14 @@ export async function runAiTurn(
           const buyTid = getTerritoryId(buyTerr);
           if (buyTid) ws.balances.set(buyTid, (ws.balances.get(buyTid) ?? 0) - cost);
           if (wasRebel) {
-            // Overwriting a rebel is combat: a charge unit spends one attack but
-            // stays active to charge on, others are spent immediately.
+            // Overwriting a rebel is a strike: a cavalry unit spends one action
+            // and is combat-locked (no second strike) but stays active to ride
+            // on for one open tile; others are spent immediately.
             if (unitMaxAttacks(unitType) > 1) {
               ws.attacksUsed = new Map(ws.attacksUsed);
               ws.attacksUsed.set(target, 1);
+              ws.combatSpentUnits = new Set(ws.combatSpentUnits);
+              ws.combatSpentUnits.add(target);
             } else {
               ws.spentUnits = new Set(ws.spentUnits);
               ws.spentUnits.add(target);
@@ -1292,6 +1312,7 @@ export async function runAiTurn(
           }
         } else {
           const previousOwner = (ws.tileMap.get(target)?.owner ?? "neutral") as TerritoryOwner;
+          const targetEntityBefore = ws.entities.get(target);
           const prevSnapshot = new Map(ws.tileMap);
           ws.tileMap = new Map(ws.tileMap);
           const targetTile = ws.tileMap.get(target);
@@ -1315,11 +1336,16 @@ export async function runAiTurn(
           cbs.state.setRuins(new Set(ws.ruins));
           ws.liveOwnerMap = new Map(ws.liveOwnerMap);
           ws.liveOwnerMap.set(target, aiOwner);
-          // Charge unit bought into an attack spends one attack but stays active
-          // to charge on; others are spent immediately.
+          // Charge unit bought into an attack spends one action but stays active
+          // to ride on. Striking a defender also combat-locks it (no second
+          // strike); taking an open tile leaves it free to strike later.
           if (unitMaxAttacks(unitType) > 1) {
             ws.attacksUsed = new Map(ws.attacksUsed);
             ws.attacksUsed.set(target, 1);
+            if (cavalryMoveKind(targetEntityBefore) === "entity") {
+              ws.combatSpentUnits = new Set(ws.combatSpentUnits);
+              ws.combatSpentUnits.add(target);
+            }
           } else {
             ws.spentUnits = new Set(ws.spentUnits);
             ws.spentUnits.add(target);
