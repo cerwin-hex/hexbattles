@@ -54,7 +54,7 @@ function makeSnapshot(): SavedGame {
         [tile2.key, tile2],
       ]),
       entities: new Map([
-        [tile1.key, "simple_unit"],
+        [tile1.key, "peasant"],
         [tile2.key, "tower"],
       ]),
       territoryBalances: new Map([

@@ -38,19 +38,19 @@ describe("calcTerritoryUpkeep", () => {
     expect(calcTerritoryUpkeep(tiles, new Map())).toBe(0);
   });
 
-  it("counts simple_unit upkeep (3)", () => {
+  it("counts peasant upkeep (3)", () => {
     const tiles = [makeTile(0, 0, "player")];
-    expect(calcTerritoryUpkeep(tiles, ents([["0,0", "simple_unit"]]))).toBe(3);
+    expect(calcTerritoryUpkeep(tiles, ents([["0,0", "peasant"]]))).toBe(3);
   });
 
-  it("counts advanced_unit upkeep (9)", () => {
+  it("counts warrior upkeep (9)", () => {
     const tiles = [makeTile(0, 0, "player")];
-    expect(calcTerritoryUpkeep(tiles, ents([["0,0", "advanced_unit"]]))).toBe(9);
+    expect(calcTerritoryUpkeep(tiles, ents([["0,0", "warrior"]]))).toBe(9);
   });
 
-  it("counts expert_unit upkeep (27)", () => {
+  it("counts swordsman upkeep (27)", () => {
     const tiles = [makeTile(0, 0, "player")];
-    expect(calcTerritoryUpkeep(tiles, ents([["0,0", "expert_unit"]]))).toBe(27);
+    expect(calcTerritoryUpkeep(tiles, ents([["0,0", "swordsman"]]))).toBe(27);
   });
 
   it("counts single tower upkeep as 1 (linear: n=1)", () => {
@@ -83,19 +83,19 @@ describe("calcTerritoryUpkeep", () => {
       makeTile(1, 0, "player"),
       makeTile(2, 0, "player"),
     ];
-    // simple_unit=3, tower(1st)=1, bridge=1
+    // peasant=3, tower(1st)=1, bridge=1
     expect(
       calcTerritoryUpkeep(
         tiles,
-        ents([["0,0", "simple_unit"], ["1,0", "tower"], ["2,0", "bridge"]]),
+        ents([["0,0", "peasant"], ["1,0", "tower"], ["2,0", "bridge"]]),
       ),
     ).toBe(3 + 1 + 1);
   });
 
   it("unit on lake tile counts bridge upkeep too", () => {
     const tiles = [makeTile(0, 0, "player", "lake")];
-    // simple_unit=3, implied bridge=1
-    expect(calcTerritoryUpkeep(tiles, ents([["0,0", "simple_unit"]]))).toBe(4);
+    // peasant=3, implied bridge=1
+    expect(calcTerritoryUpkeep(tiles, ents([["0,0", "peasant"]]))).toBe(4);
   });
 
   it("rebel entity has zero upkeep", () => {
@@ -107,27 +107,27 @@ describe("calcTerritoryUpkeep", () => {
 // ─── mergedUnitType ───────────────────────────────────────────────────────────
 
 describe("mergedUnitType", () => {
-  it("1+1 = advanced_unit (strength 2)", () => {
-    expect(mergedUnitType(1, 1)).toBe("advanced_unit");
+  it("1+1 = warrior (strength 2)", () => {
+    expect(mergedUnitType(1, 1)).toBe("warrior");
   });
 
-  it("1+2 = expert_unit (strength 3)", () => {
-    expect(mergedUnitType(1, 2)).toBe("expert_unit");
+  it("1+2 = swordsman (strength 3)", () => {
+    expect(mergedUnitType(1, 2)).toBe("swordsman");
   });
 
-  it("2+1 = expert_unit (strength 3)", () => {
-    expect(mergedUnitType(2, 1)).toBe("expert_unit");
+  it("2+1 = swordsman (strength 3)", () => {
+    expect(mergedUnitType(2, 1)).toBe("swordsman");
   });
 
-  it("2+2 caps at expert_unit (strength 3)", () => {
-    expect(mergedUnitType(2, 2)).toBe("expert_unit");
+  it("2+2 caps at swordsman (strength 3)", () => {
+    expect(mergedUnitType(2, 2)).toBe("swordsman");
   });
 
   it("1+1+1 (two merges): first merge gives advanced (str 2), second gives expert (str 3)", () => {
     const step1 = mergedUnitType(1, 1);
-    expect(step1).toBe("advanced_unit");
+    expect(step1).toBe("warrior");
     const step2 = mergedUnitType(2, 1);
-    expect(step2).toBe("expert_unit");
+    expect(step2).toBe("swordsman");
   });
 });
 
@@ -215,7 +215,7 @@ describe("applySingleHexPenalty", () => {
     const nowMap = tileMap(nowTiles);
 
     const balances = new Map([["1,0", 20]]);
-    const entities2 = new Map<string, EntityType>([["1,0", "simple_unit"]]);
+    const entities2 = new Map<string, EntityType>([["1,0", "peasant"]]);
     const graveyard = new Set<string>();
     const ruins = new Set<string>();
 
@@ -388,7 +388,7 @@ describe("isChargeAttack", () => {
     expect(
       isChargeAttack({
         isCombatMove: true,
-        entity: "simple_unit",
+        entity: "peasant",
         attacksUsedSoFar: 0,
         remainingAfterMove: 4,
       }),

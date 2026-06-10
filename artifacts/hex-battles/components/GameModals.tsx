@@ -22,6 +22,7 @@ export interface EconBreakdown {
     icon: string;
     name: string;
     count: number;
+    category: "infantry" | "cavalry" | "buildings";
     upkeepPerUnit: number | null;
     mostExpensiveCost: number | null;
     total: number;
@@ -150,7 +151,7 @@ export default function GameModals({
               {econBreakdown && econBreakdown.cityCount > 0 && (
                 <View style={styles.econRow}>
                   <Text style={styles.econRowLabel}>
-                    {ENTITY_META.city.icon} Cities ×{econBreakdown.cityCount}{" "}
+                    {ENTITY_META.city.icon} City ×{econBreakdown.cityCount}{" "}
                     <Text style={styles.econPer}>(+{CITY_BONUS} each)</Text>
                   </Text>
                   <Text style={styles.econRowValue}>
@@ -165,7 +166,16 @@ export default function GameModals({
                 <View style={styles.econSection}>
                   <Text style={styles.econSectionLabel}>UPKEEP / TURN</Text>
                   {econBreakdown.upkeepGroups.map((g, i) => (
-                    <View key={i} style={styles.econRow}>
+                    <View
+                      key={i}
+                      style={[
+                        styles.econRow,
+                        i > 0 &&
+                          g.category !==
+                            econBreakdown.upkeepGroups[i - 1].category &&
+                          styles.econUpkeepCategoryGap,
+                      ]}
+                    >
                       <Text style={styles.econRowLabel}>
                         {g.icon} {g.name} ×{g.count}{" "}
                         {g.upkeepPerUnit !== null && (
@@ -180,7 +190,13 @@ export default function GameModals({
                     </View>
                   ))}
                   {econBreakdown.rebelTotalLoss > 0 && (
-                    <View style={styles.econRow}>
+                    <View
+                      style={[
+                        styles.econRow,
+                        econBreakdown.upkeepGroups.length > 0 &&
+                          styles.econUpkeepCategoryGap,
+                      ]}
+                    >
                       <Text style={styles.econRowLabel}>
                         ✊ Rebels ×{econBreakdown.rebelCount}
                       </Text>

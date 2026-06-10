@@ -1,6 +1,6 @@
 export type TerrainType = 'grass' | 'desert' | 'mountain' | 'lake' | 'forest';
 export type TerritoryOwner = 'neutral' | 'player' | 'ai1' | 'ai2' | 'ai3' | 'ai4' | 'ai5';
-export type EntityType = 'simple_unit' | 'advanced_unit' | 'expert_unit' | 'scout' | 'knight' | 'tower' | 'castle' | 'city' | 'rebel' | 'bridge';
+export type EntityType = 'peasant' | 'warrior' | 'swordsman' | 'scout' | 'knight' | 'tower' | 'castle' | 'city' | 'rebel' | 'bridge';
 
 export interface HexTile {
   q: number;

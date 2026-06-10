@@ -473,6 +473,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
+  econUpkeepCategoryGap: {
+    marginTop: 8,
+  },
   econRowLabel: {
     fontSize: 13,
     fontFamily: "Inter_400Regular",

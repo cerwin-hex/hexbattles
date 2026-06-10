@@ -126,11 +126,11 @@ describe("income and upkeep", () => {
       activeTileMap: tileMap(tiles),
       mutableTileMap: tileMap(tiles),
       territoryBalances: new Map([["0,0", 10]]),
-      entities: ents([["0,0", "simple_unit"]]),
+      entities: ents([["0,0", "peasant"]]),
     });
     handleEndTurnLogic(params);
     const newBalances = (params.setTerritoryBalances as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    // balance 10 + grass income 2 - simple_unit upkeep 3 = 9
+    // balance 10 + grass income 2 - peasant upkeep 3 = 9
     expect(newBalances.get("0,0")).toBe(9);
   });
 
@@ -165,14 +165,14 @@ describe("bankruptcy — unit liquidation", () => {
   });
 
   it("kills player units when territory goes bankrupt (balance drains to 0)", () => {
-    // Desert tile (income=1) with expert_unit (upkeep=27) — delta is negative
+    // Desert tile (income=1) with swordsman (upkeep=27) — delta is negative
     const tiles = [makeTile(0, 0, "player", "desert")];
     const params = makeParams({
       turn: 2,
       activeTileMap: tileMap(tiles),
       mutableTileMap: tileMap(tiles),
       territoryBalances: new Map([["0,0", 0]]),
-      entities: ents([["0,0", "expert_unit"]]),
+      entities: ents([["0,0", "swordsman"]]),
     });
     handleEndTurnLogic(params);
     const newBalances = (params.setTerritoryBalances as ReturnType<typeof vi.fn>).mock.calls[0][0];
@@ -184,7 +184,7 @@ describe("bankruptcy — unit liquidation", () => {
   });
 
   it("drains player reserves to 0 on bankruptcy", () => {
-    // Grass tile (income=2) with advanced_unit (upkeep=9) — delta = -7.
+    // Grass tile (income=2) with warrior (upkeep=9) — delta = -7.
     // Reserve of 5 + income 2 = 7g available, can't cover 9g upkeep → bankrupt,
     // balance lands at 0, unit liquidated.
     const tiles = [makeTile(0, 0, "player")];
@@ -193,7 +193,7 @@ describe("bankruptcy — unit liquidation", () => {
       activeTileMap: tileMap(tiles),
       mutableTileMap: tileMap(tiles),
       territoryBalances: new Map([["0,0", 5]]),
-      entities: ents([["0,0", "advanced_unit"]]),
+      entities: ents([["0,0", "warrior"]]),
     });
     handleEndTurnLogic(params);
     const newBalances = (params.setTerritoryBalances as ReturnType<typeof vi.fn>).mock.calls[0][0];
@@ -211,7 +211,7 @@ describe("bankruptcy — unit liquidation", () => {
       aiOwners: ["ai1"],
       aiDifficulty: "medium",
       territoryBalances: new Map([["0,0", 5]]),
-      entities: ents([["0,0", "advanced_unit"]]),
+      entities: ents([["0,0", "warrior"]]),
     });
     handleEndTurnLogic(params);
     const newBalances = (params.setTerritoryBalances as ReturnType<typeof vi.fn>).mock.calls[0][0];
@@ -221,7 +221,7 @@ describe("bankruptcy — unit liquidation", () => {
   });
 
   it("does not trigger bankruptcy when reserves cover the deficit", () => {
-    // Grass (income=2), simple_unit (upkeep=3) → delta = -1. Reserve 100g
+    // Grass (income=2), peasant (upkeep=3) → delta = -1. Reserve 100g
     // easily covers → balance drops to 99, no bankruptcy, unit survives.
     const tiles = [makeTile(0, 0, "player")];
     const params = makeParams({
@@ -229,7 +229,7 @@ describe("bankruptcy — unit liquidation", () => {
       activeTileMap: tileMap(tiles),
       mutableTileMap: tileMap(tiles),
       territoryBalances: new Map([["0,0", 100]]),
-      entities: ents([["0,0", "simple_unit"]]),
+      entities: ents([["0,0", "peasant"]]),
     });
     handleEndTurnLogic(params);
     const newBalances = (params.setTerritoryBalances as ReturnType<typeof vi.fn>).mock.calls[0][0];

@@ -38,9 +38,9 @@ function entities(pairs: [string, EntityType][]): Map<string, EntityType> {
 // ─── ENTITY_META ──────────────────────────────────────────────────────────────
 
 describe("ENTITY_META", () => {
-  it("simple_unit has strength 1", () => expect(ENTITY_META.simple_unit.strength).toBe(1));
-  it("advanced_unit has strength 2", () => expect(ENTITY_META.advanced_unit.strength).toBe(2));
-  it("expert_unit has strength 3", () => expect(ENTITY_META.expert_unit.strength).toBe(3));
+  it("peasant has strength 1", () => expect(ENTITY_META.peasant.strength).toBe(1));
+  it("warrior has strength 2", () => expect(ENTITY_META.warrior.strength).toBe(2));
+  it("swordsman has strength 3", () => expect(ENTITY_META.swordsman.strength).toBe(3));
   it("rebel is not a unit", () => expect(ENTITY_META.rebel.isUnit).toBe(false));
   it("city has zero upkeep", () => expect(ENTITY_META.city.upkeep).toBe(0));
   it("bridge has zero strength", () => expect(ENTITY_META.bridge.strength).toBe(0));
@@ -130,7 +130,7 @@ describe("getZoCStrength", () => {
 
   it("returns strength of entity on the tile itself", () => {
     const map = tileMap([makeTile(0, 0, "player")]);
-    const ents = entities([["0,0", "advanced_unit"]]);
+    const ents = entities([["0,0", "warrior"]]);
     expect(getZoCStrength("0,0", "player", ents, map)).toBe(2);
   });
 
@@ -139,7 +139,7 @@ describe("getZoCStrength", () => {
       makeTile(0, 0, "player"),
       makeTile(1, 0, "player"),
     ]);
-    const ents = entities([["1,0", "expert_unit"]]);
+    const ents = entities([["1,0", "swordsman"]]);
     // "0,0" itself has no entity, but neighbor "1,0" has strength 3
     expect(getZoCStrength("0,0", "player", ents, map)).toBe(3);
   });
@@ -149,7 +149,7 @@ describe("getZoCStrength", () => {
       makeTile(0, 0, "player"),
       makeTile(1, 0, "ai1"),
     ]);
-    const ents = entities([["1,0", "expert_unit"]]);
+    const ents = entities([["1,0", "swordsman"]]);
     expect(getZoCStrength("0,0", "player", ents, map)).toBe(0);
   });
 });
@@ -178,7 +178,7 @@ describe("getMaxEnemyZoC", () => {
       makeTile(0, 0, "ai1"),
       makeTile(1, 0, "ai1"),
     ]);
-    const ents = entities([["1,0", "expert_unit"]]);
+    const ents = entities([["1,0", "swordsman"]]);
     expect(getMaxEnemyZoC("0,0", "player", ents, map)).toBe(3);
   });
 });
@@ -188,21 +188,21 @@ describe("getMaxEnemyZoC", () => {
 describe("getValidMoves", () => {
   it("returns empty set for spent unit", () => {
     const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "player")]);
-    const ents = entities([["0,0", "simple_unit"]]);
+    const ents = entities([["0,0", "peasant"]]);
     const spent = new Set(["0,0"]);
     expect(getValidMoves("0,0", "player", ents, map, spent)).toEqual(new Set());
   });
 
   it("can move to adjacent empty player tile", () => {
     const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "player")]);
-    const ents = entities([["0,0", "simple_unit"]]);
+    const ents = entities([["0,0", "peasant"]]);
     const moves = getValidMoves("0,0", "player", ents, map, new Set());
     expect(moves.has("1,0")).toBe(true);
   });
 
   it("can move to neutral tile", () => {
     const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "neutral")]);
-    const ents = entities([["0,0", "simple_unit"]]);
+    const ents = entities([["0,0", "peasant"]]);
     const moves = getValidMoves("0,0", "player", ents, map, new Set());
     expect(moves.has("1,0")).toBe(true);
   });
@@ -213,7 +213,7 @@ describe("getValidMoves", () => {
       makeTile(1, 0, "neutral", "mountain"),
       makeTile(2, 0, "neutral"),
     ]);
-    const ents = entities([["0,0", "simple_unit"]]);
+    const ents = entities([["0,0", "peasant"]]);
     const moves = getValidMoves("0,0", "player", ents, map, new Set());
     expect(moves.has("1,0")).toBe(false);
     expect(moves.has("2,0")).toBe(false);
@@ -224,8 +224,8 @@ describe("getValidMoves", () => {
       makeTile(0, 0, "player"),
       makeTile(1, 0, "ai1"),
     ]);
-    // AI has expert_unit (strength 3), player unit has strength 1 — cannot capture
-    const ents = entities([["0,0", "simple_unit"], ["1,0", "expert_unit"]]);
+    // AI has swordsman (strength 3), player unit has strength 1 — cannot capture
+    const ents = entities([["0,0", "peasant"], ["1,0", "swordsman"]]);
     const moves = getValidMoves("0,0", "player", ents, map, new Set());
     expect(moves.has("1,0")).toBe(false);
   });
@@ -236,7 +236,7 @@ describe("getValidMoves", () => {
       makeTile(1, 0, "ai1"),
     ]);
     // Player has expert (strength 3), enemy has simple (strength 1)
-    const ents = entities([["0,0", "expert_unit"], ["1,0", "simple_unit"]]);
+    const ents = entities([["0,0", "swordsman"], ["1,0", "peasant"]]);
     const moves = getValidMoves("0,0", "player", ents, map, new Set());
     expect(moves.has("1,0")).toBe(true);
   });
@@ -246,7 +246,7 @@ describe("getValidMoves", () => {
       makeTile(0, 0, "player"),
       makeTile(1, 0, "neutral", "lake"),
     ]);
-    const ents = entities([["0,0", "simple_unit"]]);
+    const ents = entities([["0,0", "peasant"]]);
     const moves = getValidMoves("0,0", "player", ents, map, new Set());
     expect(moves.has("1,0")).toBe(false);
   });
@@ -256,7 +256,7 @@ describe("getValidMoves", () => {
       makeTile(0, 0, "player"),
       makeTile(1, 0, "player", "lake"),
     ]);
-    const ents = entities([["0,0", "simple_unit"], ["1,0", "bridge"]]);
+    const ents = entities([["0,0", "peasant"], ["1,0", "bridge"]]);
     const moves = getValidMoves("0,0", "player", ents, map, new Set());
     expect(moves.has("1,0")).toBe(true);
   });
@@ -269,7 +269,7 @@ describe("getValidMoves", () => {
       makeTile(1, 0, "neutral", "forest"),
       makeTile(2, 0, "neutral", "forest"),
     ]);
-    const ents = entities([["0,0", "simple_unit"]]);
+    const ents = entities([["0,0", "peasant"]]);
     const moves = getValidMoves("0,0", "player", ents, map, new Set());
     expect(moves.has("1,0")).toBe(true);
     expect(moves.has("2,0")).toBe(false);
@@ -282,7 +282,7 @@ describe("getValidMoves", () => {
     const map = tileMap(row);
     const scoutMoves = getValidMoves("0,0", "player", entities([["0,0", "scout"]]), map, new Set());
     expect(scoutMoves.has("5,0")).toBe(true);
-    const peasantMoves = getValidMoves("0,0", "player", entities([["0,0", "simple_unit"]]), map, new Set());
+    const peasantMoves = getValidMoves("0,0", "player", entities([["0,0", "peasant"]]), map, new Set());
     expect(peasantMoves.has("3,0")).toBe(true);
     expect(peasantMoves.has("4,0")).toBe(false);
   });
@@ -297,8 +297,8 @@ describe("getValidMoves", () => {
 
   it("infantry can still target an enemy fortification (cavalry rule is cavalry-only)", () => {
     const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "ai1")]);
-    // expert_unit (str 3) vs tower (str 1): allowed for infantry.
-    const ents = entities([["0,0", "expert_unit"], ["1,0", "tower"]]);
+    // swordsman (str 3) vs tower (str 1): allowed for infantry.
+    const ents = entities([["0,0", "swordsman"], ["1,0", "tower"]]);
     const moves = getValidMoves("0,0", "player", ents, map, new Set());
     expect(moves.has("1,0")).toBe(true);
   });
@@ -310,7 +310,7 @@ describe("getValidMoves", () => {
       makeTile(0, 1, "neutral"), // open tile, adjacent via a different direction
     ]);
     // Knight (str 2) at (0,0) already struck this turn (in combatSpentUnits).
-    const ents = entities([["0,0", "knight"], ["1,0", "simple_unit"]]);
+    const ents = entities([["0,0", "knight"], ["1,0", "peasant"]]);
     const struck = new Set(["0,0"]);
     const moves = getValidMoves("0,0", "player", ents, map, new Set(), undefined, struck);
     expect(moves.has("1,0")).toBe(false); // no second strike
@@ -321,7 +321,7 @@ describe("getValidMoves", () => {
     const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "ai1")]);
     // Knight (str 2) outranks the defender's ZoC (str 1), so only the cavalry
     // gating — not strength — decides eligibility here.
-    const ents = entities([["0,0", "knight"], ["1,0", "simple_unit"]]);
+    const ents = entities([["0,0", "knight"], ["1,0", "peasant"]]);
     const moves = getValidMoves("0,0", "player", ents, map, new Set(), undefined, new Set());
     expect(moves.has("1,0")).toBe(true);
   });

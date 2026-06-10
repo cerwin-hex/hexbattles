@@ -294,18 +294,18 @@ describe("dtSpacedPlacements", () => {
 describe("dtFindMergeMove", () => {
   it("returns null when fewer than 2 units", () => {
     const ctx = makeCtx([makeTile(0, 0, "ai1")]);
-    const result = dtFindMergeMove(2, new Set(["1,0"]), [["0,0", "simple_unit"]], ctx);
+    const result = dtFindMergeMove(2, new Set(["1,0"]), [["0,0", "peasant"]], ctx);
     expect(result).toBeNull();
   });
 
   it("returns null when targetKeys is empty", () => {
     const ctx = makeCtx([makeTile(0, 0, "ai1"), makeTile(1, 0, "ai1")]);
-    const units: [string, EntityType][] = [["0,0", "simple_unit"], ["1,0", "simple_unit"]];
+    const units: [string, EntityType][] = [["0,0", "peasant"], ["1,0", "peasant"]];
     expect(dtFindMergeMove(2, new Set(), units, ctx)).toBeNull();
   });
 
-  it("finds a merge move when two simples can reach a target as advanced_unit", () => {
-    // Two simple_unit on adjacent player tiles. Merge produces advanced (str 2).
+  it("finds a merge move when two simples can reach a target as warrior", () => {
+    // Two peasant on adjacent player tiles. Merge produces advanced (str 2).
     // Target "2,0" is adjacent to "1,0" (the merge destination).
     const tiles = [
       makeTile(0, 0, "ai1"),
@@ -314,7 +314,7 @@ describe("dtFindMergeMove", () => {
     ];
     const ctx: AiContext = {
       tileMap: tileMap(tiles),
-      entities: ents([["0,0", "simple_unit"], ["1,0", "simple_unit"]]),
+      entities: ents([["0,0", "peasant"], ["1,0", "peasant"]]),
       balances: new Map(),
       cities: new Set(),
       spentUnits: new Set(),
@@ -322,7 +322,7 @@ describe("dtFindMergeMove", () => {
       combatSpentUnits: new Set(),
       aiOwner: "ai1",
     };
-    const result = dtFindMergeMove(2, new Set(["2,0"]), [["0,0", "simple_unit"], ["1,0", "simple_unit"]], ctx);
+    const result = dtFindMergeMove(2, new Set(["2,0"]), [["0,0", "peasant"], ["1,0", "peasant"]], ctx);
     expect(result).not.toBeNull();
     expect(result?.to).toBe("1,0");
   });
@@ -332,7 +332,7 @@ describe("dtFindMergeMove", () => {
     const tiles = [makeTile(0, 0, "ai1"), makeTile(1, 0, "ai1"), makeTile(2, 0, "neutral")];
     const ctx: AiContext = {
       tileMap: tileMap(tiles),
-      entities: ents([["0,0", "advanced_unit"], ["1,0", "advanced_unit"]]),
+      entities: ents([["0,0", "warrior"], ["1,0", "warrior"]]),
       balances: new Map(),
       cities: new Set(),
       spentUnits: new Set(),
@@ -340,7 +340,7 @@ describe("dtFindMergeMove", () => {
       combatSpentUnits: new Set(),
       aiOwner: "ai1",
     };
-    const result = dtFindMergeMove(3, new Set(["2,0"]), [["0,0", "advanced_unit"], ["1,0", "advanced_unit"]], ctx);
+    const result = dtFindMergeMove(3, new Set(["2,0"]), [["0,0", "warrior"], ["1,0", "warrior"]], ctx);
     expect(result).toBeNull();
   });
 });

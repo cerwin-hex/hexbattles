@@ -22,6 +22,7 @@ export interface EconBreakdownResult {
     icon: string;
     name: string;
     count: number;
+    category: "infantry" | "cavalry" | "buildings";
     upkeepPerUnit: number | null;
     mostExpensiveCost: number | null;
     total: number;
@@ -80,10 +81,16 @@ export function useEconBreakdown({
       const mostExpensiveCost = isDefense
         ? nextDefenseUpkeep(type as "tower" | "castle", count - 1)
         : null;
+      const category: "infantry" | "cavalry" | "buildings" = !meta.isUnit
+        ? "buildings"
+        : meta.movement
+          ? "cavalry"
+          : "infantry";
       return {
         icon: meta.icon,
         name: meta.name,
         count,
+        category,
         upkeepPerUnit: isDefense ? null : meta.upkeep,
         mostExpensiveCost,
         total,

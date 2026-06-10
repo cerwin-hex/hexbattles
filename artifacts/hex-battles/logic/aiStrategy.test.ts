@@ -189,14 +189,14 @@ describe("runAiTurn", () => {
 
   describe("player bankruptcy check", () => {
     it("removes player units when the territory goes bankrupt", async () => {
-      // 2 grass tiles → income = 4; 2 simple_units → upkeep = 6; balance = 0
+      // 2 grass tiles → income = 4; 2 peasants → upkeep = 6; balance = 0
       // delta = 4 - 6 = -2 → newBalance = -2 → bankruptcy
       const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
       const ws = makeEmptyWs(makeTileMap(tiles));
       const territoryId = "0,0"; // lexicographically smallest key
       ws.balances.set(territoryId, 0);
-      ws.entities.set("0,0", "simple_unit" as EntityType);
-      ws.entities.set("1,0", "simple_unit" as EntityType);
+      ws.entities.set("0,0", "peasant" as EntityType);
+      ws.entities.set("1,0", "peasant" as EntityType);
 
       const cbs = makeCbs();
 
@@ -220,8 +220,8 @@ describe("runAiTurn", () => {
       const ws = makeEmptyWs(makeTileMap(tiles));
       const territoryId = "0,0";
       ws.balances.set(territoryId, 5);
-      ws.entities.set("0,0", "advanced_unit" as EntityType);
-      ws.entities.set("1,0", "advanced_unit" as EntityType);
+      ws.entities.set("0,0", "warrior" as EntityType);
+      ws.entities.set("1,0", "warrior" as EntityType);
 
       const cbs = makeCbs();
       await runAiTurn(ws, cbs, [], 2, "easy");
@@ -232,12 +232,12 @@ describe("runAiTurn", () => {
     });
 
     it("does not trigger bankruptcy for a solvent player territory", async () => {
-      // 2 grass tiles → income = 4; 1 simple_unit → upkeep = 3; balance = 10
+      // 2 grass tiles → income = 4; 1 peasant → upkeep = 3; balance = 10
       // delta = 4 - 3 = 1 → newBalance = 11 → no bankruptcy
       const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
       const ws = makeEmptyWs(makeTileMap(tiles));
       ws.balances.set("0,0", 10);
-      ws.entities.set("0,0", "simple_unit" as EntityType);
+      ws.entities.set("0,0", "peasant" as EntityType);
 
       const cbs = makeCbs();
       await runAiTurn(ws, cbs, [], 2, "easy");
@@ -251,8 +251,8 @@ describe("runAiTurn", () => {
       const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
       const ws = makeEmptyWs(makeTileMap(tiles));
       ws.balances.set("0,0", 0);
-      ws.entities.set("0,0", "simple_unit" as EntityType);
-      ws.entities.set("1,0", "simple_unit" as EntityType);
+      ws.entities.set("0,0", "peasant" as EntityType);
+      ws.entities.set("1,0", "peasant" as EntityType);
 
       const cbs = makeCbs();
       await runAiTurn(ws, cbs, [], 1, "easy");
@@ -265,7 +265,7 @@ describe("runAiTurn", () => {
 
   describe("unit move execution (dtExecMove)", () => {
     it("spends the unit after it captures an enemy tile (combat)", async () => {
-      // AI owns (0,0)+(1,0) with a simple_unit at (0,0); enemy owns empty (2,0).
+      // AI owns (0,0)+(1,0) with a peasant at (0,0); enemy owns empty (2,0).
       // On "hard" the loop captures (2,0); the real exec runs dtExecMove, and a
       // combat move must leave the unit spent regardless of remaining movement.
       const tiles = [
@@ -274,7 +274,7 @@ describe("runAiTurn", () => {
         makeTile(2, 0, "player"),
       ];
       const ws = makeEmptyWs(makeTileMap(tiles));
-      ws.entities.set("0,0", "simple_unit" as EntityType);
+      ws.entities.set("0,0", "peasant" as EntityType);
       ws.balances.set("0,0", 10);
       // The move animation gates dtExecMove on a callback; invoke it immediately.
       const cbs = makeCbs({
@@ -288,7 +288,7 @@ describe("runAiTurn", () => {
 
       await runAiTurn(ws, cbs, ["ai1"], 2, "hard");
 
-      expect(ws.entities.get("2,0")).toBe("simple_unit");
+      expect(ws.entities.get("2,0")).toBe("peasant");
       expect(ws.entities.has("0,0")).toBe(false);
       expect(ws.spentUnits.has("2,0")).toBe(true);
     });
@@ -398,7 +398,7 @@ function makeExec(overrides: Partial<AiDecisionExec> = {}): AiDecisionExec {
 
 describe("runAiTerritoryDecisionLoop", () => {
   it("moves a unit to capture an adjacent empty enemy tile", async () => {
-    // AI owns (0,0) and (1,0); simple_unit at (0,0).
+    // AI owns (0,0) and (1,0); peasant at (0,0).
     // Enemy owns (2,0) with no entity — the unit can reach it in 2 steps.
     // Priority A: capturing (2,0) eliminates the only enemy tile (neg=true) → move fires.
     const tiles = [
@@ -406,7 +406,7 @@ describe("runAiTerritoryDecisionLoop", () => {
       makeTile(1, 0, "ai1"),
       makeTile(2, 0, "player"),
     ];
-    const entities = new Map<string, EntityType>([["0,0", "simple_unit"]]);
+    const entities = new Map<string, EntityType>([["0,0", "peasant"]]);
     // Territory ID = lexicographically smallest key = "0,0"
     const balances = new Map([["0,0", 10]]);
     const aiCtx = makeAiCtx(tiles, "ai1", entities, balances);
@@ -499,14 +499,14 @@ describe("runAiTerritoryDecisionLoop", () => {
 
     expect(exec.buy).toHaveBeenCalledTimes(1);
     const [unitType, targetKey] = (exec.buy as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(unitType).toBe("simple_unit");
+    expect(unitType).toBe("peasant");
     expect(targetKey).toBe("1,0");
   });
 
   it("skips all purchases when balance is too low to afford any unit", async () => {
     // AI owns only (0,0) — income = 2, upkeep = 0, balance = 0.
     // Enemy owns (1,0) with no entity, adjacent to (0,0).
-    // canAfford(simple_unit cost=10, ...): 0 >= 10 → false → blocked.
+    // canAfford(peasant cost=10, ...): 0 >= 10 → false → blocked.
     // All unit types cost at least 10, so all buy paths are skipped.
     const tiles = [
       makeTile(0, 0, "ai1"),
@@ -532,7 +532,7 @@ describe("runAiTerritoryDecisionLoop", () => {
     // "defending" state.  currMaxStr is determined by AI entities in the map.
     function makeDefendingSetup(
       aiEntities: Map<string, EntityType> = new Map(),
-      enemyEntity: EntityType = "advanced_unit",
+      enemyEntity: EntityType = "warrior",
       aiBalance = 50,
     ) {
       const tiles = [
@@ -552,7 +552,7 @@ describe("runAiTerritoryDecisionLoop", () => {
     }
 
     it("sets territory state to 'defending' when a stronger enemy unit is adjacent", async () => {
-      // Enemy advanced_unit (str=2) is adjacent to the AI border tile (3,0).
+      // Enemy warrior (str=2) is adjacent to the AI border tile (3,0).
       // AI has no units → currMaxStr=0 → 2 > 0 → defending state.
       const { aiCtx } = makeDefendingSetup();
       const exec = makeExec();
@@ -565,13 +565,13 @@ describe("runAiTerritoryDecisionLoop", () => {
     it("Priority 1: exec.move is called to split the stronger enemy's territory", async () => {
       // Set up a deeper enemy strip so capturing the first tile leaves the
       // enemy alive but split — dtCaptureNegatesIncome fires because the
-      // remaining 2-tile territory cannot pay upkeep for the expert_unit.
+      // remaining 2-tile territory cannot pay upkeep for the swordsman.
       //
       // AI "ai1": (0,0)–(1,0)–(2,0)–(3,0)  [income=8, balance=50]
-      // AI entity: advanced_unit (str=2) at (3,0)
-      // Enemy "player": (4,0), (5,0), (6,0) — expert_unit (str=3) at (6,0)
+      // AI entity: warrior (str=2) at (3,0)
+      // Enemy "player": (4,0), (5,0), (6,0) — swordsman (str=3) at (6,0)
       //
-      // currMaxStr=2, expert_unit str=3 > 2 → defending.
+      // currMaxStr=2, swordsman str=3 > 2 → defending.
       // Priority 1 candidates:
       //   (3,0)→(4,0): ZoC at (4,0) = 0 (no entity at (5,0)), str 2 > 0 ✓
       //   dtCaptureNegatesIncome: remaining income (4) − upkeep (27) < 0 → true
@@ -587,8 +587,8 @@ describe("runAiTerritoryDecisionLoop", () => {
         makeTile(6, 0, "player"),
       ];
       const entities = new Map<string, EntityType>([
-        ["3,0", "advanced_unit"],
-        ["6,0", "expert_unit"],
+        ["3,0", "warrior"],
+        ["6,0", "swordsman"],
       ]);
       const balances = new Map([["0,0", 50]]);
       const aiCtx = makeAiCtx(tiles, "ai1", entities, balances);
@@ -608,7 +608,7 @@ describe("runAiTerritoryDecisionLoop", () => {
     });
 
     it("Priority 2: upgrades a tower to castle when the upgrade counters the stronger enemy", async () => {
-      // AI has a tower (str=1) at (1,0).  Enemy has advanced_unit (str=2) at (4,0).
+      // AI has a tower (str=1) at (1,0).  Enemy has warrior (str=2) at (4,0).
       // currMaxStr=0 (tower is not a unit) → str 2 > 0 → defending.
       // Priority 1: no availUnits → no split candidates.
       // Priority 2 first loop (non-unit upgrades):
@@ -618,7 +618,7 @@ describe("runAiTerritoryDecisionLoop", () => {
       //   → exec.upgrade("1,0", "castle", 15)
       const { aiCtx } = makeDefendingSetup(
         new Map<string, EntityType>([["1,0", "tower"]]),
-        "advanced_unit",
+        "warrior",
       );
       let upgraded = false;
       const exec = makeExec({
@@ -632,20 +632,20 @@ describe("runAiTerritoryDecisionLoop", () => {
     });
 
     it("Priority 2: upgrades a nearby unit when the upgrade meets the threat threshold", async () => {
-      // AI has a simple_unit (str=1) at (0,0).  Enemy has advanced_unit (str=2) at (4,0).
+      // AI has a peasant (str=1) at (0,0).  Enemy has warrior (str=2) at (4,0).
       // currMaxStr=1 → str 2 > 1 → defending.
-      // Priority 1: simple_unit at (0,0), 3 movement points → can reach (3,0) but NOT (4,0)
+      // Priority 1: peasant at (0,0), 3 movement points → can reach (3,0) but NOT (4,0)
       //   (cost 4 steps along the strip) → no split candidates.
       // Priority 2 first loop: no non-unit entities → skip.
       // Priority 2 second loop (unit upgrades near the enemy):
-      //   simple_unit at (0,0): hexDistance(0,0, 4,0)=4 ≤ 5 ✓
-      //   UNIT_UPGRADE[simple_unit]=advanced_unit, str 2 ≥ eStr 2 ✓
+      //   peasant at (0,0): hexDistance(0,0, 4,0)=4 ≤ 5 ✓
+      //   UNIT_UPGRADE[peasant]=warrior, str 2 ≥ eStr 2 ✓
       //   upgCost=10, dUpk=6
       //   canAfford(10, 6): 50≥10 && income(10) − (upkeep(3)+6)=1≥0 ✓
-      //   → exec.upgrade("0,0", "advanced_unit", 10)
+      //   → exec.upgrade("0,0", "warrior", 10)
       const { aiCtx } = makeDefendingSetup(
-        new Map<string, EntityType>([["0,0", "simple_unit"]]),
-        "advanced_unit",
+        new Map<string, EntityType>([["0,0", "peasant"]]),
+        "warrior",
       );
       let upgraded = false;
       const exec = makeExec({
@@ -655,16 +655,16 @@ describe("runAiTerritoryDecisionLoop", () => {
       await runAiTerritoryDecisionLoop("-1,0", aiCtx, exec, () => !upgraded, "hard");
 
       expect(exec.upgrade).toHaveBeenCalledTimes(1);
-      expect(exec.upgrade).toHaveBeenCalledWith("0,0", "advanced_unit", 10);
+      expect(exec.upgrade).toHaveBeenCalledWith("0,0", "warrior", 10);
     });
 
     it("Priority 2: buys a defensive unit at a border tile when no upgrades are available", async () => {
-      // AI has no entities.  Enemy has advanced_unit (str=2) at (4,0).
+      // AI has no entities.  Enemy has warrior (str=2) at (4,0).
       // currMaxStr=0 → str 2 > 0 → defending.
       // Priority 1: no availUnits → no candidates.
       // Priority 2 first/second loops: no entities → skip.
       // Priority 2 third loop (buy unit):
-      //   simple_unit / scout str 1 < eStr 2 → skip.
+      //   peasant / scout str 1 < eStr 2 → skip.
       //   Within tier 2, cavalry is preferred: knight str 2 ≥ 2 ✓, cost=25, upkeep=18
       //   canAfford(25, 18): 50≥25 && income(10) − (0+18) = −8 → 50 + (−8) = 42 ≥ 0 ✓
       //   borderPlacements: (3,0) is border tile adjacent to (4,0), empty,
@@ -672,7 +672,7 @@ describe("runAiTerritoryDecisionLoop", () => {
       //   → exec.buy("knight", "3,0", 25, false)
       const { aiCtx } = makeDefendingSetup(
         new Map<string, EntityType>(),
-        "advanced_unit",
+        "warrior",
       );
       let bought = false;
       const exec = makeExec({
@@ -694,14 +694,14 @@ describe("runAiTerritoryDecisionLoop", () => {
   describe("Priority B — bridge-building", () => {
     it("moves a unit across a neutral bridge tile to connect two disconnected AI territories", async () => {
       // Layout (axial coords):
-      //   ai1 territory 1: (0,0)–(1,0)  [simple_unit at (1,0)]
+      //   ai1 territory 1: (0,0)–(1,0)  [peasant at (1,0)]
       //   neutral bridge:  (2,0)         [ZoC = 0 — neutral tiles never generate ZoC]
       //   ai1 territory 2: (3,0)–(4,0)  [disconnected from territory 1]
       //
       // No enemy tiles → Priority 0/A are no-ops.
       // Bridge detection: (1,0)'s neighbor (2,0) is neutral and (2,0) touches (3,0)
       //   which is ai1 but NOT in currTerrKeys → directBridge = true.
-      // ZoC at (2,0) = 0; simple_unit str = 1 > 0 → exec.move("1,0", "2,0") fires.
+      // ZoC at (2,0) = 0; peasant str = 1 > 0 → exec.move("1,0", "2,0") fires.
       const tiles = [
         makeTile(0, 0, "ai1"),
         makeTile(1, 0, "ai1"),
@@ -709,7 +709,7 @@ describe("runAiTerritoryDecisionLoop", () => {
         makeTile(3, 0, "ai1"),
         makeTile(4, 0, "ai1"),
       ];
-      const entities = new Map<string, EntityType>([["1,0", "simple_unit"]]);
+      const entities = new Map<string, EntityType>([["1,0", "peasant"]]);
       const balances = new Map([["0,0", 20]]);
       const aiCtx = makeAiCtx(tiles, "ai1", entities, balances);
 
@@ -726,7 +726,7 @@ describe("runAiTerritoryDecisionLoop", () => {
 
     it("prefers the larger disconnected territory when two bridges are available", async () => {
       // Layout:
-      //   ai1 territory (processed): (0,0)–(1,0)           [simple_unit at (1,0)]
+      //   ai1 territory (processed): (0,0)–(1,0)           [peasant at (1,0)]
       //   neutral bridge A: (0,-1) → ai1 fragment sz=1: (0,-2)  [isolated]
       //   neutral bridge B: (2,0)  → ai1 fragment sz=2: (3,0)–(4,0)
       //
@@ -735,7 +735,7 @@ describe("runAiTerritoryDecisionLoop", () => {
       //   (2,0): neighbor (3,0) is ai1, not in currTerrKeys → sz=2
       // (0,-2) and (3,0) are not adjacent (hexDistance > 1) — separate fragments.
       // Bridges sorted by sz descending: (2,0) sz=2 first.
-      // simple_unit at (1,0) can reach (2,0) in 1 step with ZoC=0 → exec.move fires there.
+      // peasant at (1,0) can reach (2,0) in 1 step with ZoC=0 → exec.move fires there.
       const tiles = [
         makeTile(0, 0, "ai1"),
         makeTile(1, 0, "ai1"),
@@ -745,7 +745,7 @@ describe("runAiTerritoryDecisionLoop", () => {
         makeTile(3, 0, "ai1"),
         makeTile(4, 0, "ai1"),
       ];
-      const entities = new Map<string, EntityType>([["1,0", "simple_unit"]]);
+      const entities = new Map<string, EntityType>([["1,0", "peasant"]]);
       const balances = new Map([["0,0", 20]]);
       const aiCtx = makeAiCtx(tiles, "ai1", entities, balances);
 
@@ -765,11 +765,11 @@ describe("runAiTerritoryDecisionLoop", () => {
   describe("merge-move path", () => {
     it("merges two weak units to overcome ZoC before crossing an enemy bridge tile", async () => {
       // Layout:
-      //   ai1 territory 1: (0,0)–(1,0)  [simple_unit at each]
-      //   enemy bridge:    (2,0) player  [simple_unit at (2,0) → ZoC = 1]
+      //   ai1 territory 1: (0,0)–(1,0)  [peasant at each]
+      //   enemy bridge:    (2,0) player  [peasant at (2,0) → ZoC = 1]
       //   ai1 territory 2: (3,0)–(4,0)  [disconnected]
       //
-      // Neither simple_unit (str=1) can enter (2,0) because 1 ≤ ZoC(1).
+      // Neither peasant (str=1) can enter (2,0) because 1 ≤ ZoC(1).
       // getValidMoves for each unit excludes (2,0) → Priority A candsA is empty.
       //
       // Priority A merge-move fallback:
@@ -778,8 +778,8 @@ describe("runAiTerritoryDecisionLoop", () => {
       //   dtFindMergeMove(1, {"2,0"}, units):
       //     uk1="0,0" (str=1) → uk2="1,0" (str=1): mergedStr=2 ≥ 1, ≤ 3.
       //     vm1 includes "1,0" (ally unit tile). stepsUsed=1, remainingAfterMerge=2.
-      //     tempEntities: advanced_unit (str=2) at "1,0".
-      //     vmMerged: advanced_unit str=2 > ZoC=1 → "2,0" reachable.
+      //     tempEntities: warrior (str=2) at "1,0".
+      //     vmMerged: warrior str=2 > ZoC=1 → "2,0" reachable.
       //   → exec.move("0,0", "1,0") (move uk1 onto uk2 to trigger the merge).
       const tiles = [
         makeTile(0, 0, "ai1"),
@@ -789,9 +789,9 @@ describe("runAiTerritoryDecisionLoop", () => {
         makeTile(4, 0, "ai1"),
       ];
       const entities = new Map<string, EntityType>([
-        ["0,0", "simple_unit"],
-        ["1,0", "simple_unit"],
-        ["2,0", "simple_unit"],
+        ["0,0", "peasant"],
+        ["1,0", "peasant"],
+        ["2,0", "peasant"],
       ]);
       const balances = new Map([["0,0", 50]]);
       const aiCtx = makeAiCtx(tiles, "ai1", entities, balances);
@@ -808,8 +808,8 @@ describe("runAiTerritoryDecisionLoop", () => {
     });
 
     it("does not fire the merge when only one unit is available (cannot form a pair)", async () => {
-      // Only one simple_unit (str=1) at (1,0). ZoC=1 at (2,0) from the enemy
-      // simple_unit. A single unit cannot enter (2,0): 1 ≤ ZoC(1).
+      // Only one peasant (str=1) at (1,0). ZoC=1 at (2,0) from the enemy
+      // peasant. A single unit cannot enter (2,0): 1 ≤ ZoC(1).
       // dtFindMergeMove requires at least 2 units → returns null immediately.
       // The unit at (1,0) is marked spent so availUnits is empty, preventing
       // Priority E neutral-expand or Priority F approach-enemy from firing.
@@ -821,8 +821,8 @@ describe("runAiTerritoryDecisionLoop", () => {
         makeTile(4, 0, "ai1"),
       ];
       const entities = new Map<string, EntityType>([
-        ["1,0", "simple_unit"],
-        ["2,0", "simple_unit"],
+        ["1,0", "peasant"],
+        ["2,0", "peasant"],
       ]);
       const balances = new Map([["0,0", 5]]);
       const aiCtx = makeAiCtx(tiles, "ai1", entities, balances);

@@ -20,9 +20,9 @@ export const ORDERED_EDGES: ReadonlyArray<{
 ];
 
 export const STRENGTH_TO_UNIT: Record<number, EntityType> = {
-  1: "simple_unit",
-  2: "advanced_unit",
-  3: "expert_unit",
+  1: "peasant",
+  2: "warrior",
+  3: "swordsman",
 };
 
 export const PURCHASABLES = (Object.keys(ENTITY_META) as EntityType[])

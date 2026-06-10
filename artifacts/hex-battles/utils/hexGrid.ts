@@ -17,9 +17,9 @@ export type {
 };
 
 export const ENTITY_META: Record<EntityType, EntityMeta> = {
-  simple_unit:   { name: 'Peasant',   icon: '⚒️',  cost: 10, upkeep: 3,  isUnit: true,  strength: 1 },
-  advanced_unit: { name: 'Warrior',   icon: '🗡️',  cost: 20, upkeep: 9,  isUnit: true,  strength: 2 },
-  expert_unit:   { name: 'Swordsman', icon: '⚔️',  cost: 30, upkeep: 27, isUnit: true,  strength: 3 },
+  peasant:       { name: 'Peasant',   icon: '⚒️',  cost: 10, upkeep: 3,  isUnit: true,  strength: 1 },
+  warrior:       { name: 'Warrior',   icon: '🗡️',  cost: 20, upkeep: 9,  isUnit: true,  strength: 2 },
+  swordsman:     { name: 'Swordsman', icon: '⚔️',  cost: 30, upkeep: 27, isUnit: true,  strength: 3 },
   scout:         { name: 'Scout',     icon: '🐎',  cost: 15, upkeep: 6,  isUnit: true,  strength: 1, movement: 5, maxAttacks: 2 },
   knight:        { name: 'Knight',    icon: '⚜️',  cost: 25, upkeep: 18, isUnit: true,  strength: 2, movement: 5, maxAttacks: 2 },
   // NOTE: tower/castle upkeep here is the per-building BASE rate only.
@@ -109,8 +109,8 @@ export const TERRAIN_MOVE_COST: Record<TerrainType, number> = {
 export const CITY_BONUS = 2;
 
 export const UNIT_UPGRADE: Partial<Record<EntityType, EntityType>> = {
-  simple_unit: 'advanced_unit',
-  advanced_unit: 'expert_unit',
+  peasant: 'warrior',
+  warrior: 'swordsman',
   scout: 'knight',
   tower: 'castle',
 };

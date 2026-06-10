@@ -869,7 +869,7 @@ export async function runAiTerritoryDecisionLoop(
         // Prefer buying a scout onto the rebel: its charge clears the rebel and
         // leaves it active to ride on and act again the same turn. Fall back to
         // a peasant when the scout is unaffordable for the territory.
-        const buyPreference: EntityType[] = ["scout", "simple_unit"];
+        const buyPreference: EntityType[] = ["scout", "peasant"];
         for (const rt of rebelTiles) {
           if (actionTaken) break;
           const rtIncome = (TERRAIN_INCOME[rt.terrain] ?? 0) + (aiCtx.cities.has(rt.key) ? CITY_BONUS : 0);

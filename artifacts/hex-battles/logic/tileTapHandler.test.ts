@@ -106,7 +106,7 @@ describe("entity selection", () => {
     const params = makeParams({
       key: "0,0",
       activeTileMap: tileMap(tiles),
-      entities: ents([["0,0", "simple_unit"]]),
+      entities: ents([["0,0", "peasant"]]),
     });
     handleTileTapLogic(params);
     expect(params.setSelectedEntityKey).toHaveBeenCalledWith("0,0");
@@ -118,7 +118,7 @@ describe("entity selection", () => {
       key: "0,0",
       selectedEntityKey: "0,0",
       activeTileMap: tileMap(tiles),
-      entities: ents([["0,0", "simple_unit"]]),
+      entities: ents([["0,0", "peasant"]]),
     });
     handleTileTapLogic(params);
     expect(params.setSelectedEntityKey).toHaveBeenCalledWith(null);
@@ -154,7 +154,7 @@ describe("entity selection", () => {
     const params = makeParams({
       key: "0,0",
       activeTileMap: tileMap(tiles),
-      entities: ents([["0,0", "simple_unit"]]),
+      entities: ents([["0,0", "peasant"]]),
     });
     handleTileTapLogic(params);
     const calls = (params.setSelectedEntityKey as ReturnType<typeof vi.fn>).mock.calls;
@@ -173,7 +173,7 @@ describe("unit move", () => {
       activeTileMap: map,
       selectedEntityKey: "0,0",
       validMoveTiles: new Set(["1,0"]),
-      entities: ents([["0,0", "simple_unit"]]),
+      entities: ents([["0,0", "peasant"]]),
       liveOwnerMap: new Map([["0,0", "player"], ["1,0", "player"]]),
       setMutableTileMap: vi.fn(),
       setEntities: vi.fn(),
@@ -191,14 +191,14 @@ describe("unit move", () => {
       activeTileMap: map,
       selectedEntityKey: "0,0",
       validMoveTiles: new Set(["1,0"]),
-      entities: ents([["0,0", "simple_unit"]]),
+      entities: ents([["0,0", "peasant"]]),
       liveOwnerMap: new Map([["0,0", "player"], ["1,0", "player"]]),
     });
     handleTileTapLogic(params);
     const setSpentUnits = params.setSpentUnits as ReturnType<typeof vi.fn>;
     const spent: Set<string> = setSpentUnits.mock.calls[0][0];
     expect(spent.has("1,0")).toBe(false);
-    // simple_unit has 3 movement; a 1-step move leaves 2 remaining at the destination
+    // peasant has 3 movement; a 1-step move leaves 2 remaining at the destination
     const setPartialMoves = params.setPartialMoves as ReturnType<typeof vi.fn>;
     const partial: Map<string, number> = setPartialMoves.mock.calls[0][0];
     expect(partial.get("1,0")).toBe(2);
@@ -212,7 +212,7 @@ describe("unit move", () => {
       activeTileMap: map,
       selectedEntityKey: "0,0",
       validMoveTiles: new Set(["1,0"]),
-      entities: ents([["0,0", "simple_unit"]]),
+      entities: ents([["0,0", "peasant"]]),
       // Only 1 move left → a 1-step move exhausts it
       partialMoves: new Map([["0,0", 1]]),
       liveOwnerMap: new Map([["0,0", "player"], ["1,0", "player"]]),
@@ -234,7 +234,7 @@ describe("unit move", () => {
       activeTileMap: map,
       selectedEntityKey: "0,0",
       validMoveTiles: new Set(["1,0"]),
-      entities: ents([["0,0", "simple_unit"]]),
+      entities: ents([["0,0", "peasant"]]),
       liveOwnerMap: new Map([["0,0", "player"], ["1,0", "ai1"]]),
     });
     handleTileTapLogic(params);
@@ -251,7 +251,7 @@ describe("unit move", () => {
       activeTileMap: map,
       selectedEntityKey: "0,0",
       validMoveTiles: new Set(["1,0"]),
-      entities: ents([["0,0", "simple_unit"]]),
+      entities: ents([["0,0", "peasant"]]),
       liveOwnerMap: new Map([["0,0", "player"], ["1,0", "neutral"]]),
     });
     handleTileTapLogic(params);
@@ -288,7 +288,7 @@ describe("unit move", () => {
       activeTileMap: map,
       selectedEntityKey: "0,0",
       validMoveTiles: new Set(["1,0"]),
-      entities: ents([["0,0", "simple_unit"]]),
+      entities: ents([["0,0", "peasant"]]),
       liveOwnerMap: new Map([["0,0", "player"], ["1,0", "ai1"]]),
     });
     handleTileTapLogic(params);
@@ -303,7 +303,7 @@ describe("unit move", () => {
       makeTile(1, 0, "player", "lake"),
     ];
     const map = tileMap(tiles);
-    const entityMap = ents([["0,0", "simple_unit"], ["1,0", "bridge"]]);
+    const entityMap = ents([["0,0", "peasant"], ["1,0", "bridge"]]);
     const params = makeParams({
       key: "1,0",
       activeTileMap: map,
@@ -320,7 +320,7 @@ describe("unit move", () => {
   it("merges two units when moving onto an allied unit with combined strength <= 3", () => {
     const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
     const map = tileMap(tiles);
-    const entityMap = ents([["0,0", "simple_unit"], ["1,0", "simple_unit"]]);
+    const entityMap = ents([["0,0", "peasant"], ["1,0", "peasant"]]);
     const params = makeParams({
       key: "1,0",
       activeTileMap: map,
@@ -336,7 +336,7 @@ describe("unit move", () => {
     const newEntities: Map<string, EntityType> = setEntities.mock.calls[0][0];
     // After merge: "0,0" (source) is gone, "1,0" has the merged unit
     expect(newEntities.has("0,0")).toBe(false);
-    expect(newEntities.get("1,0")).toBe("advanced_unit");
+    expect(newEntities.get("1,0")).toBe("warrior");
   });
 
   // ─── Cavalry charge ability (maxAttacks > 1) ─────────────────────────────────
@@ -374,7 +374,7 @@ describe("unit move", () => {
       selectedEntityKey: "0,0",
       validMoveTiles: new Set(["1,0"]),
       // (1,0) holds an enemy defender → this move is a strike, not an open capture.
-      entities: ents([["0,0", "knight"], ["1,0", "simple_unit"]]),
+      entities: ents([["0,0", "knight"], ["1,0", "peasant"]]),
       liveOwnerMap: new Map([["0,0", "player"], ["1,0", "ai1"]]),
     });
     handleTileTapLogic(params);
@@ -446,7 +446,7 @@ describe("unit move", () => {
     // A knight moving onto an allied peasant must NOT merge into a Swordsman.
     const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
     const map = tileMap(tiles);
-    const entityMap = ents([["0,0", "knight"], ["1,0", "simple_unit"]]);
+    const entityMap = ents([["0,0", "knight"], ["1,0", "peasant"]]);
     const params = makeParams({
       key: "1,0",
       activeTileMap: map,
@@ -460,7 +460,7 @@ describe("unit move", () => {
     handleTileTapLogic(params);
     const newEntities: Map<string, EntityType> = (params.setEntities as ReturnType<typeof vi.fn>).mock.calls[0][0];
     // No merge → no Swordsman is ever produced.
-    expect([...newEntities.values()]).not.toContain("expert_unit");
+    expect([...newEntities.values()]).not.toContain("swordsman");
   });
 });
 
@@ -473,7 +473,7 @@ describe("armed entity placement on own territory", () => {
     const params = makeParams({
       key: "1,0",
       activeTileMap: tileMap(tiles),
-      armedEntityId: "simple_unit",
+      armedEntityId: "peasant",
       selectedTileKeys: new Set(["0,0", "1,0"]),
       selectedTerritoryId: "0,0",
       selectedTerritory: territory,
@@ -491,7 +491,7 @@ describe("armed entity placement on own territory", () => {
     const params = makeParams({
       key: "1,0",
       activeTileMap: tileMap(tiles),
-      armedEntityId: "expert_unit",
+      armedEntityId: "swordsman",
       selectedTileKeys: new Set(["0,0", "1,0"]),
       selectedTerritoryId: "0,0",
       selectedTerritory: territory,
@@ -529,7 +529,7 @@ describe("armed entity placement on own territory", () => {
     const params = makeParams({
       key: "1,0",
       activeTileMap: tileMap(tiles),
-      armedEntityId: "simple_unit",
+      armedEntityId: "peasant",
       selectedTileKeys: new Set(["0,0", "1,0"]),
       selectedTerritoryId: "0,0",
       selectedTerritory: territory,
@@ -547,7 +547,7 @@ describe("armed entity placement on own territory", () => {
     const params = makeParams({
       key: "1,0",
       activeTileMap: tileMap(tiles),
-      armedEntityId: "simple_unit",
+      armedEntityId: "peasant",
       selectedTileKeys: new Set(["0,0", "1,0"]),
       selectedTerritoryId: "0,0",
       selectedTerritory: territory,
@@ -627,7 +627,7 @@ describe("armed entity placement on own territory", () => {
     const params = makeParams({
       key: "1,0",
       activeTileMap: tileMap(tiles),
-      armedEntityId: "simple_unit",
+      armedEntityId: "peasant",
       selectedTileKeys: new Set(["0,0", "1,0"]),
       selectedTerritoryId: "0,0",
       selectedTerritory: territory,
@@ -646,7 +646,7 @@ describe("armed entity placement on own territory", () => {
     const params = makeParams({
       key: "1,0",
       activeTileMap: tileMap(tiles),
-      armedEntityId: "simple_unit",
+      armedEntityId: "peasant",
       selectedTileKeys: new Set(["0,0", "1,0"]),
       selectedTerritoryId: "0,0",
       selectedTerritory: territory,
@@ -667,7 +667,7 @@ describe("armed entity attack outside own territory", () => {
     const params = makeParams({
       key: "1,0",
       activeTileMap: tileMap(tiles),
-      armedEntityId: "simple_unit",
+      armedEntityId: "peasant",
       validPlacementAttackTiles: new Set(["1,0"]),
       selectedTerritoryId: "0,0",
       selectedTerritory: territory,
@@ -686,7 +686,7 @@ describe("armed entity attack outside own territory", () => {
     const params = makeParams({
       key: "1,0",
       activeTileMap: tileMap(tiles),
-      armedEntityId: "expert_unit",
+      armedEntityId: "swordsman",
       validPlacementAttackTiles: new Set(["1,0"]),
       selectedTerritoryId: "0,0",
       selectedTerritory: territory,
@@ -726,7 +726,7 @@ describe("armed entity attack outside own territory", () => {
     const params = makeParams({
       key: "1,0",
       activeTileMap: tileMap(tiles),
-      armedEntityId: "simple_unit",
+      armedEntityId: "peasant",
       validPlacementAttackTiles: new Set(["1,0"]),
       selectedTerritoryId: "0,0",
       selectedTerritory: territory,

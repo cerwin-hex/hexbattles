@@ -126,7 +126,7 @@ export function initTerritoryBalances(
 
 export function mergedUnitType(strA: number, strB: number): EntityType {
   const total = Math.min(strA + strB, 3);
-  return STRENGTH_TO_UNIT[total] ?? "expert_unit";
+  return STRENGTH_TO_UNIT[total] ?? "swordsman";
 }
 
 /**
