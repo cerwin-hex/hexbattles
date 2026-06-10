@@ -449,6 +449,59 @@ describe("runAiTerritoryDecisionLoop", () => {
     expect(outside).toBe(true);
   });
 
+  it("prefers buying a scout onto a rebel when the territory can afford it", async () => {
+    // AI owns a 4-tile row with a rebel squatting on (3,0) and no units to move
+    // onto it, so Priority G buys directly. Income = 6 (three non-rebel grass)
+    // sustains a scout (upkeep 6) given the rebel tile's own income, and the
+    // balance covers the cost — so the AI prefers a Scout over a peasant for
+    // the charge tempo.
+    const tiles = [
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai1"),
+      makeTile(2, 0, "ai1"),
+      makeTile(3, 0, "ai1"),
+    ];
+    const entities = new Map<string, EntityType>([["3,0", "rebel"]]);
+    const balances = new Map([["0,0", 20]]);
+    const aiCtx = makeAiCtx(tiles, "ai1", entities, balances);
+
+    let bought = false;
+    const exec = makeExec({
+      buy: vi.fn(async () => { bought = true; return true; }),
+    });
+
+    await runAiTerritoryDecisionLoop("0,0", aiCtx, exec, () => !bought, "hard");
+
+    expect(exec.buy).toHaveBeenCalledTimes(1);
+    const [unitType, targetKey, , outside] = (exec.buy as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(unitType).toBe("scout");
+    expect(targetKey).toBe("3,0");
+    expect(outside).toBe(false);
+  });
+
+  it("falls back to a peasant on a rebel when a scout is too costly to sustain", async () => {
+    // AI owns just (0,0)+(1,0) with a rebel on (1,0) and no units. Income = 2
+    // (only (0,0) is non-rebel grass) + (1,0)'s 2 = 4, which cannot sustain a
+    // scout (upkeep 6: 4 − 6 < 0) but can sustain a peasant (upkeep 3). Balance
+    // 20 covers either cost, so the AI falls back to the affordable peasant.
+    const tiles = [makeTile(0, 0, "ai1"), makeTile(1, 0, "ai1")];
+    const entities = new Map<string, EntityType>([["1,0", "rebel"]]);
+    const balances = new Map([["0,0", 20]]);
+    const aiCtx = makeAiCtx(tiles, "ai1", entities, balances);
+
+    let bought = false;
+    const exec = makeExec({
+      buy: vi.fn(async () => { bought = true; return true; }),
+    });
+
+    await runAiTerritoryDecisionLoop("0,0", aiCtx, exec, () => !bought, "hard");
+
+    expect(exec.buy).toHaveBeenCalledTimes(1);
+    const [unitType, targetKey] = (exec.buy as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(unitType).toBe("simple_unit");
+    expect(targetKey).toBe("1,0");
+  });
+
   it("skips all purchases when balance is too low to afford any unit", async () => {
     // AI owns only (0,0) — income = 2, upkeep = 0, balance = 0.
     // Enemy owns (1,0) with no entity, adjacent to (0,0).
