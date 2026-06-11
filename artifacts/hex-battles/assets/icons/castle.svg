@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <use href="#g-castle" stroke="#2B2118" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></use>
+  <g id="g-castle">
+  <rect x="22" y="26" width="20" height="30" fill="#9C937F"></rect>
+  <g fill="#877E6F">
+  <rect x="24" y="20" width="4.5" height="7"></rect>
+  <rect x="29.75" y="20" width="4.5" height="7"></rect>
+  <rect x="35.5" y="20" width="4.5" height="7"></rect>
+  </g>
+  <g fill="#B5AC9C">
+  <rect x="10" y="14" width="12" height="42"></rect>
+  <rect x="42" y="14" width="12" height="42"></rect>
+  <rect x="9" y="8" width="5" height="7"></rect>
+  <rect x="17" y="8" width="5" height="7"></rect>
+  <rect x="42" y="8" width="5" height="7"></rect>
+  <rect x="50" y="8" width="5" height="7"></rect>
+  </g>
+  <path d="M27 56 V45 Q27 39 32 39 Q37 39 37 45 V56 Z" fill="#2B2118"></path>
+  <rect x="14" y="24" width="4" height="9" rx="2" fill="#2B2118"></rect>
+  <rect x="46" y="24" width="4" height="9" rx="2" fill="#2B2118"></rect>
+  </g>
+</svg>

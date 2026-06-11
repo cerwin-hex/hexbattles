@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <use href="#g-bridge" stroke="#2B2118" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></use>
+  <g id="g-bridge">
+  <path d="M8 29 V52 H16 V46 Q16 34 32 34 Q48 34 48 46 V52 H56 V29 Z" fill="#877E6F"></path>
+  <rect x="4" y="22" width="56" height="8" fill="#B5AC9C"></rect>
+  <rect x="4" y="16" width="56" height="5" rx="2" fill="#9C937F"></rect>
+  </g>
+</svg>

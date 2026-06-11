@@ -1,6 +1,5 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import { ENTITY_META } from "@/utils/hexGrid";
 import { useOwnerColors } from "@/contexts/SettingsContext";
 import { UnitToken } from "@/components/UnitToken";
 import type { HexTile } from "@/types";
@@ -14,9 +13,9 @@ export interface CityOverlayLayerProps {
 }
 
 /**
- * Cities render through the shared building UnitToken (square, owner-coloured
- * border, building glyph scale) so they match towers/castles and bridges in
- * border weight and icon size. Only the background hue distinguishes them.
+ * Cities render through the shared building UnitToken (isBuilding: bare icon,
+ * no background, no ring) so they match towers/castles and bridges. The passed
+ * borderColor is ignored for buildings but kept for the shared prop shape.
  */
 function CityOverlayLayerInner({
   cities,
@@ -41,11 +40,10 @@ function CityOverlayLayerInner({
           >
             <UnitToken
               r={r}
-              icon={ENTITY_META.city.icon}
-              bgColor="rgba(205,205,212,0.9)"
+              entityId="city"
               borderColor={borderColor}
               borderWidth={2.2}
-              square
+              isBuilding
             />
           </View>
         );

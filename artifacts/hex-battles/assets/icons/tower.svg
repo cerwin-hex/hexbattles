@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <use href="#g-tower" stroke="#2B2118" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></use>
+  <g id="g-tower">
+  <g fill="#9C937F">
+  <rect x="19" y="7" width="7.5" height="13"></rect>
+  <rect x="28.25" y="7" width="7.5" height="13"></rect>
+  <rect x="37.5" y="7" width="7.5" height="13"></rect>
+  </g>
+  <rect x="21" y="18" width="22" height="36" fill="#B5AC9C"></rect>
+  <rect x="16" y="52" width="32" height="6" rx="1.5" fill="#877E6F"></rect>
+  <rect x="29" y="27" width="6" height="13" rx="3" fill="#2B2118"></rect>
+  </g>
+</svg>

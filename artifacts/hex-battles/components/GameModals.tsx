@@ -5,9 +5,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { ENTITY_META, CITY_BONUS } from "@/utils/hexGrid";
+import { CITY_BONUS } from "@/utils/hexGrid";
 import type { EntityType } from "@/types";
 import styles from "@/app/gameStyles";
+import { CoinIcon, SkullIcon, UnitIcon } from "@/components/UnitIcon";
 
 export interface EconBreakdown {
   grassCount: number;
@@ -19,7 +20,7 @@ export interface EconBreakdown {
   desertIncome: number;
   cityIncome: number;
   upkeepGroups: {
-    icon: string;
+    id: EntityType;
     name: string;
     count: number;
     category: "infantry" | "cavalry" | "buildings";
@@ -118,7 +119,7 @@ export default function GameModals({
               {econBreakdown && econBreakdown.grassCount > 0 && (
                 <View style={styles.econRow}>
                   <Text style={styles.econRowLabel}>
-                    🌿 Grass ×{econBreakdown.grassCount}{" "}
+                    Grass ×{econBreakdown.grassCount}{" "}
                     <Text style={styles.econPer}>(+2 each)</Text>
                   </Text>
                   <Text style={styles.econRowValue}>
@@ -129,7 +130,7 @@ export default function GameModals({
               {econBreakdown && econBreakdown.forestCount > 0 && (
                 <View style={styles.econRow}>
                   <Text style={styles.econRowLabel}>
-                    🌲 Forest ×{econBreakdown.forestCount}{" "}
+                    Forest ×{econBreakdown.forestCount}{" "}
                     <Text style={styles.econPer}>(+2 each)</Text>
                   </Text>
                   <Text style={styles.econRowValue}>
@@ -140,7 +141,7 @@ export default function GameModals({
               {econBreakdown && econBreakdown.desertCount > 0 && (
                 <View style={styles.econRow}>
                   <Text style={styles.econRowLabel}>
-                    🏜️ Desert ×{econBreakdown.desertCount}{" "}
+                    Desert ×{econBreakdown.desertCount}{" "}
                     <Text style={styles.econPer}>(+1 each)</Text>
                   </Text>
                   <Text style={styles.econRowValue}>
@@ -150,10 +151,13 @@ export default function GameModals({
               )}
               {econBreakdown && econBreakdown.cityCount > 0 && (
                 <View style={styles.econRow}>
-                  <Text style={styles.econRowLabel}>
-                    {ENTITY_META.city.icon} City ×{econBreakdown.cityCount}{" "}
-                    <Text style={styles.econPer}>(+{CITY_BONUS} each)</Text>
-                  </Text>
+                  <View style={styles.econLabelRow}>
+                    <UnitIcon entityId="city" size={16} />
+                    <Text style={styles.econRowLabel}>
+                      City ×{econBreakdown.cityCount}{" "}
+                      <Text style={styles.econPer}>(+{CITY_BONUS} each)</Text>
+                    </Text>
+                  </View>
                   <Text style={styles.econRowValue}>
                     +{econBreakdown.cityIncome}
                   </Text>
@@ -176,14 +180,17 @@ export default function GameModals({
                           styles.econUpkeepCategoryGap,
                       ]}
                     >
-                      <Text style={styles.econRowLabel}>
-                        {g.icon} {g.name} ×{g.count}{" "}
-                        {g.upkeepPerUnit !== null && (
-                          <Text style={styles.econPer}>
-                            (−{g.upkeepPerUnit} each)
-                          </Text>
-                        )}
-                      </Text>
+                      <View style={styles.econLabelRow}>
+                        <UnitIcon entityId={g.id} size={16} />
+                        <Text style={styles.econRowLabel}>
+                          {g.name} ×{g.count}{" "}
+                          {g.upkeepPerUnit !== null && (
+                            <Text style={styles.econPer}>
+                              (−{g.upkeepPerUnit} each)
+                            </Text>
+                          )}
+                        </Text>
+                      </View>
                       <Text style={[styles.econRowValue, { color: "#E07060" }]}>
                         −{g.total}
                       </Text>
@@ -197,9 +204,12 @@ export default function GameModals({
                           styles.econUpkeepCategoryGap,
                       ]}
                     >
-                      <Text style={styles.econRowLabel}>
-                        ✊ Rebels ×{econBreakdown.rebelCount}
-                      </Text>
+                      <View style={styles.econLabelRow}>
+                        <UnitIcon entityId="rebel" size={16} />
+                        <Text style={styles.econRowLabel}>
+                          Rebels ×{econBreakdown.rebelCount}
+                        </Text>
+                      </View>
                       <Text style={[styles.econRowValue, { color: "#E07060" }]}>
                         −{econBreakdown.rebelTotalLoss}
                       </Text>
@@ -227,9 +237,10 @@ export default function GameModals({
             </View>
             <View style={styles.econRow}>
               <Text style={styles.econNetLabel}>Current balance</Text>
-              <Text style={styles.econNetValue}>
-                🪙 {selectedTerritoryBalance}
-              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                <CoinIcon size={16} />
+                <Text style={styles.econNetValue}>{selectedTerritoryBalance}</Text>
+              </View>
             </View>
             <TouchableOpacity
               style={styles.econCloseBtn}
@@ -244,7 +255,6 @@ export default function GameModals({
       <Modal visible={showDominancePopup} transparent animationType="fade">
         <View style={styles.gameResultOverlay}>
           <View style={styles.gameResultCard}>
-            <Text style={styles.gameResultEmoji}>⚔️</Text>
             <Text
               style={[styles.gameResultTitle, styles.gameResultVictoryTitle]}
             >
@@ -290,9 +300,7 @@ export default function GameModals({
       <Modal visible={gameResult !== null} transparent animationType="fade">
         <View style={styles.gameResultOverlay}>
           <View style={styles.gameResultCard}>
-            <Text style={styles.gameResultEmoji}>
-              {gameResult === "victory" ? "🏆" : "💀"}
-            </Text>
+            {gameResult === "defeat" && <SkullIcon size={56} />}
             <Text
               style={[
                 styles.gameResultTitle,

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <use href="#g-ruin" stroke="#2B2118" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></use>
+  <g id="g-ruin">
+  <polygon points="16,56 16,26 21,29 21,19 27,23 30,14 33,17 33,56" fill="#B5AC9C"></polygon>
+  <polygon points="33,56 33,36 39,32 41,40 48,37 48,56" fill="#9C937F"></polygon>
+  <rect x="21" y="34" width="6" height="9" rx="2.5" fill="#2B2118"></rect>
+  <rect x="36" y="48" width="7" height="6" rx="1.5" fill="#877E6F"></rect>
+  <circle cx="49" cy="53.5" r="3.5" fill="#877E6F"></circle>
+  <circle cx="12" cy="54" r="2.5" fill="#877E6F"></circle>
+  </g>
+</svg>

@@ -4,6 +4,7 @@ import Animated from "react-native-reanimated";
 import type { EntityType } from "@/types";
 import styles from "@/app/gameStyles";
 import type { EconBreakdown } from "@/components/GameModals";
+import { CoinIcon } from "@/components/UnitIcon";
 
 interface BottomActionMenuProps {
   botInset: number;
@@ -104,7 +105,7 @@ export default function BottomActionMenu({
             activeOpacity={hasSelection ? 0.75 : 1}
           >
             <View style={styles.goldTopRow}>
-              <Text style={styles.goldIcon}>🪙</Text>
+              <CoinIcon size={16} />
               <Text style={styles.goldAmount}>{goldDisplayValue}</Text>
             </View>
             {hasSelection && econBreakdown !== null ? (
@@ -155,18 +156,6 @@ export default function BottomActionMenu({
                 }}
                 activeOpacity={canBuild ? 0.75 : 1}
               >
-                <Text
-                  style={{
-                    fontSize: 13,
-                    color: isActive
-                      ? "#0D0A06"
-                      : canBuild
-                        ? "#C8A24A"
-                        : "#3A2E14",
-                  }}
-                >
-                  {mode === "units" ? "⚒" : "🏛"}
-                </Text>
                 <Text
                   style={[
                     styles.buildBtnText,

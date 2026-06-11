@@ -3,7 +3,6 @@ import Animated, {
   SharedValue,
   useAnimatedStyle,
 } from "react-native-reanimated";
-import { ENTITY_META } from "@/utils/hexGrid";
 import { useOwnerColors } from "@/contexts/SettingsContext";
 import { UnitToken } from "@/components/UnitToken";
 import type { EntityType, TerritoryOwner } from "@/types";
@@ -26,7 +25,6 @@ export default function AnimatedMovingUnit({
   progress,
 }: AnimatedMovingUnitProps) {
   const { borders: TERRITORY_BORDERS } = useOwnerColors();
-  const meta = ENTITY_META[entityId];
   const r = hexSize * 0.5;
   const animStyle = useAnimatedStyle(() => {
     const p = progress.value;
@@ -37,8 +35,6 @@ export default function AnimatedMovingUnit({
       ],
     };
   });
-  const bgColor =
-    owner === "player" ? "rgba(30,50,120,0.9)" : "rgba(80,20,20,0.9)";
   const borderColor = TERRITORY_BORDERS[owner] ?? TERRITORY_BORDERS["player"];
   return (
     <Animated.View
@@ -49,11 +45,10 @@ export default function AnimatedMovingUnit({
     >
       <UnitToken
         r={r}
-        icon={meta.icon}
-        bgColor={bgColor}
+        entityId={entityId}
         borderColor={borderColor}
-        borderWidth={2.2}
-        opacity={0.9}
+        borderWidth={3.0}
+        opacity={1.0}
       />
     </Animated.View>
   );

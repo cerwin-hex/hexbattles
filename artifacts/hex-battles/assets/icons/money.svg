@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <use href="#g-money" stroke="#2B2118" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></use>
+  <g id="g-money">
+  <circle cx="39" cy="24" r="13.5" fill="#C49232"></circle>
+  <circle cx="39" cy="24" r="8.5" fill="none" stroke="#9C742C" stroke-width="2.5"></circle>
+  <circle cx="25" cy="39" r="14.5" fill="#D6A23E" stroke="#2B2118" stroke-width="1.5"></circle>
+  <circle cx="25" cy="39" r="9.5" fill="none" stroke="#B8893A" stroke-width="2.5"></circle>
+  </g>
+</svg>

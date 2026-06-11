@@ -25,6 +25,7 @@ import {
   isHydrated,
 } from '@/utils/savedGame';
 import { INFO_TABLE_ROWS } from '@/constants/gameConstants';
+import { UnitIcon } from '@/components/UnitIcon';
 
 const TILE_MIN = 40;
 const TILE_MAX = 200;
@@ -67,7 +68,7 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
                 Units and buildings have a strength value from 1 to 3. A unit can only move onto a tile if its strength is higher than that of the enemy. Move a unit onto an enemy tile to capture it.
               </Text>
               <Text style={[styles.ruleBody, { marginTop: 8 }]}>
-                Cavalry — the Scout (🐎) and Knight (⚜️) — move up to 5 tiles and take two open tiles per turn, or strike a unit/rebel once and then ride on to one more open tile before stopping. They never assault towers or castles, and cannot be merged.
+                Cavalry — the Scout and Knight — move up to 5 tiles and take two open tiles per turn, or strike a unit/rebel once and then ride on to one more open tile before stopping. They never assault towers or castles, and cannot be merged.
               </Text>
             </View>
 
@@ -85,7 +86,9 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
                 </View>
                 {UNIT_ROWS.map((row, i) => (
                   <View key={row.name} style={[styles.tableRow, i % 2 === 1 && styles.tableRowAlt]}>
-                    <Text style={[styles.tableCell, styles.tableCellIcon]}>{row.icon}</Text>
+                    <View style={[styles.tableCell, styles.tableCellIcon, styles.tableCellIconBox]}>
+                      <UnitIcon entityId={row.id} size={22} />
+                    </View>
                     <Text style={[styles.tableCell, styles.tableCellName, styles.tableBodyText]}>{row.name}</Text>
                     <Text style={[styles.tableCell, styles.tableCellNum, styles.tableBodyText]}>{row.cost}</Text>
                     <Text style={[styles.tableCell, styles.tableCellNum, styles.tableBodyText]}>{row.upkeep}</Text>
@@ -103,7 +106,7 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
               <Text style={styles.ruleSectionTitle}>Bridges</Text>
               <View style={styles.ruleDivider} />
               <Text style={styles.ruleBody}>
-                Build a Bridge (➖) on any lake tile adjacent to your territory for 🪙5 (1 upkeep per turn). Bridges become part of your territory and allow units to cross the water. Enemies can capture or destroy your bridges, cutting off connections.
+                Build a Bridge on any lake tile adjacent to your territory for 5 gold (1 upkeep per turn). Bridges become part of your territory and allow units to cross the water. Enemies can capture or destroy your bridges, cutting off connections.
               </Text>
             </View>
 
@@ -111,7 +114,7 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
               <Text style={styles.ruleSectionTitle}>Rebels</Text>
               <View style={styles.ruleDivider} />
               <Text style={styles.ruleBody}>
-                Rebels (✊) are a hostile neutral force. They spawn randomly and on tiles where units have fallen in battle and can spread to adjacent empty tiles.
+                Rebels are a hostile neutral force. They spawn randomly and on tiles where units have fallen in battle and can spread to adjacent empty tiles.
               </Text>
             </View>
 
@@ -699,6 +702,10 @@ const styles = StyleSheet.create({
     width: 30,
     fontSize: 16,
     textAlign: 'center',
+  },
+  tableCellIconBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tableCellName: {
     flex: 1,

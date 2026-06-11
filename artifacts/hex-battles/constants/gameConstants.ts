@@ -40,7 +40,7 @@ export const BUILDING_PURCHASABLES = PURCHASABLES.filter((p) => !p.isUnit);
  * Derived from ENTITY_META so any new entity appears automatically.
  */
 export const INFO_TABLE_ROWS = PURCHASABLES.map((p) => ({
-  icon: p.icon,
+  id: p.id,
   name: p.name,
   cost: p.cost,
   upkeep: p.upkeep,

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <use href="#g-scout" stroke="#2B2118" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></use>
+  <g id="g-scout">
+  <path d="M32 6 Q52 6 52 30 Q52 44 45 54 L36 50 Q43 42 43 30 Q43 15 32 15 Q21 15 21 30 Q21 42 28 50 L19 54 Q12 44 12 30 Q12 6 32 6 Z" fill="#C7CDD4"></path>
+  <path d="M32 6 Q52 6 52 30 Q52 44 45 54 L40.5 52 Q47 42 47 28 Q46 10 32 10 Z" fill="#AEB6BE"></path>
+  <g fill="#2B2118">
+  <circle cx="18" cy="22" r="2.2"></circle>
+  <circle cx="46" cy="22" r="2.2"></circle>
+  <circle cx="16.5" cy="34" r="2.2"></circle>
+  <circle cx="47.5" cy="34" r="2.2"></circle>
+  <circle cx="21.5" cy="46" r="2.2"></circle>
+  <circle cx="42.5" cy="46" r="2.2"></circle>
+  </g>
+  </g>
+</svg>
