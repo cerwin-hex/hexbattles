@@ -14,7 +14,6 @@ export interface HexTile {
 
 export interface EntityMeta {
   name: string;
-  icon: string;
   cost: number;
   upkeep: number;
   isUnit: boolean;

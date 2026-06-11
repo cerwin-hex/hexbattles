@@ -1,5 +1,6 @@
 import React from "react";
-import { G, Text as SvgText } from "react-native-svg";
+import { StyleSheet, View } from "react-native";
+import { RuinIcon, SkullIcon } from "@/components/UnitIcon";
 import type { EntityType } from "@/types";
 
 export interface GraveyardLayerProps {
@@ -10,6 +11,11 @@ export interface GraveyardLayerProps {
   HEX_SIZE: number;
 }
 
+/**
+ * Battlefield graves (skulls) and razed buildings (ruins) render as absolutely
+ * positioned icon overlays — the same RN-View overlay pattern as the unit and
+ * city layers — replacing the former skull / ruin emoji glyphs drawn as SVG text.
+ */
 function GraveyardLayerInner({
   graveyard,
   ruins,
@@ -17,25 +23,26 @@ function GraveyardLayerInner({
   tileDataMap,
   HEX_SIZE,
 }: GraveyardLayerProps) {
-  const fs = HEX_SIZE * 0.7;
+  const size = HEX_SIZE * 0.9;
   return (
-    <G>
+    <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
       {graveyard.size > 0 &&
         Array.from(graveyard).map((key) => {
           const pos = tileDataMap.get(key);
           if (!pos) return null;
           if (entities.has(key)) return null;
           return (
-            <SvgText
+            <View
               key={`grave-${key}`}
-              x={pos.cx}
-              y={pos.cy + fs * 0.38}
-              textAnchor="middle"
-              fontSize={fs}
-              opacity={0.85}
+              style={{
+                position: "absolute",
+                left: pos.cx - size / 2,
+                top: pos.cy - size / 2,
+                opacity: 0.85,
+              }}
             >
-              ☠️
-            </SvgText>
+              <SkullIcon size={size} />
+            </View>
           );
         })}
       {ruins.size > 0 &&
@@ -44,19 +51,20 @@ function GraveyardLayerInner({
           if (!pos) return null;
           if (entities.has(key)) return null;
           return (
-            <SvgText
+            <View
               key={`ruin-${key}`}
-              x={pos.cx}
-              y={pos.cy + fs * 0.38}
-              textAnchor="middle"
-              fontSize={fs}
-              opacity={0.85}
+              style={{
+                position: "absolute",
+                left: pos.cx - size / 2,
+                top: pos.cy - size / 2,
+                opacity: 0.85,
+              }}
             >
-              🏚️
-            </SvgText>
+              <RuinIcon size={size} />
+            </View>
           );
         })}
-    </G>
+    </View>
   );
 }
 

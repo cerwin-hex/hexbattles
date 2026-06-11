@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <use href="#g-swordsman" stroke="#2B2118" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></use>
+  <g id="g-swordsman">
+  <g transform="rotate(-45 32 32)">
+  <path d="M32 1 L36.5 9 V40 H27.5 V9 Z" fill="#9AA3AD"></path>
+  <rect x="21" y="39" width="22" height="5" rx="2.5" fill="#B8893A"></rect>
+  <rect x="29" y="44" width="6" height="10" fill="#5C3A1E"></rect>
+  <circle cx="32" cy="57.5" r="4" fill="#B8893A"></circle>
+  </g>
+  <g transform="rotate(45 32 32)">
+  <path d="M32 1 L36.5 9 V40 H27.5 V9 Z" fill="#C7CDD4"></path>
+  <rect x="21" y="39" width="22" height="5" rx="2.5" fill="#D6A23E"></rect>
+  <rect x="29" y="44" width="6" height="10" fill="#7A4A28"></rect>
+  <circle cx="32" cy="57.5" r="4" fill="#D6A23E"></circle>
+  </g>
+  </g>
+</svg>

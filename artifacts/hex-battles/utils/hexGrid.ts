@@ -17,18 +17,18 @@ export type {
 };
 
 export const ENTITY_META: Record<EntityType, EntityMeta> = {
-  peasant:       { name: 'Peasant',   icon: '⚒️',  cost: 10, upkeep: 3,  isUnit: true,  strength: 1 },
-  warrior:       { name: 'Warrior',   icon: '🗡️',  cost: 20, upkeep: 9,  isUnit: true,  strength: 2 },
-  swordsman:     { name: 'Swordsman', icon: '⚔️',  cost: 30, upkeep: 27, isUnit: true,  strength: 3 },
-  scout:         { name: 'Scout',     icon: '🐎',  cost: 15, upkeep: 6,  isUnit: true,  strength: 1, movement: 5, maxAttacks: 2 },
-  knight:        { name: 'Knight',    icon: '⚜️',  cost: 25, upkeep: 18, isUnit: true,  strength: 2, movement: 5, maxAttacks: 2 },
+  peasant:       { name: 'Peasant',   cost: 10, upkeep: 3,  isUnit: true,  strength: 1 },
+  warrior:       { name: 'Warrior',   cost: 20, upkeep: 9,  isUnit: true,  strength: 2 },
+  swordsman:     { name: 'Swordsman', cost: 30, upkeep: 27, isUnit: true,  strength: 3 },
+  scout:         { name: 'Scout',     cost: 15, upkeep: 6,  isUnit: true,  strength: 1, movement: 5, maxAttacks: 2 },
+  knight:        { name: 'Knight',    cost: 25, upkeep: 18, isUnit: true,  strength: 2, movement: 5, maxAttacks: 2 },
   // NOTE: tower/castle upkeep here is the per-building BASE rate only.
   // Actual territory upkeep is LINEAR (n-th building costs n×base); use calcDefenseUpkeep/nextDefenseUpkeep.
-  tower:         { name: 'Tower',     icon: '🛕',  cost: 15, upkeep: 1,  isUnit: false, strength: 1 },
-  castle:        { name: 'Castle',    icon: '🏰',  cost: 30, upkeep: 5,  isUnit: false, strength: 2 },
-  bridge:        { name: 'Bridge',    icon: '➖',   cost: 5,  upkeep: 1,  isUnit: false, strength: 0 },
-  rebel:         { name: 'Rebel',     icon: '✊',   cost: 0,  upkeep: 0,  isUnit: false, strength: 0 },
-  city:          { name: 'City',      icon: '🏘️',  cost: 10, upkeep: 0,  isUnit: false, strength: 0 },
+  tower:         { name: 'Tower',     cost: 15, upkeep: 1,  isUnit: false, strength: 1 },
+  castle:        { name: 'Castle',    cost: 30, upkeep: 5,  isUnit: false, strength: 2 },
+  bridge:        { name: 'Bridge',    cost: 5,  upkeep: 1,  isUnit: false, strength: 0 },
+  rebel:         { name: 'Rebel',     cost: 0,  upkeep: 0,  isUnit: false, strength: 0 },
+  city:          { name: 'City',      cost: 10, upkeep: 0,  isUnit: false, strength: 0 },
 };
 
 /** Default movement budget for units without an explicit `movement` in ENTITY_META. */

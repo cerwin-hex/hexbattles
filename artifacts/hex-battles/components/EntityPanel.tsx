@@ -116,7 +116,7 @@ export default function EntityPanel({
             { color: removeEnabled ? "#F07060" : "#7A3020" },
           ]}
         >
-          ✕ Remove{removeCost > 0 ? ` (🪙${removeCost})` : ""}
+          ✕ Remove{removeCost > 0 ? ` (${removeCost})` : ""}
         </Text>
       </TouchableOpacity>
       <TouchableOpacity
@@ -144,7 +144,7 @@ export default function EntityPanel({
             !upgradeEnabled && styles.buildBtnTextDisabled,
           ]}
         >
-          ⬆ Upgrade {canUpgrade ? `(🪙${upgradeCost})` : "(Max)"}
+          ⬆ Upgrade {canUpgrade ? `(${upgradeCost})` : "(Max)"}
         </Text>
       </TouchableOpacity>
     </View>

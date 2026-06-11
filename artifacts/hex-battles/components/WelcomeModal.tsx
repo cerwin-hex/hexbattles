@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { INFO_TABLE_ROWS } from '@/constants/gameConstants';
+import { UnitIcon } from '@/components/UnitIcon';
 
 const STORAGE_KEY = 'hex_battles_welcome_seen';
 
@@ -98,7 +99,7 @@ export function WelcomeModal() {
                 {' '}than whatever defends it. Merge two units of equal strength on the same tile to create a stronger one.
               </Text>
               <Text style={[styles.body, { marginTop: 8 }]}>
-                Cavalry — the Scout (🐎) and Knight (⚜️) — move up to 5 tiles and take{' '}
+                Cavalry — the Scout and Knight — move up to 5 tiles and take{' '}
                 <Text style={styles.highlight}>two open tiles per turn</Text>, or strike a unit/rebel{' '}
                 <Text style={styles.highlight}>once</Text> and then ride on to one more open tile before stopping. They never assault towers or castles, and cannot merge.
               </Text>
@@ -109,10 +110,10 @@ export function WelcomeModal() {
                 You earn gold at the start of each turn from every tile you own. Units and buildings cost upkeep — if you run out of gold, your weakest units are disbanded automatically. Keep expanding to fund your army.
               </Text>
               <View style={styles.incomeBox}>
-                <Text style={styles.incomeRow}>🟩 Grass / 🌲 Forest  →  <Text style={styles.gold}>🪙2</Text> per turn</Text>
-                <Text style={styles.incomeRow}>🏜️ Desert  →  <Text style={styles.gold}>🪙1</Text> per turn</Text>
-                <Text style={styles.incomeRow}>🏙️ City  →  <Text style={styles.gold}>+🪙2 bonus</Text> on top of terrain</Text>
-                <Text style={styles.incomeRow}>⛰️ Mountain / 💧 Lake  →  <Text style={styles.dimGold}>🪙0</Text></Text>
+                <Text style={styles.incomeRow}>Grass / Forest  →  <Text style={styles.gold}>2 gold</Text> per turn</Text>
+                <Text style={styles.incomeRow}>Desert  →  <Text style={styles.gold}>1 gold</Text> per turn</Text>
+                <Text style={styles.incomeRow}>City  →  <Text style={styles.gold}>+2 gold bonus</Text> on top of terrain</Text>
+                <Text style={styles.incomeRow}>Mountain / Lake  →  <Text style={styles.dimGold}>0 gold</Text></Text>
               </View>
             </Section>
 
@@ -121,13 +122,15 @@ export function WelcomeModal() {
                 <View style={[styles.tableRow, styles.tableHeaderRow]}>
                   <Text style={[styles.tableCell, styles.tableCellIcon, styles.tableHeaderText]}> </Text>
                   <Text style={[styles.tableCell, styles.tableCellName, styles.tableHeaderText]}>Name</Text>
-                  <Text style={[styles.tableCell, styles.tableCellNum, styles.tableHeaderText]}>🪙 Cost</Text>
-                  <Text style={[styles.tableCell, styles.tableCellNum, styles.tableHeaderText]}>🪙 Upkeep</Text>
+                  <Text style={[styles.tableCell, styles.tableCellNum, styles.tableHeaderText]}>Cost</Text>
+                  <Text style={[styles.tableCell, styles.tableCellNum, styles.tableHeaderText]}>Upkeep</Text>
                   <Text style={[styles.tableCell, styles.tableCellNum, styles.tableHeaderText]}>Str</Text>
                 </View>
                 {UNIT_ROWS.map((row, i) => (
                   <View key={row.name} style={[styles.tableRow, i % 2 === 1 && styles.tableRowAlt]}>
-                    <Text style={[styles.tableCell, styles.tableCellIcon]}>{row.icon}</Text>
+                    <View style={[styles.tableCell, styles.tableCellIcon, styles.tableCellIconBox]}>
+                      <UnitIcon entityId={row.id} size={22} />
+                    </View>
                     <Text style={[styles.tableCell, styles.tableCellName, styles.tableBodyText]}>{row.name}</Text>
                     <Text style={[styles.tableCell, styles.tableCellNum, styles.tableBodyText]}>{row.cost}</Text>
                     <Text style={[styles.tableCell, styles.tableCellNum, styles.tableBodyText]}>{row.upkeep}</Text>
@@ -143,7 +146,7 @@ export function WelcomeModal() {
                 { name: 'Forest', desc: 'Same income as grass, but costs 2 movement to enter' },
                 { name: 'Desert', desc: 'Lower income' },
                 { name: 'Mountain', desc: 'Impassable' },
-                { name: 'Lake', desc: 'Impassable — build a Bridge (➖) to cross' },
+                { name: 'Lake', desc: 'Impassable — build a Bridge to cross' },
               ].map(t => (
                 <View key={t.name} style={styles.terrainRow}>
                   <Text style={styles.terrainName}>{t.name}</Text>
@@ -152,7 +155,7 @@ export function WelcomeModal() {
               ))}
             </Section>
 
-            <Section title="Rebels ✊">
+            <Section title="Rebels">
               <Text style={styles.body}>
                 Rebels are a hostile neutral force. They spawn on battlefield graves and can spread to adjacent empty tiles. Don't ignore them — a neglected rear can collapse your economy.
               </Text>
@@ -383,6 +386,10 @@ const styles = StyleSheet.create({
     width: 30,
     fontSize: 16,
     textAlign: 'center',
+  },
+  tableCellIconBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tableCellName: {
     flex: 1,

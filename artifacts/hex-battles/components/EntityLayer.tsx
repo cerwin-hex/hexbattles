@@ -58,16 +58,9 @@ function EntityLayerInner({
         // Idle (non-spent, non-selected) player units bounce in IdleUnitLayer.
         const isIdleBouncing = isPlayerUnit && !isSpent && !isSelected;
         if (isIdleBouncing) return null;
-        // Background alpha is uniform (0.9) across every status; only the hue
-        // changes (red rebel / green selected / blue unit / brown building) so
-        // tokens don't drift in apparent opacity from one state to the next.
-        const bgColor = isRebel
-          ? "rgba(140,20,20,0.9)"
-          : isSelected
-            ? "rgba(20,80,20,1)" // selected unit is fully opaque
-            : meta.isUnit
-              ? "rgba(30,50,120,0.9)"
-              : "rgba(80,40,10,0.9)";
+        // No background fill — tokens are a bare icon inside a coloured ring,
+        // so the ring's hue is the only owner/state cue (gold rebel / green
+        // selected / owner colour otherwise).
         const ownerColor =
           TERRITORY_BORDERS[liveTile?.owner ?? ""] ?? "#FFD700";
         const borderColor = isRebel
@@ -75,18 +68,12 @@ function EntityLayerInner({
           : isSelected
             ? "#50FF50"
             : ownerColor;
-        // Selection ring is only slightly heavier than a normal token (was 4.0,
-        // which read as too thick); the green colour carries the cue.
-        const borderWidth = isRebel ? 3.0 : isSelected ? 2.6 : 2.2;
-        // Per-state unit opacity: selected 100%, spent (player) 60%, any other
-        // unit 90%. Non-units (buildings, rebels) stay fully opaque.
-        const opacity = !meta.isUnit
-          ? 1.0
-          : isSelected
-            ? 1.0
-            : isSpent && isPlayerUnit
-              ? 0.6
-              : 0.9;
+        // Uniform ring weight so player units match the rebel ring; the green
+        // colour carries the selection cue.
+        const borderWidth = 3.0;
+        // Per-state opacity: only a spent player unit dims (to 80%); idle and
+        // selected units, rebels and buildings are all fully opaque.
+        const opacity = isPlayerUnit && isSpent && !isSelected ? 0.8 : 1.0;
         return (
           <View
             key={`entity-${key}`}
@@ -94,11 +81,10 @@ function EntityLayerInner({
           >
             <UnitToken
               r={r}
-              icon={meta.icon}
-              bgColor={bgColor}
+              entityId={entityId}
               borderColor={borderColor}
               borderWidth={borderWidth}
-              square={isBuilding}
+              isBuilding={isBuilding}
               opacity={opacity}
             />
           </View>

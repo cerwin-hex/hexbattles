@@ -1146,14 +1146,6 @@ export default function GameScreen() {
                 selectionEdges={selectionBorderEdges}
               />
 
-              <GraveyardLayer
-                graveyard={graveyard}
-                ruins={ruins}
-                entities={entities}
-                tileDataMap={tileDataMap}
-                HEX_SIZE={HEX_SIZE}
-              />
-
               <MovementHighlightTapTargets
                 validMoveTiles={validMoveTiles}
                 validBridgePlacementTiles={validBridgePlacementTiles}
@@ -1179,6 +1171,14 @@ export default function GameScreen() {
               activeTileMap={activeTileMap}
               tileDataMap={tileDataMap}
               selectedEntityKey={selectedEntityKey}
+              HEX_SIZE={HEX_SIZE}
+            />
+
+            <GraveyardLayer
+              graveyard={graveyard}
+              ruins={ruins}
+              entities={entities}
+              tileDataMap={tileDataMap}
               HEX_SIZE={HEX_SIZE}
             />
 

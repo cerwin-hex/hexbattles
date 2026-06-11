@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <use href="#g-peasant" stroke="#2B2118" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></use>
+  <g id="g-peasant">
+  <g transform="rotate(28 32 32)">
+  <g transform="scale(-1 1) translate(-64 0)">
+  <polygon points="31,8 36,9 29,58 24,57" fill="#7A4A28"></polygon>
+  <path d="M33 7 Q60 11 63 38 Q47 16 32 15 Z" fill="#C7CDD4"></path>
+  <rect x="29" y="10" width="8" height="5" rx="2" fill="#D6A23E" transform="rotate(8 33 12.5)"></rect>
+  </g>
+  </g>
+  </g>
+</svg>

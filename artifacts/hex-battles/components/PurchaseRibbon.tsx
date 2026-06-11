@@ -10,6 +10,7 @@ import {
   BOTTOM_BAR_H,
 } from "@/constants/gameConstants";
 import styles from "@/app/gameStyles";
+import { UnitIcon } from "@/components/UnitIcon";
 
 interface PurchaseRibbonProps {
   ribbonStyle: StyleProp<ViewStyle>;
@@ -95,7 +96,7 @@ export default function PurchaseRibbon({
                 ? "<6 tiles"
                 : playerTowerFree
                   ? "FREE"
-                  : `🪙${item.cost}`;
+                  : `${item.cost}`;
           const nextUpkeepLabel = (() => {
             if (isTower) {
               const cost = nextDefenseUpkeep("tower", selectedTerritoryDefenseCounts.tower);
@@ -128,7 +129,7 @@ export default function PurchaseRibbon({
                 setArmedEntityId(isArmed ? null : (item.id as EntityType));
               }}
             >
-              <Text style={styles.ribbonIcon}>{item.icon}</Text>
+              <UnitIcon entityId={item.id as EntityType} size={28} />
               <Text
                 style={[
                   styles.ribbonName,

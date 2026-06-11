@@ -120,11 +120,10 @@ export function IdleUnitLayer({
           >
             <UnitToken
               r={r}
-              icon={meta.icon}
-              bgColor="rgba(30,50,120,0.9)"
+              entityId={entityId}
               borderColor={TERRITORY_BORDERS["player"]}
-              borderWidth={2.2}
-              opacity={0.9}
+              borderWidth={3.0}
+              opacity={1.0}
             />
           </Animated.View>
         );

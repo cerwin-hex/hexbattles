@@ -78,9 +78,6 @@ const styles = StyleSheet.create({
     borderColor: "#FFD700",
     backgroundColor: "#2A2008",
   },
-  ribbonIcon: {
-    fontSize: 22,
-  },
   ribbonName: {
     fontSize: 10,
     fontFamily: "Cinzel_400Regular",
@@ -482,6 +479,12 @@ const styles = StyleSheet.create({
     color: "#C8A870",
     flex: 1,
   },
+  econLabelRow: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
   econPer: {
     fontSize: 11,
     fontFamily: "Inter_400Regular",
@@ -609,9 +612,6 @@ const styles = StyleSheet.create({
     padding: 36,
     alignItems: "center",
     gap: 16,
-  },
-  gameResultEmoji: {
-    fontSize: 56,
   },
   gameResultTitle: {
     fontSize: 28,

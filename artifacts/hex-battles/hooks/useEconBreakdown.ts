@@ -19,7 +19,7 @@ export interface EconBreakdownResult {
   desertIncome: number;
   cityIncome: number;
   upkeepGroups: Array<{
-    icon: string;
+    id: EntityType;
     name: string;
     count: number;
     category: "infantry" | "cavalry" | "buildings";
@@ -87,7 +87,7 @@ export function useEconBreakdown({
           ? "cavalry"
           : "infantry";
       return {
-        icon: meta.icon,
+        id: type,
         name: meta.name,
         count,
         category,

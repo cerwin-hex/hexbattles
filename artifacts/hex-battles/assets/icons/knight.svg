@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <use href="#g-knight" stroke="#2B2118" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></use>
+  <g id="g-knight">
+  <path d="M17 30 Q17 8 32 8 Q47 8 47 30 V55 H17 Z" fill="#C7CDD4"></path>
+  <path d="M32 8 Q47 8 47 30 V55 H32 Z" fill="#AEB6BE"></path>
+  <rect x="17" y="27" width="30" height="5.5" fill="#2B2118"></rect>
+  <rect x="29.25" y="32.5" width="5.5" height="14" fill="#2B2118"></rect>
+  <rect x="17" y="50" width="30" height="5" fill="#D6A23E"></rect>
+  </g>
+</svg>

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <use href="#g-rebel" stroke="#2B2118" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></use>
+  <g id="g-rebel">
+  <g transform="rotate(-35 32 32)">
+  <rect x="30" y="20" width="4.5" height="38" rx="2" fill="#6B4423"></rect>
+  <g fill="#9AA3AD">
+  <rect x="21" y="7" width="4.5" height="14" rx="2.25"></rect>
+  <rect x="30" y="7" width="4.5" height="14" rx="2.25"></rect>
+  <rect x="39" y="7" width="4.5" height="14" rx="2.25"></rect>
+  </g>
+  <rect x="21" y="18.5" width="22.5" height="4.5" rx="2" fill="#877E6F"></rect>
+  </g>
+  <g transform="rotate(35 32 32)">
+  <rect x="29.75" y="17" width="4.5" height="41" rx="2" fill="#7A4A28"></rect>
+  <rect x="27" y="14.5" width="10" height="6" rx="2" fill="#5C3A1E"></rect>
+  <path d="M32 0 Q34.5 3.5 38.5 6.5 Q42.5 11 40.5 15.5 Q38.5 19.5 32 19.5 Q25.5 19.5 23.5 15.5 Q21.5 11 25.5 6.5 Q29.5 3.5 32 0 Z" fill="#D98E32"></path>
+  <path d="M32 7.5 Q36 11 35.3 14.5 Q34.6 17 32 17 Q29.4 17 28.7 14.5 Q28 11 32 7.5 Z" fill="#E5C05A"></path>
+  </g>
+  </g>
+</svg>
