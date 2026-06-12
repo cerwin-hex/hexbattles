@@ -8,12 +8,14 @@ export interface UnitTokenProps {
   r: number;
   /** Entity whose SVG icon is rendered (from UNIT_ICON_SVG). */
   entityId: EntityType;
+  /** Owner/state colour — fills the whole unit disc. */
   borderColor: string;
-  borderWidth: number;
+  /** Unused for the filled-disc style; kept for caller API compatibility. */
+  borderWidth?: number;
   /**
-   * Buildings render as the bare icon with no ring; units (and the rebel
-   * marker) get the coloured ring drawn here. Backgrounds are always
-   * transparent — only the ring distinguishes a unit's owner/state.
+   * Buildings render as the bare icon with no disc; units (and the rebel
+   * marker) get a solid player-coloured disc, with the icon sized large so it
+   * reaches toward the outline.
    */
   isBuilding?: boolean;
   opacity?: number;
@@ -34,10 +36,10 @@ export interface UnitTokenProps {
  * units stay inside the circle. Tweak these two constants to resize every
  * unit/building icon at once.
  */
-const UNIT_ICON_SCALE = 1.3;
+const UNIT_ICON_SCALE = 1.75;
 const BUILDING_ICON_SCALE = 1.95;
 
-/** Thin dark outline drawn around a unit's coloured ring (matches the icon ink). */
+/** Thin dark outline drawn around the player-coloured disc (matches the icon ink). */
 const RING_OUTLINE_WIDTH = 0.75;
 const RING_OUTLINE_COLOR = "#2B2118";
 
@@ -45,7 +47,6 @@ function UnitTokenInner({
   r,
   entityId,
   borderColor,
-  borderWidth,
   isBuilding = false,
   opacity = 1,
 }: UnitTokenProps) {
@@ -69,10 +70,10 @@ function UnitTokenInner({
     );
   }
 
-  // Units/rebels: a coloured ring wrapped in a thin dark outline. The outer
-  // view supplies the black outline; the inner view supplies the owner/state
-  // ring and clips the icon so rotated art (swords, banners) can't spill past.
-  const innerSize = r * 2 - RING_OUTLINE_WIDTH * 2;
+  // Units/rebels: a solid player-coloured disc wrapped in a thin dark outline.
+  // The whole circle carries the owner colour (no inner ring); the icon is sized
+  // large so it reaches out toward the outline. overflow:hidden clips rotated art
+  // (swords, banners) so it can't spill past the disc edge.
   return (
     <View
       style={{
@@ -81,26 +82,14 @@ function UnitTokenInner({
         borderRadius: r,
         borderWidth: RING_OUTLINE_WIDTH,
         borderColor: RING_OUTLINE_COLOR,
+        backgroundColor: borderColor,
         alignItems: "center",
         justifyContent: "center",
         overflow: "hidden",
         opacity,
       }}
     >
-      <View
-        style={{
-          width: innerSize,
-          height: innerSize,
-          borderRadius: innerSize / 2,
-          borderWidth,
-          borderColor,
-          alignItems: "center",
-          justifyContent: "center",
-          overflow: "hidden",
-        }}
-      >
-        <UnitIcon entityId={entityId} size={iconSize} />
-      </View>
+      <UnitIcon entityId={entityId} size={iconSize} />
     </View>
   );
 }
