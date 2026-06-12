@@ -4,8 +4,6 @@ const unstable_batchedUpdates = (fn: () => void) => fn();
 import type { EntityType, HexTile, TerritoryOwner } from "@/types";
 import {
   ENTITY_META,
-  TERRAIN_INCOME,
-  CITY_BONUS,
   getContiguousTerritory,
   getTerritoryId,
   getMoveCost,
@@ -20,33 +18,21 @@ import {
   advanceAttacksUsed,
   advanceCombatSpent,
   applySingleHexPenalty,
-  calcTerritoryUpkeep,
   isChargeAttack,
   mergedUnitType,
   resolveMovedUnitMoves,
 } from "@/logic/gameLogic";
 
 /**
- * Checks whether the player can afford an action costing `cost` gold with
- * `newUpkeep` ongoing upkeep. Both conditions must hold:
- *   1. balance >= cost
- *   2. balance + (income − (currentUpkeep + newUpkeep)) >= 0
+ * Checks whether the player can afford an action costing `cost` gold.
+ * A purchase is allowed whenever the territory has at least `cost` in reserve.
+ * We intentionally do NOT pre-block buys the territory can't sustain: if the
+ * resulting upkeep outstrips income, the territory simply goes bankrupt at the
+ * next end-of-turn (handled in endTurnHandler). "I have 30, let me build the
+ * 30-cost unit" must always work.
  */
-function playerCanAfford(
-  balance: number,
-  cost: number,
-  territory: HexTile[],
-  ents: Map<string, EntityType>,
-  newUpkeep: number,
-  cities: Set<string>,
-): boolean {
-  if (balance < cost) return false;
-  const income = territory.reduce((s, t) => {
-    if (ents.get(t.key) === "rebel") return s;
-    return s + (TERRAIN_INCOME[t.terrain] ?? 0) + (cities.has(t.key) ? CITY_BONUS : 0);
-  }, 0);
-  const upkeep = calcTerritoryUpkeep(territory, ents);
-  return balance + (income - (upkeep + newUpkeep)) >= 0;
+function playerCanAfford(balance: number, cost: number): boolean {
+  return balance >= cost;
 }
 
 export interface TileTapParams {
@@ -326,9 +312,8 @@ export function handleTileTapLogic(params: TileTapParams): void {
   if (armedEntityId === "bridge" && validBridgePlacementTiles.has(key)) {
     if (!selectedTerritoryId) return;
     const bridgeCost = ENTITY_META["bridge"].cost;
-    const bridgeUpkeep = ENTITY_META["bridge"].upkeep;
     const balance = territoryBalances.get(selectedTerritoryId) ?? 0;
-    if (!playerCanAfford(balance, bridgeCost, selectedTerritory, entities, bridgeUpkeep, cities)) {
+    if (!playerCanAfford(balance, bridgeCost)) {
       triggerErrorFlash(key);
       return;
     }
@@ -431,7 +416,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
       const effectiveCost = towerIsFree ? 0 : meta.cost;
       const effectiveNewUpkeep = towerIsFree ? 0 : meta.upkeep;
       if (
-        playerCanAfford(balance, effectiveCost, selectedTerritory, entities, effectiveNewUpkeep, cities) &&
+        playerCanAfford(balance, effectiveCost) &&
         !blockedByGraveyard
       ) {
         pushHistory();
@@ -520,7 +505,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
     if (!selectedTerritoryId) return;
     const meta = ENTITY_META[armedEntityId];
     const balance = territoryBalances.get(selectedTerritoryId) ?? 0;
-    if (playerCanAfford(balance, meta.cost, selectedTerritory, entities, meta.upkeep, cities)) {
+    if (playerCanAfford(balance, meta.cost)) {
       pushHistory();
       const previousOwner = (activeTileMap.get(key)?.owner ??
         "neutral") as TerritoryOwner;
