@@ -80,7 +80,14 @@ export interface TileTapParams {
   checkWinLoss: (map: Map<string, HexTile>) => void;
   pushHistory: () => void;
   triggerErrorFlash: (key: string) => void;
-  triggerUnitAnimation: (from: string, to: string, entity: EntityType) => void;
+  triggerUnitAnimation: (
+    from: string,
+    to: string,
+    entity: EntityType,
+    owner?: TerritoryOwner,
+    hideDestination?: boolean,
+    onDone?: () => void,
+  ) => void;
   closeRibbon: () => void;
 }
 
@@ -254,24 +261,16 @@ export function handleTileTapLogic(params: TileTapParams): void {
       locks: isEntityStrike || (isCombatMove && !isCharge),
     });
 
-    // Phase 1: immediate visual feedback
-    unstable_batchedUpdates(() => {
-      setMutableTileMap(new Map(newTileMap));
-      setEntities(new Map(newEntities));
-      setSpentUnits(newSpentUnits);
-      setCombatSpentUnits(newCombatSpentUnits);
-      setPartialMoves(newPartialMoves);
-      setAttacksUsed(newAttacksUsed);
-      setSelectedEntityKey(null);
-      setSelectedTileKey(key);
-      if (ribbonOpen) closeRibbon();
-      if (movingEntityId) {
-        triggerUnitAnimation(fromKeyForAnim, key, movingEntityId);
-      }
-    });
-
-    // Phase 2 (deferred): BFS territory recalculation
-    setTimeout(() => {
+    // The whole board commit — entities, tile ownership, spent/used markers, and
+    // the territory recalculation (a flood-fill plus fresh mutableTileMap/
+    // entities that re-render the entire token/overlay stack) — runs when the
+    // unit *lands* rather than at the tap. That keeps every heavy re-render off
+    // the slide so the move animation stays smooth on the UI thread. While the
+    // unit animates, all state-mutating input is locked, so deferring the commit
+    // can't be clobbered by a second action. Only light, immediate UI feedback
+    // (clearing the selection, closing the ribbon) happens at the tap; the
+    // sliding flying token provides the visual movement in the meantime.
+    const commitMove = () => {
       const { balances: newBalances } = recalculateTerritories(
         key,
         previousOwner as TerritoryOwner,
@@ -297,14 +296,49 @@ export function handleTileTapLogic(params: TileTapParams): void {
       const newLiveOwnerMap = new Map(liveOwnerMap);
       newLiveOwnerMap.set(key, "player");
 
-      setMutableTileMap(new Map(newTileMap));
-      setEntities(new Map(newEntities));
-      setTerritoryBalances(newBalances);
-      setGraveyard(newGraveyard);
-      setRuins(newRuins);
-      setLiveOwnerMap(newLiveOwnerMap);
-      checkWinLoss(newTileMap);
-    }, 0);
+      unstable_batchedUpdates(() => {
+        setMutableTileMap(new Map(newTileMap));
+        // Select the destination tile here — atomically with its ownership flip
+        // above — not at the tap. selectedTerritory is the contiguous *player*
+        // territory at selectedTileKey, so selecting the tile before it's owned
+        // (i.e. during the slide) would compute an empty territory and the
+        // selection highlight would briefly vanish ("deselect") until landing.
+        setSelectedTileKey(key);
+        setEntities(new Map(newEntities));
+        setSpentUnits(newSpentUnits);
+        setCombatSpentUnits(newCombatSpentUnits);
+        setPartialMoves(newPartialMoves);
+        setAttacksUsed(newAttacksUsed);
+        setTerritoryBalances(newBalances);
+        setGraveyard(newGraveyard);
+        setRuins(newRuins);
+        setLiveOwnerMap(newLiveOwnerMap);
+        checkWinLoss(newTileMap);
+      });
+    };
+
+    // Immediate, light UI feedback at the tap; the board commit is deferred to
+    // the slide's end (or runs now if there's no slide to defer behind).
+    unstable_batchedUpdates(() => {
+      // Deselect the unit immediately (stops movement highlights), but leave
+      // selectedTileKey on the source tile for the duration of the slide — the
+      // source territory stays highlighted, and commitMove re-points the
+      // selection to the destination once it's owned.
+      setSelectedEntityKey(null);
+      if (ribbonOpen) closeRibbon();
+      if (movingEntityId) {
+        triggerUnitAnimation(
+          fromKeyForAnim,
+          key,
+          movingEntityId,
+          "player",
+          true,
+          commitMove,
+        );
+      } else {
+        commitMove();
+      }
+    });
     return;
   }
 

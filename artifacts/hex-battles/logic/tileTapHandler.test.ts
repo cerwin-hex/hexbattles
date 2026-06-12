@@ -69,7 +69,12 @@ function makeParams(overrides: Partial<TileTapParams> = {}): TileTapParams {
     checkWinLoss: vi.fn(),
     pushHistory: vi.fn(),
     triggerErrorFlash: vi.fn(),
-    triggerUnitAnimation: vi.fn(),
+    // A real move defers its board commit to the slide's onDone callback; invoke
+    // it synchronously here so the deferred commit runs within the test.
+    triggerUnitAnimation: vi.fn(
+      (_from, _to, _entity, _owner, _hideDestination, onDone?: () => void) =>
+        onDone?.(),
+    ),
     closeRibbon: vi.fn(),
     ...overrides,
   };

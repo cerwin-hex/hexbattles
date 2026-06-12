@@ -388,6 +388,18 @@ export default function GameScreen() {
     owner: TerritoryOwner;
     hideDestination: boolean;
   } | null>(null);
+
+  // Player input (taps, End Turn, Undo) is locked while a player move's slide is
+  // in flight, so the move can defer its heavy board commit to the moment the
+  // unit lands without a second action clobbering that pending commit, and so no
+  // heavy re-render lands on the animation frames. The lock is set/cleared
+  // imperatively in triggerUnitAnimation's player path (below) — deliberately NOT
+  // tied to animatingUnit, which the AI also drives. AI turns already block
+  // player input via isAiTurn, and coupling the lock to animatingUnit could stick
+  // it if an AI slide's completion callback were ever dropped (the AI path has no
+  // backstop timer).
+  const isAnimatingRef = useRef(false);
+
   const triggerErrorFlash = useCallback((key: string) => {
     if (errorTileTimer.current) clearTimeout(errorTileTimer.current);
     setErrorTileKey(key);
@@ -406,19 +418,46 @@ export default function GameScreen() {
       hideDestination = true,
       onDone?: () => void,
     ) => {
+      // The board commit (tile ownership, territory recalc) runs when the unit
+      // lands, so the slide length is also the delay before a captured area
+      // registers as yours. Kept short so that registration feels snappy while
+      // the slide still reads as movement.
+      const DURATION_MS = 180;
       animUnitProgress.value = 0;
       setAnimatingUnit({ fromKey, toKey, entityId, owner, hideDestination });
-      const handleDone = () => {
-        onDone?.();
-        setAnimatingUnit(null);
+      // Only the player-move path passes onDone; lock player input for its slide.
+      // (Cleared in finish(), guaranteed by the backstop timer below.)
+      if (onDone) isAnimatingRef.current = true;
+      // Run the landing commit exactly once — whether it arrives via the
+      // animation's completion callback (precise timing) or the backstop timer
+      // below (guaranteed). onDone holds the move's deferred territory/economy
+      // recalc; if we relied solely on the reanimated callback and it were ever
+      // dropped (slide interrupted, app backgrounded mid-move), that commit —
+      // and the tap-lock release — would be silently lost.
+      let committed = false;
+      const finish = () => {
+        if (committed) return;
+        committed = true;
+        try {
+          onDone?.();
+        } finally {
+          isAnimatingRef.current = false;
+          setAnimatingUnit(null);
+        }
       };
       animUnitProgress.value = withTiming(
         1,
-        { duration: 280, easing: Easing.inOut(Easing.quad) },
-        (finished) => {
-          if (finished) runOnJS(handleDone)();
+        { duration: DURATION_MS, easing: Easing.inOut(Easing.quad) },
+        (done) => {
+          if (done) runOnJS(finish)();
         },
       );
+      // Backstop only for the player-move path (the one that passes onDone and
+      // is serialized by the tap lock). The AI fires animations back-to-back, so
+      // a stray timer there could clear a later animation's state.
+      if (onDone) {
+        setTimeout(finish, DURATION_MS + 80);
+      }
     },
     [animUnitProgress],
   );
@@ -831,6 +870,14 @@ export default function GameScreen() {
     setArmedEntityId,
   });
 
+  // Undo stays enabled right after a move, so it's reachable during the slide.
+  // Block it while a unit animates: the move's commit is deferred to the slide's
+  // end, so undoing mid-slide would be re-applied by that pending landing commit.
+  const handleUndoGated = useCallback(() => {
+    if (isAnimatingRef.current) return;
+    handleUndo();
+  }, [handleUndo]);
+
   const handleDeselect = useCallback(() => {
     setSelectedTileKey(null);
     setArmedEntityId(null);
@@ -925,6 +972,9 @@ export default function GameScreen() {
 
   const handleTileTap = useCallback(
     (key: string) => {
+      // Ignore taps while a unit is animating — moves are serialized so the
+      // deferred territory recalc on landing isn't clobbered by a new move.
+      if (isAnimatingRef.current) return;
       handleTileTapLogic({
         key,
         lastTileTapMs,
@@ -1008,6 +1058,10 @@ export default function GameScreen() {
   );
 
   const handleEndTurn = useCallback(() => {
+    // Block End Turn while a unit is sliding: the move's territory recalc is
+    // deferred to the slide's end, so ending the turn mid-slide would compute
+    // income/upkeep from pre-recalc state.
+    if (isAnimatingRef.current) return;
     handleEndTurnLogic({
       isAiTurn,
       gameResult,
@@ -1325,7 +1379,7 @@ export default function GameScreen() {
         isAiTurn={isAiTurn}
         gameResult={gameResult}
         moveHistory={moveHistory}
-        handleUndo={handleUndo}
+        handleUndo={handleUndoGated}
         showGold={showGold}
         hasSelection={hasSelection}
         setShowEconModal={setShowEconModal}

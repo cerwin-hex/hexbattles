@@ -1,5 +1,5 @@
 import React from "react";
-import { SvgXml } from "react-native-svg";
+import { parse, SvgAst } from "react-native-svg";
 import type { EntityType } from "@/types";
 
 /**
@@ -185,9 +185,28 @@ export const SKULL_ICON_SVG = withOutline(SKULL_BODY);
 /** Razed-building marker — replaces the former ruin emoji. */
 export const RUIN_ICON_SVG = withOutline(RUIN_BODY);
 
-// SvgXml re-parses its xml string on mount; the icon components are memoized so
-// a layer re-render (e.g. when a unit moves) preserves each unchanged icon's
-// parsed SVG subtree instead of reconciling it again.
+// SvgXml runs parse(xml) inside a per-instance useMemo, so it re-parses the
+// whole icon string every time a fresh token mounts — and a unit move mounts two
+// fresh tokens (the flying token at move-start, the landed idle token at
+// move-end), each re-parsing on the JS thread mid-animation. Memoizing the icon
+// components below doesn't help those mounts because the useMemo is brand new.
+//
+// Instead we parse each icon's XML exactly once at module load into the AST that
+// SvgXml would otherwise build per mount, then render it through SvgAst (the same
+// component SvgXml delegates to internally). Width/height are applied per render
+// via `override`, exactly as SvgXml passes them. The AST is immutable React-side,
+// so the single parsed tree is safely shared across every token on the board.
+const UNIT_ICON_AST: Record<EntityType, ReturnType<typeof parse>> =
+  Object.fromEntries(
+    (Object.keys(UNIT_ICON_SVG) as EntityType[]).map((id) => [
+      id,
+      parse(UNIT_ICON_SVG[id]),
+    ]),
+  ) as Record<EntityType, ReturnType<typeof parse>>;
+
+const MONEY_ICON_AST = parse(MONEY_ICON_SVG);
+const SKULL_ICON_AST = parse(SKULL_ICON_SVG);
+const RUIN_ICON_AST = parse(RUIN_ICON_SVG);
 
 /** Renders a unit/building icon at the given pixel size. */
 export const UnitIcon = React.memo(function UnitIcon({
@@ -197,20 +216,22 @@ export const UnitIcon = React.memo(function UnitIcon({
   entityId: EntityType;
   size: number;
 }) {
-  return <SvgXml xml={UNIT_ICON_SVG[entityId]} width={size} height={size} />;
+  return (
+    <SvgAst ast={UNIT_ICON_AST[entityId]} override={{ width: size, height: size }} />
+  );
 });
 
 /** Renders the coin/gold icon at the given pixel size. */
 export const CoinIcon = React.memo(function CoinIcon({ size }: { size: number }) {
-  return <SvgXml xml={MONEY_ICON_SVG} width={size} height={size} />;
+  return <SvgAst ast={MONEY_ICON_AST} override={{ width: size, height: size }} />;
 });
 
 /** Renders the battlefield grave (skull) icon at the given pixel size. */
 export const SkullIcon = React.memo(function SkullIcon({ size }: { size: number }) {
-  return <SvgXml xml={SKULL_ICON_SVG} width={size} height={size} />;
+  return <SvgAst ast={SKULL_ICON_AST} override={{ width: size, height: size }} />;
 });
 
 /** Renders the razed-building (ruin) icon at the given pixel size. */
 export const RuinIcon = React.memo(function RuinIcon({ size }: { size: number }) {
-  return <SvgXml xml={RUIN_ICON_SVG} width={size} height={size} />;
+  return <SvgAst ast={RUIN_ICON_AST} override={{ width: size, height: size }} />;
 });
