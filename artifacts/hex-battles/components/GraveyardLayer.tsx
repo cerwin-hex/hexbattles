@@ -23,7 +23,7 @@ function GraveyardLayerInner({
   tileDataMap,
   HEX_SIZE,
 }: GraveyardLayerProps) {
-  const size = HEX_SIZE * 0.9;
+  const size = HEX_SIZE * 1.2;
   return (
     <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
       {graveyard.size > 0 &&

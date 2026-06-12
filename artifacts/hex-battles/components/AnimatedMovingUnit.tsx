@@ -25,7 +25,7 @@ export default function AnimatedMovingUnit({
   progress,
 }: AnimatedMovingUnitProps) {
   const { borders: TERRITORY_BORDERS } = useOwnerColors();
-  const r = hexSize * 0.5;
+  const r = hexSize * 0.55;
   const animStyle = useAnimatedStyle(() => {
     const p = progress.value;
     return {

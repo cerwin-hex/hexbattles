@@ -109,7 +109,7 @@ export function IdleUnitLayer({
         if (selectedEntityKey === key) return null;
         const pos = tileDataMap.get(key);
         if (!pos) return null;
-        const r = HEX_SIZE * 0.5;
+        const r = HEX_SIZE * 0.55;
         return (
           <Animated.View
             key={`bounce-${key}`}
@@ -123,7 +123,7 @@ export function IdleUnitLayer({
               entityId={entityId}
               borderColor={TERRITORY_BORDERS["player"]}
               borderWidth={3.0}
-              opacity={1.0}
+              opacity={0.9}
             />
           </Animated.View>
         );
