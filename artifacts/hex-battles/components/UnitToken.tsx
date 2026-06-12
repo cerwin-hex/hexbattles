@@ -43,6 +43,25 @@ const BUILDING_ICON_SCALE = 1.95;
 const RING_OUTLINE_WIDTH = 0.75;
 const RING_OUTLINE_COLOR = "#2B2118";
 
+/**
+ * How far the disc fill is mixed toward white relative to the raw owner colour
+ * (0 = owner colour as-is, 1 = white). Keeps the disc a touch lighter than the
+ * territory border colour so the dark icon ink reads clearly.
+ */
+const DISC_LIGHTEN = 0.22;
+
+/** Mix a #rrggbb colour toward white by `amount` (0..1). Non-hex inputs pass through. */
+function lighten(hex: string, amount: number): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const mix = (c: number) => Math.round(c + (255 - c) * amount);
+  const r = mix((n >> 16) & 0xff);
+  const g = mix((n >> 8) & 0xff);
+  const b = mix(n & 0xff);
+  return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`;
+}
+
 function UnitTokenInner({
   r,
   entityId,
@@ -82,7 +101,7 @@ function UnitTokenInner({
         borderRadius: r,
         borderWidth: RING_OUTLINE_WIDTH,
         borderColor: RING_OUTLINE_COLOR,
-        backgroundColor: borderColor,
+        backgroundColor: lighten(borderColor, DISC_LIGHTEN),
         alignItems: "center",
         justifyContent: "center",
         overflow: "hidden",
