@@ -1,6 +1,7 @@
 import React from "react";
 import { View } from "react-native";
 import { UnitIcon } from "@/components/UnitIcon";
+import { ENTITY_META } from "@/utils/hexGrid";
 import type { EntityType } from "@/types";
 
 export interface UnitTokenProps {
@@ -39,9 +40,18 @@ export interface UnitTokenProps {
 const UNIT_ICON_SCALE = 1.75;
 const BUILDING_ICON_SCALE = 1.95;
 
-/** Thin dark outline drawn around the player-coloured disc (matches the icon ink). */
-const RING_OUTLINE_WIDTH = 0.75;
+/** Dark outline drawn around the player-coloured disc (matches the icon ink). */
 const RING_OUTLINE_COLOR = "#2B2118";
+
+/**
+ * Outline thickness scales with unit strength so stronger units read as more
+ * heavily armoured: str 1 → 1.0, str 2 → 1.5, str 3 → 2.0. Non-unit discs
+ * (e.g. the rebel marker) fall back to the str-1 weight.
+ */
+function ringOutlineWidth(entityId: EntityType): number {
+  const meta = ENTITY_META[entityId];
+  return meta.isUnit ? 0.5 + meta.strength * 0.5 : 1.0;
+}
 
 /**
  * How far the disc fill is mixed toward white relative to the raw owner colour
@@ -99,7 +109,7 @@ function UnitTokenInner({
         width: r * 2,
         height: r * 2,
         borderRadius: r,
-        borderWidth: RING_OUTLINE_WIDTH,
+        borderWidth: ringOutlineWidth(entityId),
         borderColor: RING_OUTLINE_COLOR,
         backgroundColor: lighten(borderColor, DISC_LIGHTEN),
         alignItems: "center",

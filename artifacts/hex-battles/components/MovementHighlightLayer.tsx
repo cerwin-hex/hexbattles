@@ -66,7 +66,7 @@ function MovementHighlightLayerInner({
                 cx={pos.cx}
                 cy={pos.cy}
                 r={HEX_SIZE * 0.18}
-                fill="rgba(80,200,255,0.85)"
+                fill="rgba(255,220,0,0.85)"
               />
             );
           })}
