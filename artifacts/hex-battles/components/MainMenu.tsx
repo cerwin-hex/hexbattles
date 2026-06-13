@@ -57,7 +57,18 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
               <Text style={styles.ruleSectionTitle}>About the Game</Text>
               <View style={styles.ruleDivider} />
               <Text style={styles.ruleBody}>
-                Hex Battles is a turn-based strategy game where you fight to conquer and defend territories on a hexagonal map. You start with a small area and must expand, build your economy, and eliminate all opponents, while keeping an eye on the rebels.
+                Hex Battles is a turn-based strategy game where you fight to conquer and defend territories on a hexagonal map. You start with a few small areas and must expand, build your economy, and eliminate all opponents, while keeping an eye on the rebels.
+              </Text>
+            </View>
+
+            <View style={styles.ruleSection}>
+              <Text style={styles.ruleSectionTitle}>Economy</Text>
+              <View style={styles.ruleDivider} />
+              <Text style={styles.ruleBody}>
+                Gold is held per territory, not in one shared purse. Each separate block of land you own keeps its own treasury, earns its own income, and pays its own upkeep. You can only buy something in a territory that can afford it outright.
+              </Text>
+              <Text style={[styles.ruleBody, { marginTop: 8 }]}>
+                At the end of every turn each territory collects income from its tiles (grass/forest 2, desert 1, +2 per city, mountain/lake 0) and pays upkeep for its units and buildings. If a territory cannot cover its bill, it goes bankrupt: its treasury drains to zero, all of its units are disbanded, and — if upkeep still exceeds income — its buildings are demolished too.
               </Text>
             </View>
 
@@ -68,7 +79,7 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
                 Units and buildings have a strength value from 1 to 3. A unit can only move onto a tile if its strength is higher than that of the enemy. Move a unit onto an enemy tile to capture it.
               </Text>
               <Text style={[styles.ruleBody, { marginTop: 8 }]}>
-                Cavalry — the Scout and Knight — move up to 5 tiles and take two open tiles per turn, or strike a unit/rebel once and then ride on to one more open tile before stopping. They never assault towers or castles, and cannot be merged.
+                Cavalry — the Scout and Knight — move up to 5 tiles and take two open tiles per turn, or strike a unit/rebel once and then ride on to one more open tile before stopping. They can't assault towers or castles, and cannot be merged with infantry.
               </Text>
             </View>
 
@@ -139,11 +150,10 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
               <Text style={styles.ruleSectionTitle}>Difficulty</Text>
               <View style={styles.ruleDivider} />
               {[
-                { name: 'Super Easy', desc: 'The AI earns noticeably less income from its territories each round, giving you a big economic advantage.' },
-                { name: 'Easy', desc: 'The AI plays sloppily and skips many of its available moves, making it predictable and easy to outmanoeuvre.' },
-                { name: 'Medium', desc: 'The AI occasionally misses opportunities but still builds and expands steadily. A fair challenge for most players.' },
-                { name: 'Hard', desc: 'The AI uses a strategic decision tree and smart pathfinding to attack, defend, and expand as efficiently as possible.' },
-                { name: 'Super Hard', desc: 'The AI earns extra income from every hex it controls each round, giving it a significant economic edge over time.' },
+                { name: 'Easy', desc: 'The AI plays sloppily and skips many of its available moves (about 40%), making it predictable and easy to outmanoeuvre.' },
+                { name: 'Medium', desc: 'The AI occasionally skips a move (about 20%) but still builds and expands steadily. A fair challenge for most players.' },
+                { name: 'Hard', desc: 'The AI uses a strategic decision tree and smart pathfinding to attack, defend, and expand as efficiently as possible, never skipping a move.' },
+                { name: 'Super Hard', desc: 'Plays like Hard, but also earns bonus income from every land hex it controls each round, giving it a growing economic edge over time.' },
               ].map(d => (
                 <View key={d.name} style={[styles.terrainRow, { marginBottom: 4 }]}>
                   <Text style={[styles.terrainName, { fontWeight: '700' }]}>{d.name}</Text>
@@ -232,17 +242,17 @@ export default function MainMenu() {
           <View style={styles.helpRow}>
             <TouchableOpacity
               style={styles.helpBtn}
-              onPress={() => { Haptics.selectionAsync(); setSettingsVisible(true); }}
-              activeOpacity={0.75}
-            >
-              <Text style={styles.helpBtnText}>⚙</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.helpBtn}
               onPress={() => { Haptics.selectionAsync(); setRulesVisible(true); }}
               activeOpacity={0.75}
             >
               <Text style={styles.helpBtnText}>?</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.helpBtn}
+              onPress={() => { Haptics.selectionAsync(); setSettingsVisible(true); }}
+              activeOpacity={0.75}
+            >
+              <Text style={styles.helpBtnText}>⚙</Text>
             </TouchableOpacity>
           </View>
           <Text style={styles.title}>HEX BATTLES</Text>

@@ -11,6 +11,9 @@ import {
 } from 'react-native';
 import { INFO_TABLE_ROWS } from '@/constants/gameConstants';
 import { UnitIcon } from '@/components/UnitIcon';
+import { COLOR_PALETTE } from '@/constants/colors';
+import { COLOR_KEYS } from '@/utils/settings';
+import { useSettings } from '@/contexts/SettingsContext';
 
 const STORAGE_KEY = 'hex_battles_welcome_seen';
 
@@ -18,7 +21,9 @@ const STORAGE_KEY = 'hex_battles_welcome_seen';
 const UNIT_ROWS = INFO_TABLE_ROWS;
 
 export function WelcomeModal() {
+  const { playerColor } = useSettings();
   const [visible, setVisible] = useState(false);
+  const [dontShowAgain, setDontShowAgain] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then(val => {
@@ -26,10 +31,18 @@ export function WelcomeModal() {
     });
   }, []);
 
+  // Persist "seen" only when the player opts out — otherwise the guide
+  // reappears on the next launch. Every close path (backdrop tap, the Begin
+  // button, hardware back) funnels through here so the checkbox always applies.
   function handleClose() {
-    AsyncStorage.setItem(STORAGE_KEY, '1');
+    if (dontShowAgain) AsyncStorage.setItem(STORAGE_KEY, '1');
     setVisible(false);
   }
+
+  const playerEntry = COLOR_PALETTE[playerColor];
+  // The AI opponents take the remaining palette colours, in order — mirror that
+  // here so the swatches match what the player will actually see on the board.
+  const opponentKeys = COLOR_KEYS.filter(k => k !== playerColor);
 
   return (
     <Modal
@@ -52,34 +65,33 @@ export function WelcomeModal() {
             showsVerticalScrollIndicator={false}
           >
 
-            <Section title="You Are the Blue Player">
+            <Section title={`You Are the ${playerEntry.label} Player`}>
               <Text style={styles.body}>
                 Your territories are shown in{' '}
-                <Text style={styles.blue}>blue</Text>
-                . You start each game in a corner of the map with a small plot of land and a handful of gold. Every other colour belongs to an AI opponent — and they all want what's yours.
+                <Text style={[styles.body, { color: playerEntry.border, fontFamily: 'Inter_700Bold' }]}>
+                  {playerEntry.label.toLowerCase()}
+                </Text>
+                . You start each game with only a few scattered pieces of land and a little gold. Every other colour belongs to an AI opponent — and they all want what's yours. (You can change your colour in Settings.)
               </Text>
               <View style={styles.colorRow}>
-                <ColorChip color="#2E6EE8" label="You" />
-                <ColorChip color="#E03838" label="Red" />
-                <ColorChip color="#38B838" label="Green" />
-                <ColorChip color="#E08828" label="Orange" />
-                <ColorChip color="#C838C8" label="Purple" />
+                <ColorChip color={playerEntry.fill} label="You" />
+                {opponentKeys.map(k => (
+                  <ColorChip key={k} color={COLOR_PALETTE[k].fill} label={COLOR_PALETTE[k].label} />
+                ))}
               </View>
             </Section>
 
-            <Section title="Green Pulse = You Can Act There">
+            <Section title="Pulsating territory = You Can Act There">
               <Text style={styles.body}>
-                When a territory glows with a soft{' '}
-                <Text style={styles.green}>green pulse</Text>
-                , you have enough gold to buy a unit or building there. Tap the glowing territory to open the buy menu. No pulse means you're too broke — earn more by capturing tiles.
+                When a territory glows with a soft pulse, that territory's treasury holds enough gold to buy a unit or building there. Tap the pulsating territory to open the buy menu. No pulse means that territory doesn't have enough money to buy anything — earn more by capturing tiles to grow its income.
               </Text>
             </Section>
 
             <Section title="Taking Your Turn">
               {[
                 { n: '1', text: 'Tap one of your territories to select it.' },
-                { n: '2', text: 'Tap a unit inside to arm it — the tiles it can reach light up.' },
-                { n: '3', text: 'Tap a highlighted tile to move. Tap an enemy tile to attack and capture it.' },
+                { n: '2', text: 'Tap a unit inside to arm it — the tiles it can reach light up with small dots.' },
+                { n: '3', text: 'Tap a dotted tile to move. Tap an enemy tile to attack and capture it.' },
                 { n: '4', text: 'Buy units or buildings in the menu that appears when you tap a territory.' },
                 { n: '5', text: 'Press End Turn when you\'re done. All opponents act, then it\'s your turn again.' },
               ].map(s => (
@@ -101,13 +113,16 @@ export function WelcomeModal() {
               <Text style={[styles.body, { marginTop: 8 }]}>
                 Cavalry — the Scout and Knight — move up to 5 tiles and take{' '}
                 <Text style={styles.highlight}>two open tiles per turn</Text>, or strike a unit/rebel{' '}
-                <Text style={styles.highlight}>once</Text> and then ride on to one more open tile before stopping. They never assault towers or castles, and cannot merge.
+                <Text style={styles.highlight}>once</Text> and then ride on to one more open tile before stopping. They can't assault towers or castles.
               </Text>
             </Section>
 
             <Section title="Economy">
               <Text style={styles.body}>
-                You earn gold at the start of each turn from every tile you own. Units and buildings cost upkeep — if you run out of gold, your weakest units are disbanded automatically. Keep expanding to fund your army.
+                Gold is held <Text style={styles.highlight}>per territory</Text>, not in one shared purse. Each separate block of land you own keeps its own treasury, earns its own income each turn, and pays its own upkeep for the units and buildings standing on it.
+              </Text>
+              <Text style={[styles.body, { marginTop: 8 }]}>
+                If a territory can't cover its upkeep, it goes bankrupt: its treasury empties, <Text style={styles.highlight}>all of its units are disbanded</Text>, and if upkeep still outweighs income its buildings are demolished too. Keep each front expanding so its income can fund its army.
               </Text>
               <View style={styles.incomeBox}>
                 <Text style={styles.incomeRow}>Grass / Forest  →  <Text style={styles.gold}>2 gold</Text> per turn</Text>
@@ -174,6 +189,16 @@ export function WelcomeModal() {
           </ScrollView>
 
           <View style={styles.footer}>
+            <TouchableOpacity
+              style={styles.checkboxRow}
+              onPress={() => setDontShowAgain(v => !v)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.checkbox, dontShowAgain && styles.checkboxChecked]}>
+                {dontShowAgain && <Text style={styles.checkboxMark}>✓</Text>}
+              </View>
+              <Text style={styles.checkboxLabel}>Don't show me again</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.startBtn} onPress={handleClose} activeOpacity={0.85}>
               <Text style={styles.startBtnText}>Begin Your Conquest  ›</Text>
             </TouchableOpacity>
@@ -442,6 +467,38 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#4A3C1E',
     backgroundColor: '#161004',
+    gap: 14,
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    alignSelf: 'center',
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: '#9A7030',
+    backgroundColor: '#221A0E',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: '#4A3008',
+    borderColor: '#C8A24A',
+  },
+  checkboxMark: {
+    fontSize: 14,
+    color: '#F0D080',
+    fontFamily: 'Inter_700Bold',
+    lineHeight: 16,
+  },
+  checkboxLabel: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: '#A08A60',
   },
   startBtn: {
     backgroundColor: '#4A3008',
