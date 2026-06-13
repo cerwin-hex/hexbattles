@@ -4,7 +4,7 @@ import {
   calcTerritoryUpkeep,
   applySingleHexPenalty,
   initTerritoryBalances,
-  mergedUnitType,
+  mergeResult,
   resolveMovedUnitMoves,
   isChargeAttack,
   advanceAttacksUsed,
@@ -104,30 +104,46 @@ describe("calcTerritoryUpkeep", () => {
   });
 });
 
-// ─── mergedUnitType ───────────────────────────────────────────────────────────
+// ─── mergeResult ────────────────────────────────────────────────────────────
 
-describe("mergedUnitType", () => {
-  it("1+1 = warrior (strength 2)", () => {
-    expect(mergedUnitType(1, 1)).toBe("warrior");
+describe("mergeResult", () => {
+  it("infantry: peasant + peasant = warrior (strength 2)", () => {
+    expect(mergeResult("peasant", "peasant")).toBe("warrior");
   });
 
-  it("1+2 = swordsman (strength 3)", () => {
-    expect(mergedUnitType(1, 2)).toBe("swordsman");
+  it("infantry: peasant + warrior = swordsman (strength 3)", () => {
+    expect(mergeResult("peasant", "warrior")).toBe("swordsman");
+    expect(mergeResult("warrior", "peasant")).toBe("swordsman");
   });
 
-  it("2+1 = swordsman (strength 3)", () => {
-    expect(mergedUnitType(2, 1)).toBe("swordsman");
+  it("infantry: warrior + warrior is illegal (no strength-4 unit)", () => {
+    expect(mergeResult("warrior", "warrior")).toBeNull();
   });
 
-  it("2+2 caps at swordsman (strength 3)", () => {
-    expect(mergedUnitType(2, 2)).toBe("swordsman");
+  it("cavalry: scout + scout = knight (own upgrade track, strength 2)", () => {
+    expect(mergeResult("scout", "scout")).toBe("knight");
   });
 
-  it("1+1+1 (two merges): first merge gives advanced (str 2), second gives expert (str 3)", () => {
-    const step1 = mergedUnitType(1, 1);
-    expect(step1).toBe("warrior");
-    const step2 = mergedUnitType(2, 1);
-    expect(step2).toBe("swordsman");
+  it("cavalry: scout + knight is illegal (no strength-3 cavalry)", () => {
+    expect(mergeResult("scout", "knight")).toBeNull();
+    expect(mergeResult("knight", "knight")).toBeNull();
+  });
+
+  it("cross-track merges are illegal (cavalry never mixes with infantry)", () => {
+    expect(mergeResult("scout", "peasant")).toBeNull();
+    expect(mergeResult("peasant", "scout")).toBeNull();
+    expect(mergeResult("knight", "warrior")).toBeNull();
+  });
+
+  it("buildings never merge", () => {
+    expect(mergeResult("tower", "tower")).toBeNull();
+    expect(mergeResult("peasant", "tower")).toBeNull();
+  });
+
+  it("two scout merges in sequence: scout+scout = knight (str 2), then knight cannot merge further", () => {
+    const step1 = mergeResult("scout", "scout");
+    expect(step1).toBe("knight");
+    expect(mergeResult("knight", "scout")).toBeNull();
   });
 });
 

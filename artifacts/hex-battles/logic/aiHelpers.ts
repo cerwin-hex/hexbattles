@@ -10,7 +10,7 @@ import {
   getMoveCost,
   TerritoryCache,
 } from "@/utils/hexGrid";
-import { calcTerritoryUpkeep, mergedUnitType } from "@/logic/gameLogic";
+import { calcTerritoryUpkeep, mergeResult } from "@/logic/gameLogic";
 
 export interface AiContext {
   tileMap: Map<string, HexTile>;
@@ -196,10 +196,8 @@ export function dtFindMergeMove(
       if (i === j) continue;
       const [uk1, ue1] = units[i];
       const [uk2, ue2] = units[j];
-      const str1 = ENTITY_META[ue1].strength;
-      const str2 = ENTITY_META[ue2].strength;
-      const mergedStr = str1 + str2;
-      if (mergedStr > 3 || mergedStr < requiredStr) continue;
+      const mergedType = mergeResult(ue1, ue2);
+      if (!mergedType || ENTITY_META[mergedType].strength < requiredStr) continue;
       const range1 = ctx.partialMoves.get(uk1) ?? 3;
       const vm1 = getValidMoves(uk1, ctx.aiOwner, ctx.entities, ctx.tileMap, ctx.spentUnits, range1, ctx.combatSpentUnits);
       if (!vm1.has(uk2)) continue;
@@ -209,7 +207,7 @@ export function dtFindMergeMove(
       const mergedRemaining = Math.min(remainingAfterMerge, destRemaining);
       const tempEntities = new Map(ctx.entities);
       tempEntities.delete(uk1);
-      tempEntities.set(uk2, mergedUnitType(str1, str2));
+      tempEntities.set(uk2, mergedType);
       const vmMerged = getValidMoves(uk2, ctx.aiOwner, tempEntities, ctx.tileMap, new Set(), mergedRemaining);
       for (const tk of targetKeys) {
         if (vmMerged.has(tk)) return { from: uk1, to: uk2 };

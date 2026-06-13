@@ -17,7 +17,7 @@ import {
   isCavalry,
   cavalryMoveKind,
 } from "@/utils/hexGrid";
-import { advanceAttacksUsed, advanceCombatSpent, calcTerritoryUpkeep, isChargeAttack, mergedUnitType, resolveMovedUnitMoves } from "@/logic/gameLogic";
+import { advanceAttacksUsed, advanceCombatSpent, calcTerritoryUpkeep, isChargeAttack, mergeResult, resolveMovedUnitMoves } from "@/logic/gameLogic";
 import {
   dtSplitScore,
   dtCaptureNegatesIncome,
@@ -1150,20 +1150,15 @@ export async function runAiTurn(
         const destExisting = ws.entities.get(toKey);
         // Bridge capture = normal capture: unit moves to bridge tile (bridge entity replaced by unit).
         // The lake tile stays territorial because a unit now stands on it (isLakePassable in hexGrid).
-        const isAllyMerge =
-          !!destExisting &&
-          destExisting !== "bridge" &&
-          ENTITY_META[destExisting].isUnit &&
-          destTile.owner === aiOwner &&
-          ENTITY_META[unitEntity].strength + ENTITY_META[destExisting].strength <= 3;
+        const mergeInto =
+          destExisting && destExisting !== "bridge" && destTile.owner === aiOwner
+            ? mergeResult(unitEntity, destExisting)
+            : null;
+        const isAllyMerge = mergeInto !== null;
 
         if (isAllyMerge) {
-          const merged = mergedUnitType(
-            ENTITY_META[unitEntity].strength,
-            ENTITY_META[destExisting!].strength,
-          );
           ws.entities.delete(fromKey);
-          ws.entities.set(toKey, merged);
+          ws.entities.set(toKey, mergeInto!);
         } else {
           ws.entities.delete(toKey);
           ws.entities.delete(fromKey);

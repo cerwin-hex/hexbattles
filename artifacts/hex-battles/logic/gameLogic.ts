@@ -8,8 +8,9 @@ import {
   getTerritoryId,
   TERRAIN_INCOME,
   unitMaxAttacks,
+  isCavalry,
 } from "@/utils/hexGrid";
-import { STRENGTH_TO_UNIT } from "@/constants/gameConstants";
+import { STRENGTH_TO_UNIT, STRENGTH_TO_CAVALRY } from "@/constants/gameConstants";
 
 export function calcTerritoryUpkeep(
   territory: HexTile[],
@@ -124,9 +125,25 @@ export function initTerritoryBalances(
   return balances;
 }
 
-export function mergedUnitType(strA: number, strB: number): EntityType {
-  const total = Math.min(strA + strB, 3);
-  return STRENGTH_TO_UNIT[total] ?? "swordsman";
+/**
+ * Track-aware merge resolution and the single source of truth for whether two
+ * units may merge — replacing the old per-unit `unitCanMerge` + strength-only
+ * `mergedUnitType`, neither of which could enforce same-track pairing. Returns
+ * the merged unit type, or null when the merge is illegal: two units merge only
+ * within the same track — both infantry or both
+ * cavalry, never mixed — and only when their combined strength maps to a unit
+ * in that track (so warrior + warrior, scout + knight, etc. all return null).
+ *
+ * Invariant: when non-null, the result's strength equals strA + strB, because
+ * each STRENGTH_TO_* table maps n to a unit of strength n.
+ */
+export function mergeResult(a: EntityType, b: EntityType): EntityType | null {
+  if (!ENTITY_META[a].isUnit || !ENTITY_META[b].isUnit) return null;
+  const aCav = isCavalry(a);
+  if (aCav !== isCavalry(b)) return null;
+  const total = ENTITY_META[a].strength + ENTITY_META[b].strength;
+  const table = aCav ? STRENGTH_TO_CAVALRY : STRENGTH_TO_UNIT;
+  return table[total] ?? null;
 }
 
 /**
