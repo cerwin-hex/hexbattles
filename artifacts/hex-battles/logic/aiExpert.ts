@@ -51,6 +51,10 @@ export interface EvalWeights {
   breakthrough: number;
   fortification: number;
   borderBonus: number;
+  /** Reward per owned-tile edge facing enemy territory (the contested front). */
+  frontier: number;
+  /** Reward per owned-tile edge facing void / mountain (a "covered back"). */
+  secured: number;
   fragmentation: number;
   threat: number;
   leader: number;
@@ -68,6 +72,8 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   breakthrough: 1.5,
   fortification: 3,
   borderBonus: 1.5,
+  frontier: 0.8,
+  secured: 0.4,
   fragmentation: 2,
   threat: 4,
   leader: 1.5,
@@ -168,6 +174,27 @@ export function evaluatePosition(
     }
   }
 
+  // ── Positional value: every owned land tile's edges are classified by what
+  // they face. Edges toward enemy territory are the contested front (valuable to
+  // hold/contest); edges toward void or mountain are a "covered back" that never
+  // needs defending. This makes a tile pointing at the enemy worth more than one
+  // pointing at the void, while still rewarding backing the territory against the
+  // map edge. ──
+  let frontier = 0;
+  let secured = 0;
+  for (const t of tileMap.values()) {
+    if (t.owner !== owner || t.terrain === "mountain" || t.terrain === "lake") continue;
+    const [q, r] = t.key.split(",").map(Number);
+    for (const { dir: [dq, dr] } of HEX_EDGES) {
+      const nt = tileMap.get(tileKey(q + dq, r + dr));
+      if (!nt || nt.terrain === "mountain") {
+        secured += 1; // void or impassable mountain — safe back
+      } else if (nt.owner !== owner && nt.owner !== "neutral") {
+        frontier += 1; // edge against enemy territory — the contested front
+      }
+    }
+  }
+
   // ── Threat (avoid counterattack): own tiles capturable by an adjacent enemy ──
   const threatened = new Map<string, number>();
   for (const [k, e] of entities) {
@@ -215,7 +242,9 @@ export function evaluatePosition(
     unitStrength * w.unitStrength +
     breakthrough * w.breakthrough +
     fortification * w.fortification +
-    borderBonus * w.borderBonus -
+    borderBonus * w.borderBonus +
+    frontier * w.frontier +
+    secured * w.secured -
     clusters * w.fragmentation -
     threat * w.threat -
     leaderIncome * w.leader

@@ -4,6 +4,7 @@ import {
   simulateAction,
   generateCandidateActions,
   runExpertTerritoryDecisionLoop,
+  DEFAULT_WEIGHTS,
   type SimState,
   type ExpertAction,
 } from "@/logic/aiExpert";
@@ -109,6 +110,34 @@ describe("evaluatePosition", () => {
     const sConnected = evaluatePosition("ai1", connected, new Map(), new Map(), new Set());
     const sFragmented = evaluatePosition("ai1", fragmented, new Map(), new Map(), new Set());
     expect(sConnected).toBeGreaterThan(sFragmented);
+  });
+
+  it("values an edge facing the enemy (frontier term)", () => {
+    // ai1 tile adjacent to an (empty) enemy tile. Frontier weight should add value.
+    const map = makeTileMap([makeTile(0, 0, "ai1"), makeTile(1, 0, "ai2")]);
+    const withFrontier = evaluatePosition("ai1", map, new Map(), new Map(), new Set(), {
+      ...DEFAULT_WEIGHTS,
+      frontier: 5,
+    });
+    const noFrontier = evaluatePosition("ai1", map, new Map(), new Map(), new Set(), {
+      ...DEFAULT_WEIGHTS,
+      frontier: 0,
+    });
+    expect(withFrontier).toBeGreaterThan(noFrontier);
+  });
+
+  it("values an edge backed against the void (secured term)", () => {
+    // A lone tile is surrounded by void; secured weight should add value.
+    const map = makeTileMap([makeTile(0, 0, "ai1")]);
+    const withSecured = evaluatePosition("ai1", map, new Map(), new Map(), new Set(), {
+      ...DEFAULT_WEIGHTS,
+      secured: 2,
+    });
+    const noSecured = evaluatePosition("ai1", map, new Map(), new Map(), new Set(), {
+      ...DEFAULT_WEIGHTS,
+      secured: 0,
+    });
+    expect(withSecured).toBeGreaterThan(noSecured);
   });
 });
 
@@ -307,5 +336,21 @@ describe("runExpertTerritoryDecisionLoop", () => {
     if (first?.kind === "move") {
       expect(new Set([first.from, first.to])).toEqual(new Set(["0,0", "1,0"]));
     }
+  });
+
+  it("captures toward the enemy before capturing toward the void", async () => {
+    // A unit can capture either of two neutral tiles: (1,0) points at an enemy
+    // tile (2,0); (-1,0) backs onto void. The enemy-facing tile is worth more.
+    const tileMap = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "neutral"),
+      makeTile(2, 0, "ai2"),
+      makeTile(-1, 0, "neutral"),
+    ]);
+    const entities = new Map<string, EntityType>([["0,0", "peasant"]]);
+    const ctx = makeCtx(tileMap, entities, "ai1", new Map());
+
+    const first = await firstExpertAction("0,0", ctx);
+    expect(first).toEqual({ kind: "move", from: "0,0", to: "1,0" });
   });
 });
