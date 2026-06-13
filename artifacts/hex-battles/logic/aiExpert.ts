@@ -47,6 +47,8 @@ export interface EvalWeights {
   /** Flat penalty per territory currently running a deficit. */
   bankruptcyPenalty: number;
   unitStrength: number;
+  /** Reward per owned unit that can capture an adjacent non-owned tile. */
+  breakthrough: number;
   fortification: number;
   borderBonus: number;
   fragmentation: number;
@@ -63,6 +65,7 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   deficitMag: 6,
   bankruptcyPenalty: 15,
   unitStrength: 2,
+  breakthrough: 1.5,
   fortification: 3,
   borderBonus: 1.5,
   fragmentation: 2,
@@ -131,10 +134,11 @@ export function evaluatePosition(
     }
   }
 
-  // ── Military: unit strength, fortifications, border presence ──
+  // ── Military: unit strength, fortifications, border presence, breakthrough ──
   let unitStrength = 0;
   let fortification = 0;
   let borderBonus = 0;
+  let breakthrough = 0;
   for (const [k, e] of entities) {
     const t = tileMap.get(k);
     if (!t || t.owner !== owner) continue;
@@ -147,6 +151,17 @@ export function evaluatePosition(
     if (meta.isUnit) {
       unitStrength += meta.strength;
       if (onBorder) borderBonus += meta.strength;
+      // Breakthrough: can this unit capture an adjacent non-owned tile? Rewards
+      // concentrating force (e.g. merging two weak units into one strong enough
+      // to break a defence) and keeping attack-capable units at the front.
+      const canCapture = HEX_EDGES.some(({ dir: [dq, dr] }) => {
+        const nk = tileKey(kq + dq, kr + dr);
+        const nt = tileMap.get(nk);
+        if (!nt || nt.owner === owner) return false;
+        if (nt.terrain === "lake" || nt.terrain === "mountain") return false;
+        return meta.strength > getMaxEnemyZoC(nk, owner, entities, tileMap);
+      });
+      if (canCapture) breakthrough += 1;
     } else if (e === "tower" || e === "castle") {
       fortification += meta.strength;
       if (onBorder) borderBonus += meta.strength;
@@ -198,6 +213,7 @@ export function evaluatePosition(
     deficitMag * w.deficitMag -
     deficitCount * w.bankruptcyPenalty +
     unitStrength * w.unitStrength +
+    breakthrough * w.breakthrough +
     fortification * w.fortification +
     borderBonus * w.borderBonus -
     clusters * w.fragmentation -
@@ -254,14 +270,20 @@ export function simulateAction(s0: SimState, a: ExpertAction, owner: TerritoryOw
       if (!fromE || !destTile) return s;
       const prevOwner = destTile.owner as TerritoryOwner;
       const destExisting = s.entities.get(a.to);
-      const isAllyMerge = !!destExisting && destExisting !== "bridge" && prevOwner === owner;
+      // Only a real mergeable ally counts as a merge. Moving onto a rebel (or any
+      // non-mergeable occupant) is combat: the occupant is removed and the unit
+      // takes the tile — matching dtExecMove in the real game.
+      const mergeInto =
+        destExisting && destExisting !== "bridge" && prevOwner === owner
+          ? mergeResult(fromE, destExisting)
+          : null;
+      const isAllyMerge = mergeInto !== null;
       const prevMap = new Map(s.tileMap);
       const prevEnt = new Map(s.entities);
       if (prevOwner !== owner) s.tileMap.set(a.to, { ...destTile, owner });
       if (isAllyMerge) {
-        const merged = mergeResult(fromE, destExisting!);
         s.entities.delete(a.from);
-        if (merged) s.entities.set(a.to, merged);
+        s.entities.set(a.to, mergeInto);
       } else {
         s.entities.delete(a.to);
         s.entities.delete(a.from);
@@ -396,11 +418,13 @@ export function generateCandidateActions(
         moveCount++;
       } else {
         const destE = ctx.entities.get(mk);
-        // own-tile move: only worth considering as a merge or repositioning to a
-        // border tile (interior shuffles never improve the position).
+        // own-tile move worth considering as: a merge, clearing a rebel (an owned
+        // tile a rebel sits on yields no income until cleared), or repositioning
+        // to a border tile (interior shuffles never improve the position).
         const isMerge = !!destE && destE !== "bridge" && !!mergeResult(ue, destE);
+        const isRebelClear = destE === "rebel";
         const isBorderReposition = borderTiles.some((b) => b.key === mk) && !destE;
-        if (isMerge || isBorderReposition) {
+        if (isMerge || isRebelClear || isBorderReposition) {
           out.push({ kind: "move", from: uk, to: mk });
           moveCount++;
         }

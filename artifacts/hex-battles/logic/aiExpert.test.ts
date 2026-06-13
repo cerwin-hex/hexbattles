@@ -49,6 +49,31 @@ function makeCtx(
   };
 }
 
+/** Run the expert loop and return the first action it dispatches (or null). */
+async function firstExpertAction(
+  start: string,
+  ctx: AiContext,
+): Promise<ExpertAction | null> {
+  let first: ExpertAction | null = null;
+  const stop = (a: ExpertAction): boolean => {
+    if (!first) first = a;
+    return false; // halt the loop after the first action
+  };
+  const exec: AiDecisionExec = {
+    move: async (from, to) => stop({ kind: "move", from, to }),
+    buy: async (unitType, target, cost, outside) =>
+      stop({ kind: "buy", unitType, target, cost, outside }),
+    build: async (buildingType, target, cost) =>
+      stop({ kind: "build", buildingType, target, cost }),
+    upgrade: async (target, to, cost) => stop({ kind: "upgrade", target, to, cost }),
+    remove: async (target) => stop({ kind: "remove", target }),
+    markSpent: () => {},
+    setTerritoryState: () => {},
+  };
+  await runExpertTerritoryDecisionLoop(start, ctx, exec, () => true);
+  return first;
+}
+
 // ─── evaluatePosition ───────────────────────────────────────────────────────
 
 describe("evaluatePosition", () => {
@@ -234,5 +259,53 @@ describe("runExpertTerritoryDecisionLoop", () => {
 
     expect(calls.length).toBeGreaterThan(0);
     expect(calls[0]).toEqual({ kind: "move", from: "0,0", to: "1,0" });
+  });
+
+  it("clears a rebel sitting on its own territory", async () => {
+    // ai1 unit next to a rebel occupying an owned tile (which yields no income
+    // until cleared). Expert should move onto the rebel to clear it.
+    const tileMap = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai1"),
+      makeTile(2, 0, "ai1"),
+    ]);
+    const entities = new Map<string, EntityType>([
+      ["0,0", "swordsman"],
+      ["1,0", "rebel"],
+    ]);
+    const ctx = makeCtx(tileMap, entities, "ai1", new Map());
+
+    const first = await firstExpertAction("0,0", ctx);
+    expect(first).toEqual({ kind: "move", from: "0,0", to: "1,0" });
+  });
+
+  it("merges two idle peasants so the result can break through a defense", async () => {
+    // Two peasants (str 1) cannot capture (2,0) — it is defended by ZoC 1 from
+    // an enemy unit at (3,0). Merged into a warrior (str 2) they can. Expert
+    // should choose the merge rather than leaving both peasants idle.
+    // Territory is large enough (income 10) to sustain a warrior (upkeep 9),
+    // so the merge is not blocked by a deficit penalty. Only (1,0) borders the
+    // enemy; (2,0) is defended by ZoC 1 from the enemy peasant at (3,0).
+    const tileMap = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai1"),
+      makeTile(0, 1, "ai1"),
+      makeTile(0, 2, "ai1"),
+      makeTile(0, 3, "ai1"),
+      makeTile(2, 0, "ai2"),
+      makeTile(3, 0, "ai2"),
+    ]);
+    const entities = new Map<string, EntityType>([
+      ["0,0", "peasant"],
+      ["1,0", "peasant"],
+      ["3,0", "peasant"],
+    ]);
+    const ctx = makeCtx(tileMap, entities, "ai1", new Map());
+
+    const first = await firstExpertAction("0,0", ctx);
+    expect(first?.kind).toBe("move");
+    if (first?.kind === "move") {
+      expect(new Set([first.from, first.to])).toEqual(new Set(["0,0", "1,0"]));
+    }
   });
 });
