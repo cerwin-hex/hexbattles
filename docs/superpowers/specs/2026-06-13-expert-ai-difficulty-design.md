@@ -201,6 +201,22 @@ profitable armies are free but over-extension is punished) plus a **cash-buffer
 penalty** (reserves below ~12/territory). That single fix turned bimodal 0–40
 blowout losses into wins (vs hard 11–8 → 22–2).
 
+### Multi-opponent + performance at scale (verified headlessly)
+
+The user plays 3–4 AIs and required "must not delay the game", so both were tested
+via `playFreeForAll` (run with `AI_SELFPLAY=1`):
+
+- **3–4 AI strength:** expert dominates 4-AI free-for-alls (expert vs super_hard vs
+  hard vs medium) — **6/6** wins at 160 tiles, **3/4** at 80 tiles (9/10 overall),
+  finishing with by far the most land. Committed as an env-gated test.
+- **Per-turn compute (this dev machine, animation skipped = pure compute):** ~16–94 ms
+  per AI owner-turn at 80 tiles; ~265 ms avg / ~339 ms max at 160 tiles. Bounded and
+  sub-second even at large boards. **Caveat:** a phone is slower (≈2–4×), so at the
+  menu's max (200 tiles) a single big late-game expert turn could reach ~1 s — a
+  possible hitch only at extreme board sizes. Real-device measurement at 200 tiles is
+  the remaining check; Phase 2 (overlap compute with the existing per-action
+  animation) is the mitigation if it hitches.
+
 ### Deferred / future
 
 - Phase 2 pondering/overlap still deferred (gated on real-device perf).

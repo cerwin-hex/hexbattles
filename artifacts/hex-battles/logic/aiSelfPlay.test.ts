@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { playMatch, playSeries } from "@/logic/aiSelfPlay";
+import { playMatch, playSeries, playFreeForAll } from "@/logic/aiSelfPlay";
+import type { TerritoryOwner } from "@/types";
 
 // The strength series are real games (~1.3s each), too slow for the default
 // suite. They run only when AI_SELFPLAY is set; the headline results are
@@ -48,6 +49,34 @@ describe("expert strength (self-play)", () => {
       // Observed 22-10 (~69%); require > 55% over 32 games.
       expect(r.winsA / r.games).toBeGreaterThan(0.55);
       expect(r.winsA).toBeGreaterThan(r.winsB);
+    },
+    600000,
+  );
+
+  fullIt(
+    "is the dominant seat in 4-AI free-for-alls (3-4 opponents)",
+    async () => {
+      // expert(ai1) vs super_hard, hard, medium across seeded maps.
+      const wins: Record<string, number> = {};
+      const N = 4;
+      for (let s = 0; s < N; s++) {
+        const r = await playFreeForAll({
+          seed: 3000 + s,
+          tiles: 80,
+          difficulties: ["expert", "super_hard", "hard", "medium"],
+          maxTurns: 35,
+          expertIncomeBonus: true,
+        });
+        if (r.winner !== "draw") wins[r.winner] = (wins[r.winner] ?? 0) + 1;
+      }
+      const expertWins = wins["ai1" as TerritoryOwner] ?? 0;
+      const bestOther = Math.max(
+        0,
+        ...(["ai2", "ai3", "ai4"] as TerritoryOwner[]).map((s) => wins[s] ?? 0),
+      );
+      // Observed expert 3 / others ≤1. Require expert the strict top winner.
+      expect(expertWins).toBeGreaterThan(bestOther);
+      expect(expertWins).toBeGreaterThanOrEqual(Math.ceil(N / 2));
     },
     600000,
   );

@@ -529,6 +529,31 @@ export function generateCandidateActions(
 
 const SCORE_EPSILON = 1e-6;
 
+/** True if any tile of `territory` is capturable by an adjacent enemy unit. */
+function territoryThreatened(
+  tileMap: Map<string, HexTile>,
+  entities: Map<string, EntityType>,
+  territory: HexTile[],
+  owner: TerritoryOwner,
+): boolean {
+  const terrKeys = new Set(territory.map((t) => t.key));
+  for (const [k, e] of entities) {
+    if (!ENTITY_META[e].isUnit) continue;
+    const t = tileMap.get(k);
+    if (!t || t.owner === owner || t.owner === "neutral") continue;
+    const s = ENTITY_META[e].strength;
+    const [kq, kr] = k.split(",").map(Number);
+    for (const { dir: [dq, dr] } of HEX_EDGES) {
+      const nk = tileKey(kq + dq, kr + dr);
+      if (!terrKeys.has(nk)) continue;
+      const nt = tileMap.get(nk);
+      if (!nt || nt.terrain === "mountain" || nt.terrain === "lake") continue;
+      if (s > getMaxEnemyZoC(nk, t.owner as TerritoryOwner, entities, tileMap)) return true;
+    }
+  }
+  return false;
+}
+
 // Tuning hook: the self-play harness can override the active weights to search
 // for strong values without recompiling. null ⇒ use DEFAULT_WEIGHTS.
 let WEIGHTS_OVERRIDE: EvalWeights | null = null;
@@ -575,9 +600,12 @@ export async function runExpertTerritoryDecisionLoop(
       }
     }
 
-    if (!best) break;
+    exec.setTerritoryState(
+      tid,
+      territoryThreatened(ctx.tileMap, ctx.entities, territory, owner) ? "defending" : "attacking",
+    );
 
-    exec.setTerritoryState(tid, "attacking");
+    if (!best) break;
     let ok = false;
     switch (best.kind) {
       case "move":

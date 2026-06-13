@@ -91,8 +91,9 @@ function creditIncome(
   ws: AiWorkingState,
   diffByOwner: Record<string, Difficulty>,
   expertBonus: boolean,
+  seats: TerritoryOwner[] = COMPETITORS,
 ): void {
-  for (const owner of COMPETITORS) {
+  for (const owner of seats) {
     const visited = new Set<string>();
     for (const tile of Array.from(ws.tileMap.values())) {
       if (tile.owner !== owner || visited.has(tile.key)) continue;
@@ -291,6 +292,125 @@ export interface SeriesResult {
   winsB: number;
   draws: number;
   games: number;
+}
+
+const ALL_SEATS: TerritoryOwner[] = ["ai1", "ai2", "ai3", "ai4", "ai5"];
+
+export interface FreeForAllConfig {
+  seed: number;
+  tiles: number;
+  /** One difficulty per seat (length N, N seats labelled ai1..aiN). */
+  difficulties: Difficulty[];
+  maxTurns: number;
+  expertIncomeBonus?: boolean;
+}
+
+export interface FreeForAllResult {
+  winner: TerritoryOwner | "draw";
+  land: Record<string, number>;
+  turns: number;
+  /** Total pure compute (ms) summed over all AI owner-turns (no animation). */
+  computeMs: number;
+  /** Number of AI owner-turns executed. */
+  ownerTurns: number;
+}
+
+/**
+ * Play one N-player free-for-all (every seat is an AI). Reports the winner by
+ * land control plus pure compute timing — used to verify 3-4 AI behaviour and
+ * that per-turn AI compute stays within budget at large board sizes.
+ */
+export async function playFreeForAll(cfg: FreeForAllConfig): Promise<FreeForAllResult> {
+  const n = cfg.difficulties.length;
+  const seats = ALL_SEATS.slice(0, n);
+  const rng = mulberry32(cfg.seed);
+  const origRandom = Math.random;
+  Math.random = rng;
+  __setExpertWeightsOverride(null);
+  try {
+    const tiles = generateHexGrid(cfg.tiles, n);
+    const tileMap = new Map<string, HexTile>(tiles.map((t) => [t.key, t]));
+    // generateHexGrid labels seats player,ai1,..,ai(n-1); shift to ai1..aiN.
+    const remap: Record<string, TerritoryOwner> = { player: "ai1" };
+    for (let i = 1; i < n; i++) remap[`ai${i}`] = `ai${i + 1}` as TerritoryOwner;
+    for (const t of tileMap.values()) {
+      if (remap[t.owner]) t.owner = remap[t.owner];
+    }
+
+    const entities = new Map<string, EntityType>();
+    for (const t of tileMap.values()) {
+      if (!seats.includes(t.owner as TerritoryOwner)) continue;
+      if (t.terrain === "mountain" || t.terrain === "lake") continue;
+      if (rng() < 0.1) entities.set(t.key, "rebel");
+    }
+    const cities = new Set<string>(tiles.filter((t) => t.isCity).map((t) => t.key));
+
+    const ws: AiWorkingState = {
+      tileMap,
+      entities,
+      balances: new Map(),
+      liveOwnerMap: new Map(),
+      graveyard: new Set(),
+      ruins: new Set(),
+      cities,
+      spentUnits: new Set(),
+      partialMoves: new Map(),
+      attacksUsed: new Map(),
+      combatSpentUnits: new Set(),
+      freeTowerUsed: new Map(),
+    };
+    const diffByOwner: Record<string, Difficulty> = {};
+    seats.forEach((s, i) => (diffByOwner[s] = cfg.difficulties[i]));
+    const cbs = makeHeadlessCbs();
+
+    let computeMs = 0;
+    let ownerTurns = 0;
+    let turn = 1;
+    for (; turn <= cfg.maxTurns; turn++) {
+      if (turn >= 3) creditIncome(ws, diffByOwner, cfg.expertIncomeBonus ?? false, seats);
+      for (const owner of seats) {
+        if (landTiles(ws, owner) === 0) continue;
+        ws.spentUnits = new Set();
+        ws.partialMoves = new Map();
+        ws.attacksUsed = new Map();
+        ws.combatSpentUnits = new Set();
+        const t0 = performance.now();
+        await runAiTurn(ws, cbs, [owner], turn, diffByOwner[owner]);
+        computeMs += performance.now() - t0;
+        ownerTurns++;
+      }
+      const alive = seats.filter((s) => landTiles(ws, s) > 0);
+      if (alive.length <= 1) {
+        turn++;
+        break;
+      }
+    }
+
+    const land: Record<string, number> = {};
+    let best: TerritoryOwner | null = null;
+    let bestN = -1;
+    let tie = false;
+    for (const s of seats) {
+      land[s] = landTiles(ws, s);
+      if (land[s] > bestN) {
+        bestN = land[s];
+        best = s;
+        tie = false;
+      } else if (land[s] === bestN) {
+        tie = true;
+      }
+    }
+    return {
+      winner: tie || !best ? "draw" : best,
+      land,
+      turns: Math.min(turn, cfg.maxTurns),
+      computeMs,
+      ownerTurns,
+    };
+  } finally {
+    Math.random = origRandom;
+    __setExpertWeightsOverride(null);
+  }
 }
 
 /**
