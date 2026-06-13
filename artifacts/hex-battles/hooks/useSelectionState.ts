@@ -8,10 +8,10 @@ import {
   getValidMoves,
   getMaxEnemyZoC,
   unitMovement,
-  unitCanMerge,
   isCavalry,
   cavalryMoveKind,
 } from "@/utils/hexGrid";
+import { mergeResult } from "@/logic/gameLogic";
 import { computeSelectionBorderEdges } from "@/utils/borderEdges";
 
 interface SelectionStateParams {
@@ -99,7 +99,6 @@ export function useSelectionState({
     if (!tile || tile.owner !== "player") return new Set();
     const entityId = entities.get(selectedEntityKey);
     if (!entityId || !ENTITY_META[entityId].isUnit) return new Set();
-    const movingStrength = ENTITY_META[entityId].strength;
     const remaining = partialMoves.get(selectedEntityKey) ?? unitMovement(entityId);
     const raw = getValidMoves(
       selectedEntityKey,
@@ -110,18 +109,17 @@ export function useSelectionState({
       remaining,
       combatSpentUnits,
     );
-    // Remove ally unit tiles that aren't a legal merge target: combined strength > 3,
-    // dest is combat-spent, or either unit can't merge (e.g. cavalry). Landing on an
-    // ally that can't be merged with would otherwise overwrite it.
+    // Remove ally unit tiles that aren't a legal merge target: no valid merge
+    // result (combined strength too high, or cross-track e.g. cavalry + infantry)
+    // or the destination is combat-spent. Landing on an ally that can't be merged
+    // with would otherwise overwrite it.
     for (const k of raw) {
       const destTile = activeTileMap.get(k);
       if (destTile?.owner !== "player") continue;
       const destEntity = entities.get(k);
       if (!destEntity || !ENTITY_META[destEntity].isUnit) continue;
       const legalMerge =
-        unitCanMerge(entityId) &&
-        unitCanMerge(destEntity) &&
-        movingStrength + ENTITY_META[destEntity].strength <= 3 &&
+        mergeResult(entityId, destEntity) !== null &&
         !combatSpentUnits.has(k);
       if (!legalMerge) raw.delete(k);
     }

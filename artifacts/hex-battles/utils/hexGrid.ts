@@ -80,16 +80,6 @@ export function cavalryMayEnter(
   return true;
 }
 
-/**
- * Whether two units may merge. Merging maps combined strength back onto an
- * infantry type via STRENGTH_TO_UNIT, so special units (e.g. cavalry with the
- * charge ability) are excluded — merging them would silently convert them into
- * plain infantry.
- */
-export function unitCanMerge(entity: EntityType): boolean {
-  return ENTITY_META[entity].isUnit && unitMaxAttacks(entity) === 1;
-}
-
 export const TERRAIN_INCOME: Record<TerrainType, number> = {
   grass:    2,
   desert:   1,

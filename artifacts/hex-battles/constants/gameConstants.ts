@@ -25,6 +25,15 @@ export const STRENGTH_TO_UNIT: Record<number, EntityType> = {
   3: "swordsman",
 };
 
+// Cavalry merge track, parallel to STRENGTH_TO_UNIT. Cavalry keeps its own
+// upgrade line, so two scouts (strength 1) merge into a knight (strength 2)
+// rather than collapsing into an infantry unit. There is no strength-3 cavalry,
+// so only scout + scout is a valid cavalry merge.
+export const STRENGTH_TO_CAVALRY: Record<number, EntityType> = {
+  1: "scout",
+  2: "knight",
+};
+
 export const PURCHASABLES = (Object.keys(ENTITY_META) as EntityType[])
   .filter((id) => id !== "rebel")
   .map((id) => ({

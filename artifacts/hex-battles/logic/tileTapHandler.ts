@@ -11,7 +11,6 @@ import {
   recalculateTerritoriesForCapture,
   unitMovement,
   unitMaxAttacks,
-  unitCanMerge,
   cavalryMoveKind,
 } from "@/utils/hexGrid";
 import {
@@ -19,7 +18,7 @@ import {
   advanceCombatSpent,
   applySingleHexPenalty,
   isChargeAttack,
-  mergedUnitType,
+  mergeResult,
   resolveMovedUnitMoves,
 } from "@/logic/gameLogic";
 
@@ -163,27 +162,15 @@ export function handleTileTapLogic(params: TileTapParams): void {
     const newEntities = new Map(entities);
     const movingUnit = newEntities.get(selectedEntityKey)!;
     const existingUnit = newEntities.get(key);
+    const mergeInto = existingUnit ? mergeResult(movingUnit, existingUnit) : null;
     const isMerge =
-      !!existingUnit &&
-      existingUnit !== "city" &&
-      existingUnit !== "rebel" &&
-      existingUnit !== "bridge" &&
-      ENTITY_META[existingUnit].isUnit &&
-      unitCanMerge(movingUnit) &&
-      unitCanMerge(existingUnit) &&
+      mergeInto !== null &&
       activeTileMap.get(key)?.owner === "player" &&
-      ENTITY_META[movingUnit].strength +
-        ENTITY_META[existingUnit].strength <=
-        3 &&
       !combatSpentUnits.has(key);
 
     if (isMerge) {
-      const merged = mergedUnitType(
-        ENTITY_META[movingUnit].strength,
-        ENTITY_META[existingUnit!].strength,
-      );
       newEntities.delete(selectedEntityKey);
-      newEntities.set(key, merged);
+      newEntities.set(key, mergeInto!);
     } else {
       newEntities.delete(key);
       newEntities.delete(selectedEntityKey);
@@ -393,14 +380,11 @@ export function handleTileTapLogic(params: TileTapParams): void {
       existingOnTile !== "bridge" &&
       ENTITY_META[existingOnTile].isUnit &&
       activeTileMap.get(key)?.owner === "player";
-    const canMerge =
-      armedIsUnit &&
-      existingIsAllyUnit &&
-      unitCanMerge(armedEntityId) &&
-      unitCanMerge(existingOnTile!) &&
-      ENTITY_META[armedEntityId].strength +
-        ENTITY_META[existingOnTile!].strength <=
-        3;
+    const mergeBuyInto =
+      armedIsUnit && existingIsAllyUnit
+        ? mergeResult(armedEntityId, existingOnTile!)
+        : null;
+    const canMerge = mergeBuyInto !== null;
     const canOverwriteRebel = armedIsUnit && existingOnTile === "rebel";
     // A charge unit (maxAttacks > 1) bought directly onto a rebel spends one
     // attack but stays active so it can charge on and attack again, mirroring
@@ -458,11 +442,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
         const newSpentUnits = new Set(spentUnits);
         const newPartialMoves = new Map(partialMoves);
         if (canMerge) {
-          const merged = mergedUnitType(
-            ENTITY_META[armedEntityId].strength,
-            ENTITY_META[existingOnTile!].strength,
-          );
-          newEntities.set(key, merged);
+          newEntities.set(key, mergeBuyInto!);
           const placedRange = unitMovement(armedEntityId);
           const existingRemaining =
             newPartialMoves.get(key) ?? (newSpentUnits.has(key) ? 0 : placedRange);
