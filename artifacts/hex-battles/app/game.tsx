@@ -848,12 +848,14 @@ export default function GameScreen() {
     aiStateMap,
   });
 
-  // Dev: owned-tile count per player (You + each AI), shown only in dev mode.
+  // Dev: owned land-tile count per player (You + each AI), shown only in dev
+  // mode. Excludes lakes/bridges and mountains — only land territory counts.
   const devTileCounts = useMemo(() => {
     if (!isDeveloperModeActive) return [];
     const counts = new Map<TerritoryOwner, number>();
     for (const t of activeTileMap.values()) {
       if (t.owner === "neutral") continue;
+      if (t.terrain === "lake" || t.terrain === "mountain") continue;
       counts.set(t.owner, (counts.get(t.owner) ?? 0) + 1);
     }
     const order: TerritoryOwner[] = ["player", ...aiOwners];
