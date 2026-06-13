@@ -34,9 +34,17 @@ import type { AiDecisionExec } from "@/logic/aiStrategy";
 const OPPONENT_OWNERS: TerritoryOwner[] = ["player", "ai1", "ai2", "ai3", "ai4", "ai5"];
 
 export interface EvalWeights {
+  /** Reward per point of gross territory income (drives expansion). */
   income: number;
   reserves: number;
   reservesCap: number;
+  /** Reserve level (per territory) below which a cash-buffer penalty kicks in. */
+  bufferThreshold: number;
+  /** Penalty per gold a territory's reserve sits below `bufferThreshold`. */
+  buffer: number;
+  /** Penalty per point of negative net income (asymmetric — healthy armies free). */
+  deficitMag: number;
+  /** Flat penalty per territory currently running a deficit. */
   bankruptcyPenalty: number;
   unitStrength: number;
   fortification: number;
@@ -50,6 +58,9 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   income: 10,
   reserves: 0.3,
   reservesCap: 30,
+  bufferThreshold: 12,
+  buffer: 1,
+  deficitMag: 6,
   bankruptcyPenalty: 15,
   unitStrength: 2,
   fortification: 3,
@@ -91,6 +102,8 @@ export function evaluatePosition(
   // ── Economy: income, reserves, per-territory deficit penalty ──
   let income = 0;
   let reserves = 0;
+  let bufferShortfall = 0;
+  let deficitMag = 0;
   let deficitCount = 0;
   const visited = new Set<string>();
   for (const t of tileMap.values()) {
@@ -104,12 +117,18 @@ export function evaluatePosition(
     const tid = getTerritoryId(terr);
     const bal = tid ? balances.get(tid) ?? 0 : 0;
     reserves += Math.max(-w.reservesCap, Math.min(bal, w.reservesCap));
+    bufferShortfall += Math.max(0, w.bufferThreshold - bal);
     const terrIncome = terr.reduce((s, x) => {
       if (entities.get(x.key) === "rebel") return s;
       return s + (TERRAIN_INCOME[x.terrain] ?? 0) + (cities.has(x.key) ? CITY_BONUS : 0);
     }, 0);
     income += terrIncome;
-    if (terrIncome - calcTerritoryUpkeep(terr, entities) < 0) deficitCount += 1;
+    const net = terrIncome - calcTerritoryUpkeep(terr, entities);
+    // Asymmetric: only deficits are penalised; a profitable army is free.
+    if (net < 0) {
+      deficitMag += -net;
+      deficitCount += 1;
+    }
   }
 
   // ── Military: unit strength, fortifications, border presence ──
@@ -175,6 +194,8 @@ export function evaluatePosition(
   return (
     income * w.income +
     reserves * w.reserves -
+    bufferShortfall * w.buffer -
+    deficitMag * w.deficitMag -
     deficitCount * w.bankruptcyPenalty +
     unitStrength * w.unitStrength +
     fortification * w.fortification +
@@ -508,12 +529,19 @@ export function generateCandidateActions(
 
 const SCORE_EPSILON = 1e-6;
 
+// Tuning hook: the self-play harness can override the active weights to search
+// for strong values without recompiling. null ⇒ use DEFAULT_WEIGHTS.
+let WEIGHTS_OVERRIDE: EvalWeights | null = null;
+export function __setExpertWeightsOverride(w: EvalWeights | null): void {
+  WEIGHTS_OVERRIDE = w;
+}
+
 export async function runExpertTerritoryDecisionLoop(
   startTileKey: string,
   ctx: AiContext,
   exec: AiDecisionExec,
   isTurnActive: () => boolean,
-  weights: EvalWeights = DEFAULT_WEIGHTS,
+  weights: EvalWeights = WEIGHTS_OVERRIDE ?? DEFAULT_WEIGHTS,
 ): Promise<void> {
   const owner = ctx.aiOwner;
   let iter = 0;
