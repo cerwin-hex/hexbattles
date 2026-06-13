@@ -1,0 +1,238 @@
+import { describe, it, expect } from "vitest";
+import {
+  evaluatePosition,
+  simulateAction,
+  generateCandidateActions,
+  runExpertTerritoryDecisionLoop,
+  type SimState,
+  type ExpertAction,
+} from "@/logic/aiExpert";
+import type { AiDecisionExec } from "@/logic/aiStrategy";
+import type { AiContext } from "@/logic/aiHelpers";
+import type { HexTile, EntityType, TerritoryOwner } from "@/types";
+import { getContiguousTerritory, getTerritoryId } from "@/utils/hexGrid";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function makeTile(
+  q: number,
+  r: number,
+  owner: TerritoryOwner,
+  terrain: HexTile["terrain"] = "grass",
+): HexTile {
+  return { q, r, key: `${q},${r}`, owner, terrain, cityBuffer: false, isCity: false };
+}
+
+function makeTileMap(tiles: HexTile[]): Map<string, HexTile> {
+  return new Map(tiles.map((t) => [t.key, t]));
+}
+
+function simState(tileMap: Map<string, HexTile>, entities: Map<string, EntityType>): SimState {
+  return { tileMap, entities, balances: new Map(), cities: new Set() };
+}
+
+function makeCtx(
+  tileMap: Map<string, HexTile>,
+  entities: Map<string, EntityType>,
+  owner: TerritoryOwner,
+  balances: Map<string, number>,
+): AiContext {
+  return {
+    tileMap,
+    entities,
+    balances,
+    cities: new Set(),
+    spentUnits: new Set(),
+    partialMoves: new Map(),
+    combatSpentUnits: new Set(),
+    aiOwner: owner,
+  };
+}
+
+// ─── evaluatePosition ───────────────────────────────────────────────────────
+
+describe("evaluatePosition", () => {
+  it("scores a larger territory higher than a smaller one", () => {
+    const big = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai1"),
+      makeTile(2, 0, "ai1"),
+    ]);
+    const small = makeTileMap([makeTile(0, 0, "ai1")]);
+    const sBig = evaluatePosition("ai1", big, new Map(), new Map(), new Set());
+    const sSmall = evaluatePosition("ai1", small, new Map(), new Map(), new Set());
+    expect(sBig).toBeGreaterThan(sSmall);
+  });
+
+  it("penalises a tile capturable by an adjacent stronger enemy (threat term)", () => {
+    // ai1 owns a 2-tile strip; one tile borders an enemy.
+    const tiles = [makeTile(0, 0, "ai1"), makeTile(1, 0, "ai1")];
+    const safeMap = makeTileMap(tiles);
+    const safe = evaluatePosition("ai1", safeMap, new Map(), new Map(), new Set());
+
+    // Now place a strong enemy unit on the tile adjacent to (1,0).
+    const threatMap = makeTileMap([...tiles, makeTile(2, 0, "ai2")]);
+    const enemyEntities = new Map<string, EntityType>([["2,0", "swordsman"]]);
+    const threatened = evaluatePosition("ai1", threatMap, enemyEntities, new Map(), new Set());
+    expect(threatened).toBeLessThan(safe);
+  });
+
+  it("prefers contiguous territory over the same tiles fragmented", () => {
+    // One connected 2-tile territory vs two disconnected single tiles.
+    const connected = makeTileMap([makeTile(0, 0, "ai1"), makeTile(1, 0, "ai1")]);
+    const fragmented = makeTileMap([makeTile(0, 0, "ai1"), makeTile(5, 5, "ai1")]);
+    const sConnected = evaluatePosition("ai1", connected, new Map(), new Map(), new Set());
+    const sFragmented = evaluatePosition("ai1", fragmented, new Map(), new Map(), new Set());
+    expect(sConnected).toBeGreaterThan(sFragmented);
+  });
+});
+
+// ─── simulateAction ─────────────────────────────────────────────────────────
+
+describe("simulateAction", () => {
+  it("flips ownership and removes the enemy entity on a capture move", () => {
+    const tileMap = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai2"),
+    ]);
+    const entities = new Map<string, EntityType>([
+      ["0,0", "swordsman"],
+      ["1,0", "peasant"],
+    ]);
+    const s = simState(tileMap, entities);
+    const after = simulateAction(s, { kind: "move", from: "0,0", to: "1,0" }, "ai1");
+    expect(after.tileMap.get("1,0")!.owner).toBe("ai1");
+    expect(after.entities.get("1,0")).toBe("swordsman");
+    expect(after.entities.has("0,0")).toBe(false);
+  });
+
+  it("reduces the acting territory balance by the buy cost", () => {
+    const tileMap = makeTileMap([makeTile(0, 0, "ai1"), makeTile(1, 0, "ai1")]);
+    const entities = new Map<string, EntityType>();
+    const balances = new Map<string, number>();
+    // discover the territory id the same way the eval does
+    const terr = getContiguousTerritory(tileMap, "0,0", "ai1", entities);
+    const tid = getTerritoryId(terr)!;
+    balances.set(tid, 50);
+    const s: SimState = { tileMap, entities, balances, cities: new Set() };
+    const after = simulateAction(
+      s,
+      { kind: "buy", unitType: "peasant", target: "1,0", cost: 10, outside: false },
+      "ai1",
+    );
+    expect(after.balances.get(tid)).toBe(40);
+    expect(after.entities.get("1,0")).toBe("peasant");
+  });
+
+  it("does not mutate the input state", () => {
+    const tileMap = makeTileMap([makeTile(0, 0, "ai1"), makeTile(1, 0, "ai2")]);
+    const entities = new Map<string, EntityType>([["0,0", "swordsman"]]);
+    const s = simState(tileMap, entities);
+    simulateAction(s, { kind: "move", from: "0,0", to: "1,0" }, "ai1");
+    expect(s.tileMap.get("1,0")!.owner).toBe("ai2");
+    expect(s.entities.get("0,0")).toBe("swordsman");
+  });
+});
+
+// ─── generateCandidateActions ───────────────────────────────────────────────
+
+describe("generateCandidateActions", () => {
+  it("yields a capture move for a unit adjacent to a capturable enemy tile", () => {
+    const tileMap = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai2"),
+    ]);
+    const entities = new Map<string, EntityType>([["0,0", "swordsman"]]);
+    const ctx = makeCtx(tileMap, entities, "ai1", new Map());
+    const terr = [tileMap.get("0,0")!];
+    const cands = generateCandidateActions(ctx, terr, 0);
+    const hasCapture = cands.some(
+      (c: ExpertAction) => c.kind === "move" && c.from === "0,0" && c.to === "1,0",
+    );
+    expect(hasCapture).toBe(true);
+  });
+
+  it("produces at least one buy candidate when the territory can afford it", () => {
+    const tileMap = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai1"),
+      makeTile(0, 1, "ai2"),
+    ]);
+    const entities = new Map<string, EntityType>();
+    const ctx = makeCtx(tileMap, entities, "ai1", new Map());
+    const terr = [tileMap.get("0,0")!, tileMap.get("1,0")!];
+    const cands = generateCandidateActions(ctx, terr, 100);
+    expect(cands.some((c: ExpertAction) => c.kind === "buy")).toBe(true);
+  });
+
+  it("never targets a mountain or lake tile for placement", () => {
+    const tileMap = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai1", "mountain"),
+      makeTile(0, 1, "ai1", "lake"),
+    ]);
+    const entities = new Map<string, EntityType>();
+    const ctx = makeCtx(tileMap, entities, "ai1", new Map());
+    const terr = Array.from(tileMap.values());
+    const cands = generateCandidateActions(ctx, terr, 100);
+    for (const c of cands) {
+      if (c.kind === "buy" || c.kind === "build") {
+        const t = tileMap.get(c.target)!;
+        // builds may target lake only for bridges
+        if (c.kind === "build" && c.buildingType === "bridge") continue;
+        expect(t.terrain).not.toBe("mountain");
+        expect(t.terrain).not.toBe("lake");
+      }
+    }
+  });
+});
+
+// ─── runExpertTerritoryDecisionLoop ─────────────────────────────────────────
+
+describe("runExpertTerritoryDecisionLoop", () => {
+  it("picks an available capture as its first action", async () => {
+    // ai1 swordsman next to an undefended enemy peasant tile worth capturing.
+    const tileMap = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai2"),
+      makeTile(2, 0, "ai2"),
+    ]);
+    const entities = new Map<string, EntityType>([
+      ["0,0", "swordsman"],
+      ["1,0", "peasant"],
+    ]);
+    const ctx = makeCtx(tileMap, entities, "ai1", new Map());
+
+    const calls: ExpertAction[] = [];
+    const exec: AiDecisionExec = {
+      // record then stop the loop so we inspect only the first decision
+      move: async (from, to) => {
+        calls.push({ kind: "move", from, to });
+        return false;
+      },
+      buy: async (unitType, target, cost, outside) => {
+        calls.push({ kind: "buy", unitType, target, cost, outside });
+        return false;
+      },
+      build: async (buildingType, target, cost) => {
+        calls.push({ kind: "build", buildingType, target, cost });
+        return false;
+      },
+      upgrade: async (target, to, cost) => {
+        calls.push({ kind: "upgrade", target, to, cost });
+        return false;
+      },
+      remove: async (target) => {
+        calls.push({ kind: "remove", target });
+        return false;
+      },
+      markSpent: () => {},
+      setTerritoryState: () => {},
+    };
+
+    await runExpertTerritoryDecisionLoop("0,0", ctx, exec, () => true);
+
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls[0]).toEqual({ kind: "move", from: "0,0", to: "1,0" });
+  });
+});

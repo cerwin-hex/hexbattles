@@ -26,6 +26,7 @@ import {
   dtFindMergeMove,
 } from "@/logic/aiHelpers";
 import type { AiContext } from "@/logic/aiHelpers";
+import { runExpertTerritoryDecisionLoop } from "@/logic/aiExpert";
 import type { AiState, Difficulty } from "@/types";
 
 // Unit purchase candidates for the AI, derived from ENTITY_META so new units are
@@ -1458,21 +1459,31 @@ export async function runAiTurn(
         cbs.state.setAiStateMap(new Map(next));
       };
 
-      await runAiTerritoryDecisionLoop(
-        startTile.key,
-        aiCtx,
-        {
-          move: dtExecMove,
-          buy: dtExecBuy,
-          upgrade: dtExecUpgrade,
-          build: dtExecBuild,
-          remove: dtExecRemove,
-          markSpent,
-          setTerritoryState,
-        },
-        () => cbs.refs.isTurnActive(),
-        difficulty,
-      );
+      const exec: AiDecisionExec = {
+        move: dtExecMove,
+        buy: dtExecBuy,
+        upgrade: dtExecUpgrade,
+        build: dtExecBuild,
+        remove: dtExecRemove,
+        markSpent,
+        setTerritoryState,
+      };
+      if (difficulty === "expert") {
+        await runExpertTerritoryDecisionLoop(
+          startTile.key,
+          aiCtx,
+          exec,
+          () => cbs.refs.isTurnActive(),
+        );
+      } else {
+        await runAiTerritoryDecisionLoop(
+          startTile.key,
+          aiCtx,
+          exec,
+          () => cbs.refs.isTurnActive(),
+          difficulty,
+        );
+      }
     }
   }
 
