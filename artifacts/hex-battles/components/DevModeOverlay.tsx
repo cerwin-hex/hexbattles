@@ -18,6 +18,8 @@ interface DevModeOverlayProps {
   setIsDeveloperModeActive: React.Dispatch<React.SetStateAction<boolean>>;
   topInset: number;
   aiDifficulty: Difficulty;
+  showAiDevLabels: boolean;
+  setShowAiDevLabels: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export function DevModeOverlay({
@@ -25,6 +27,8 @@ export function DevModeOverlay({
   setIsDeveloperModeActive,
   topInset,
   aiDifficulty,
+  showAiDevLabels,
+  setShowAiDevLabels,
 }: DevModeOverlayProps) {
   return (
     <View
@@ -33,43 +37,65 @@ export function DevModeOverlay({
         top: topInset + 4,
         right: 4,
         zIndex: 20,
-        flexDirection: "row",
-        alignItems: "center",
+        alignItems: "flex-end",
         gap: 4,
       }}
     >
-      {isDeveloperModeActive && (
-        <View
-          style={{
-            backgroundColor: "rgba(0,0,0,0.6)",
-            borderRadius: 4,
-            paddingHorizontal: 5,
-            paddingVertical: 2,
-          }}
-        >
-          <Text style={{ color: "#FFD700", fontSize: 11, fontWeight: "bold" }}>
-            {diffLabel(aiDifficulty)}
-          </Text>
-        </View>
-      )}
-      <TouchableOpacity
-        style={[
-          styles.devBtn,
-          isDeveloperModeActive ? styles.devBtnActive : styles.devBtnInactive,
-        ]}
-        onPress={() => setIsDeveloperModeActive((v) => !v)}
-      >
-        <Text
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+        {isDeveloperModeActive && (
+          <View
+            style={{
+              backgroundColor: "rgba(0,0,0,0.6)",
+              borderRadius: 4,
+              paddingHorizontal: 5,
+              paddingVertical: 2,
+            }}
+          >
+            <Text style={{ color: "#FFD700", fontSize: 11, fontWeight: "bold" }}>
+              {diffLabel(aiDifficulty)}
+            </Text>
+          </View>
+        )}
+        <TouchableOpacity
           style={[
-            styles.devBtnText,
-            isDeveloperModeActive
-              ? styles.devBtnTextActive
-              : styles.devBtnTextInactive,
+            styles.devBtn,
+            isDeveloperModeActive ? styles.devBtnActive : styles.devBtnInactive,
           ]}
+          onPress={() => setIsDeveloperModeActive((v) => !v)}
         >
-          DEV
-        </Text>
-      </TouchableOpacity>
+          <Text
+            style={[
+              styles.devBtnText,
+              isDeveloperModeActive
+                ? styles.devBtnTextActive
+                : styles.devBtnTextInactive,
+            ]}
+          >
+            DEV
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {isDeveloperModeActive && (
+        <TouchableOpacity
+          style={[
+            styles.devBtn,
+            showAiDevLabels ? styles.devBtnActive : styles.devBtnInactive,
+          ]}
+          onPress={() => setShowAiDevLabels((v) => !v)}
+        >
+          <Text
+            style={[
+              styles.devBtnText,
+              showAiDevLabels
+                ? styles.devBtnTextActive
+                : styles.devBtnTextInactive,
+            ]}
+          >
+            AI $ {showAiDevLabels ? "ON" : "OFF"}
+          </Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }

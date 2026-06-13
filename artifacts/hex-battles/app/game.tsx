@@ -363,6 +363,9 @@ export default function GameScreen() {
     new Map(),
   );
   const [isDeveloperModeActive, setIsDeveloperModeActive] = useState(false);
+  // Dev: AI economy labels (balance+income) default ON during the AI turn and
+  // OFF during the player's turn, but can be toggled manually within a turn.
+  const [showAiDevLabels, setShowAiDevLabels] = useState(false);
   const [isAiPaused, setIsAiPaused] = useState(false);
   const [isAiTurnDone, setIsAiTurnDone] = useState(false);
   const resumeAiRef = useRef<(() => void) | null>(null);
@@ -482,6 +485,12 @@ export default function GameScreen() {
   const aiStepHistoryRef = useRef<AiStepSnapshot[]>([]);
   const [aiHistoryIndex, setAiHistoryIndex] = useState(-1);
   const [aiHistoryLen, setAiHistoryLen] = useState(0);
+
+  // AI economy labels follow the turn by default: on during the AI turn, off on
+  // the player's turn. Manual toggles persist until the next turn flip.
+  useEffect(() => {
+    setShowAiDevLabels(isAiTurn);
+  }, [isAiTurn]);
 
   useEffect(() => {
     isDeveloperModeRef.current = isDeveloperModeActive;
@@ -838,6 +847,18 @@ export default function GameScreen() {
     tileDataMap,
     aiStateMap,
   });
+
+  // Dev: owned-tile count per player (You + each AI), shown only in dev mode.
+  const devTileCounts = useMemo(() => {
+    if (!isDeveloperModeActive) return [];
+    const counts = new Map<TerritoryOwner, number>();
+    for (const t of activeTileMap.values()) {
+      if (t.owner === "neutral") continue;
+      counts.set(t.owner, (counts.get(t.owner) ?? 0) + 1);
+    }
+    const order: TerritoryOwner[] = ["player", ...aiOwners];
+    return order.map((owner) => ({ owner, count: counts.get(owner) ?? 0 }));
+  }, [isDeveloperModeActive, activeTileMap, aiOwners]);
 
   const { moveHistory, setMoveHistory, pushHistory, handleUndo } = useMoveHistory({
     entities,
@@ -1305,7 +1326,7 @@ export default function GameScreen() {
             <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
               <Svg width={boardW} height={boardH}>
                 <DevEconomicSvgOverlays
-                  isDeveloperModeActive={isDeveloperModeActive}
+                  isDeveloperModeActive={isDeveloperModeActive && showAiDevLabels}
                   devEconomicOverlays={devEconomicOverlays}
                   hexSize={HEX_SIZE}
                 />
@@ -1343,12 +1364,52 @@ export default function GameScreen() {
         <Text style={styles.menuBtnText}>Menu</Text>
       </TouchableOpacity>
 
+      {__DEV__ && isDeveloperModeActive && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: topInset + 4,
+            left: 0,
+            right: 0,
+            alignItems: "center",
+            zIndex: 19,
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              gap: 8,
+              backgroundColor: "rgba(0,0,0,0.6)",
+              borderRadius: 4,
+              paddingHorizontal: 6,
+              paddingVertical: 2,
+            }}
+          >
+            {devTileCounts.map(({ owner, count }) => (
+              <Text
+                key={owner}
+                style={{
+                  color: ownerColorMaps.fills[owner] ?? "#FFFFFF",
+                  fontSize: 11,
+                  fontWeight: "bold",
+                }}
+              >
+                {owner === "player" ? "You" : owner.replace("ai", "AI")}:{count}
+              </Text>
+            ))}
+          </View>
+        </View>
+      )}
+
       {__DEV__ && (
         <DevModeOverlay
           isDeveloperModeActive={isDeveloperModeActive}
           setIsDeveloperModeActive={setIsDeveloperModeActive}
           topInset={topInset}
           aiDifficulty={aiDifficulty}
+          showAiDevLabels={showAiDevLabels}
+          setShowAiDevLabels={setShowAiDevLabels}
         />
       )}
 
