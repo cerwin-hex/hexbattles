@@ -17,7 +17,7 @@ import {
   isCavalry,
   cavalryMoveKind,
 } from "@/utils/hexGrid";
-import { advanceAttacksUsed, advanceCombatSpent, calcTerritoryUpkeep, isChargeAttack, mergeResult, resolveMovedUnitMoves } from "@/logic/gameLogic";
+import { advanceAttacksUsed, advanceCombatSpent, calcTerritoryUpkeep, effectiveRemaining, isChargeAttack, mergeResult, resolveMovedUnitMoves } from "@/logic/gameLogic";
 import {
   dtSplitScore,
   dtCaptureNegatesIncome,
@@ -1187,7 +1187,7 @@ export async function runAiTurn(
           const stepsUsed = getMoveCost(fromKey, toKey, prevTileMapSnapshot, prevEntitiesSnapshot);
           const prevRemaining = ws.partialMoves.get(fromKey) ?? maxRange;
           const remainingAfterMove = Math.max(0, prevRemaining - stepsUsed);
-          const destRemaining = ws.partialMoves.get(toKey) ?? maxRange;
+          const destRemaining = effectiveRemaining(toKey, ws.partialMoves, ws.spentUnits, maxRange);
           ws.partialMoves.delete(fromKey);
           // For a merge, the source tile empties out; mark it spent so it is not
           // re-evaluated. The merged unit lives at toKey.

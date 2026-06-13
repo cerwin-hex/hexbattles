@@ -6,6 +6,7 @@ import {
   initTerritoryBalances,
   mergeResult,
   resolveMovedUnitMoves,
+  effectiveRemaining,
   isChargeAttack,
   advanceAttacksUsed,
   advanceCombatSpent,
@@ -269,6 +270,25 @@ describe("applySingleHexPenalty", () => {
     applySingleHexPenalty(map, map, balances, entities2, graveyard, ruins);
 
     expect(balances.get("0,0")).toBe(30);
+  });
+});
+
+// ─── effectiveRemaining ───────────────────────────────────────────────────────
+
+describe("effectiveRemaining", () => {
+  it("returns the stored partial-move count when present", () => {
+    expect(effectiveRemaining("0,0", new Map([["0,0", 2]]), new Set(), 3)).toBe(2);
+  });
+
+  it("returns the full range for a fresh unit (no partial entry, not spent)", () => {
+    expect(effectiveRemaining("0,0", new Map(), new Set(), 3)).toBe(3);
+  });
+
+  it("returns 0 for a spent unit with no partial entry (the merge-into-spent bug)", () => {
+    // A spent unit is tracked in spentUnits with no partialMoves entry. Merging
+    // into it must NOT grant the merged unit a fresh movement budget, or a unit
+    // bought into an attack (spent) could merge and act again.
+    expect(effectiveRemaining("0,0", new Map(), new Set(["0,0"]), 3)).toBe(0);
   });
 });
 
