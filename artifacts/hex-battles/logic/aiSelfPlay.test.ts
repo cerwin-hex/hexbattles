@@ -39,14 +39,13 @@ describe("expert strength (self-play)", () => {
   );
 
   fullIt(
-    "beats super_hard when granted the same income bonus (smarter brain edge)",
+    "super_expert (smart brain + bonus economy) beats super_hard",
     async () => {
-      const r = await playSeries(32, "expert", "super_hard", {
+      const r = await playSeries(32, "super_expert", "super_hard", {
         tiles: 50,
         maxTurns: 45,
-        expertIncomeBonus: true,
       });
-      // Observed 22-10 (~69%); require > 55% over 32 games.
+      // Observed ~69%; require > 55% over 32 games.
       expect(r.winsA / r.games).toBeGreaterThan(0.55);
       expect(r.winsA).toBeGreaterThan(r.winsB);
     },
@@ -54,18 +53,17 @@ describe("expert strength (self-play)", () => {
   );
 
   fullIt(
-    "is the dominant seat in 4-AI free-for-alls (3-4 opponents)",
+    "super_expert is the dominant seat in 4-AI free-for-alls (3-4 opponents)",
     async () => {
-      // expert(ai1) vs super_hard, hard, medium across seeded maps.
+      // super_expert(ai1) vs super_hard, hard, medium across seeded maps.
       const wins: Record<string, number> = {};
       const N = 4;
       for (let s = 0; s < N; s++) {
         const r = await playFreeForAll({
           seed: 3000 + s,
           tiles: 80,
-          difficulties: ["expert", "super_hard", "hard", "medium"],
+          difficulties: ["super_expert", "super_hard", "hard", "medium"],
           maxTurns: 35,
-          expertIncomeBonus: true,
         });
         if (r.winner !== "draw") wins[r.winner] = (wins[r.winner] ?? 0) + 1;
       }

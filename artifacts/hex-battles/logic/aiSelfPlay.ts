@@ -78,19 +78,18 @@ function ownerStats(ws: AiWorkingState, owner: TerritoryOwner): OwnerStats {
 }
 
 /** Headless income/upkeep step — mirrors the AI branch of endTurnHandler. */
+/** Mirrors endTurnHandler: only the two "super" tiers get the income bonus. */
 function ownerGetsIncomeBonus(
   owner: TerritoryOwner,
   diffByOwner: Record<string, Difficulty>,
-  expertBonus: boolean,
 ): boolean {
   const d = diffByOwner[owner];
-  return d === "super_hard" || (d === "expert" && expertBonus);
+  return d === "super_hard" || d === "super_expert";
 }
 
 function creditIncome(
   ws: AiWorkingState,
   diffByOwner: Record<string, Difficulty>,
-  expertBonus: boolean,
   seats: TerritoryOwner[] = COMPETITORS,
 ): void {
   for (const owner of seats) {
@@ -107,7 +106,7 @@ function creditIncome(
         return s + TERRAIN_INCOME[t.terrain] + (ws.cities.has(t.key) ? CITY_BONUS : 0);
       }, 0);
       const landTileCount = territory.filter((t) => t.terrain !== "lake").length;
-      const incomeModifier = ownerGetsIncomeBonus(owner, diffByOwner, expertBonus)
+      const incomeModifier = ownerGetsIncomeBonus(owner, diffByOwner)
         ? landTileCount
         : 0;
       const upkeep = calcTerritoryUpkeep(territory, ws.entities);
@@ -192,8 +191,6 @@ export interface MatchConfig {
   maxTurns: number;
   /** Override expert eval weights for this match (tuning). */
   weights?: EvalWeights;
-  /** Give an `expert` seat the same per-turn income bonus as super_hard. */
-  expertIncomeBonus?: boolean;
   /** Optional per-turn diagnostic hook (after both seats have moved). */
   onTurn?: (turn: number, landA: number, landB: number) => void;
   /** Richer per-turn diagnostic hook with unit/fort/balance stats. */
@@ -254,7 +251,7 @@ export async function playMatch(cfg: MatchConfig): Promise<MatchResult> {
     let turn = 1;
     for (; turn <= cfg.maxTurns; turn++) {
       // AI income is credited from turn 3 onward (matches endTurnHandler cadence).
-      if (turn >= 3) creditIncome(ws, diffByOwner, cfg.expertIncomeBonus ?? false);
+      if (turn >= 3) creditIncome(ws, diffByOwner);
 
       for (const owner of COMPETITORS) {
         if (landTiles(ws, owner) === 0) continue;
@@ -302,7 +299,6 @@ export interface FreeForAllConfig {
   /** One difficulty per seat (length N, N seats labelled ai1..aiN). */
   difficulties: Difficulty[];
   maxTurns: number;
-  expertIncomeBonus?: boolean;
 }
 
 export interface FreeForAllResult {
@@ -367,7 +363,7 @@ export async function playFreeForAll(cfg: FreeForAllConfig): Promise<FreeForAllR
     let ownerTurns = 0;
     let turn = 1;
     for (; turn <= cfg.maxTurns; turn++) {
-      if (turn >= 3) creditIncome(ws, diffByOwner, cfg.expertIncomeBonus ?? false, seats);
+      if (turn >= 3) creditIncome(ws, diffByOwner, seats);
       for (const owner of seats) {
         if (landTiles(ws, owner) === 0) continue;
         ws.spentUnits = new Set();
@@ -426,7 +422,6 @@ export async function playSeries(
     maxTurns?: number;
     baseSeed?: number;
     weights?: EvalWeights;
-    expertIncomeBonus?: boolean;
   } = {},
 ): Promise<SeriesResult> {
   const tiles = opts.tiles ?? 50;
@@ -445,7 +440,6 @@ export async function playSeries(
       difficultyB: swap ? difficultyA : difficultyB,
       maxTurns,
       weights: opts.weights,
-      expertIncomeBonus: opts.expertIncomeBonus,
     });
     const aSeat: TerritoryOwner = swap ? "ai2" : "ai1";
     if (r.winner === "draw") draws++;

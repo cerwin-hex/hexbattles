@@ -1468,7 +1468,7 @@ export async function runAiTurn(
         markSpent,
         setTerritoryState,
       };
-      if (difficulty === "expert") {
+      if (difficulty === "expert" || difficulty === "super_expert") {
         await runExpertTerritoryDecisionLoop(
           startTile.key,
           aiCtx,

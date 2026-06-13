@@ -4,6 +4,24 @@
 **Branch:** `expert-ai-difficulty`
 **Status:** Approved direction (user AFK; authorized "skriv spec og plan og byg")
 
+## Addendum (2026-06-13, post-build): split into two tiers
+
+Per user request the single "expert" tier was split into two, both using the same
+eval-driven brain, differing only in economy:
+
+- **Expert** — smart brain, **no** income bonus (pure skill).
+- **Super Expert** (`super_expert`) — smart brain **+** super_hard's per-turn
+  land-count income bonus. The strongest tier.
+
+`endTurnHandler` grants the income bonus to `super_hard || super_expert` only.
+`runAiTurn` routes both `expert` and `super_expert` to `runExpertTerritoryDecisionLoop`.
+The menu now shows the four base tiers on the top row and **Expert / Super Expert on
+their own second row**. Self-play validation was re-pointed accordingly: the brain
+proof is `expert` vs `hard` (equal economy, 22–2); the top-tier proof is
+`super_expert` vs `super_hard` (~69%) and `super_expert` dominating 4-AI games. The
+old `expertIncomeBonus` harness flag was removed — the bonus is now intrinsic to the
+`super_*` difficulties, matching the game exactly.
+
 ## Goal
 
 Add a new top-tier `expert` AI difficulty that plays **measurably stronger** than

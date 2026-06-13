@@ -33,7 +33,7 @@ export interface BoardBounds {
   height: number;
 }
 
-export type Difficulty = "easy" | "medium" | "hard" | "super_hard" | "expert";
+export type Difficulty = "easy" | "medium" | "hard" | "super_hard" | "expert" | "super_expert";
 export type AiState = "attacking" | "defending";
 
 export interface BorderEdge {

@@ -291,31 +291,38 @@ export default function MainMenu() {
 
           <View style={styles.section}>
             <Text style={styles.label}>AI Difficulty</Text>
-            <View style={styles.pills}>
-              {([
+            {([
+              [
                 ['easy', null, 'Easy'],
                 ['medium', null, 'Medium'],
                 ['hard', null, 'Hard'],
                 ['super_hard', 'Super', 'Hard'],
+              ],
+              [
                 ['expert', null, 'Expert'],
-              ] as [Difficulty, string | null, string][]).map(([d, top, bottom]) => (
-                <TouchableOpacity
-                  key={d}
-                  style={[styles.diffPill, difficulty === d && styles.diffPillActive]}
-                  onPress={() => { Haptics.selectionAsync(); setDifficulty(d); }}
-                  activeOpacity={0.7}
-                >
-                  {top && (
-                    <Text style={[styles.diffText, styles.diffTextSuper, difficulty === d && styles.diffTextActive]}>
-                      {top}
+                ['super_expert', 'Super', 'Expert'],
+              ],
+            ] as [Difficulty, string | null, string][][]).map((row, rowIdx) => (
+              <View key={rowIdx} style={[styles.pills, rowIdx > 0 && styles.pillsRowGap]}>
+                {row.map(([d, top, bottom]) => (
+                  <TouchableOpacity
+                    key={d}
+                    style={[styles.diffPill, difficulty === d && styles.diffPillActive]}
+                    onPress={() => { Haptics.selectionAsync(); setDifficulty(d); }}
+                    activeOpacity={0.7}
+                  >
+                    {top && (
+                      <Text style={[styles.diffText, styles.diffTextSuper, difficulty === d && styles.diffTextActive]}>
+                        {top}
+                      </Text>
+                    )}
+                    <Text style={[styles.diffText, difficulty === d && styles.diffTextActive]}>
+                      {bottom}
                     </Text>
-                  )}
-                  <Text style={[styles.diffText, difficulty === d && styles.diffTextActive]}>
-                    {bottom}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ))}
           </View>
 
         </View>
@@ -455,6 +462,9 @@ const styles = StyleSheet.create({
     fontFamily: 'Cinzel_400Regular',
     color: '#A08A60',
     letterSpacing: 2,
+  },
+  pillsRowGap: {
+    marginTop: 6,
   },
   pills: {
     flexDirection: 'row',
