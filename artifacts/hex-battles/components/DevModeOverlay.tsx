@@ -5,6 +5,7 @@ import styles from "@/app/gameStyles";
 import type { Difficulty } from "@/types";
 
 function diffLabel(d: Difficulty): string {
+  if (d === "expert") return "Expert";
   if (d === "super_hard") return "S.Hard";
   if (d === "hard") return "Hard";
   if (d === "medium") return "Med";

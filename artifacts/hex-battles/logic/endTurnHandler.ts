@@ -202,6 +202,8 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
           );
         }, 0);
         const landTileCount = territory.filter(t => t.terrain !== "lake").length;
+        // super_hard is "hard + bonus income". expert is skill-based (smarter
+        // brain) and gets NO income bonus — it falls through to 0 here.
         const incomeModifier = aiDifficulty === "super_hard" ? landTileCount : 0;
         const upkeep = calcTerritoryUpkeep(territory, nextEntities);
         const current = nextBalances.get(territoryId) ?? 0;

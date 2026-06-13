@@ -297,6 +297,7 @@ export default function MainMenu() {
                 ['medium', null, 'Medium'],
                 ['hard', null, 'Hard'],
                 ['super_hard', 'Super', 'Hard'],
+                ['expert', null, 'Expert'],
               ] as [Difficulty, string | null, string][]).map(([d, top, bottom]) => (
                 <TouchableOpacity
                   key={d}
