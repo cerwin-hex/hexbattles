@@ -96,6 +96,7 @@ function makeBorderEdgeLayerProps(
   return {
     outerEdges: [],
     innerEdges: [],
+    showInnerEdges: false,
     hasSelection: false,
     selectionEdges: [],
     ...overrides,
@@ -153,6 +154,15 @@ describe("areBorderEdgeLayerEqual", () => {
     const selectionEdges: BorderEdge[] = [];
     const base = makeBorderEdgeLayerProps({ outerEdges, innerEdges, selectionEdges, hasSelection: false });
     const next = makeBorderEdgeLayerProps({ outerEdges, innerEdges, selectionEdges, hasSelection: true });
+    expect(areBorderEdgeLayerEqual(base, next)).toBe(false);
+  });
+
+  it("returns false when showInnerEdges flips", () => {
+    const outerEdges: BorderEdge[] = [];
+    const innerEdges: BorderEdge[] = [];
+    const selectionEdges: BorderEdge[] = [];
+    const base = makeBorderEdgeLayerProps({ outerEdges, innerEdges, selectionEdges, showInnerEdges: false });
+    const next = makeBorderEdgeLayerProps({ outerEdges, innerEdges, selectionEdges, showInnerEdges: true });
     expect(areBorderEdgeLayerEqual(base, next)).toBe(false);
   });
 });

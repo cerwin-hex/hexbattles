@@ -1262,6 +1262,7 @@ export default function GameScreen() {
               <BorderEdgeLayer
                 outerEdges={outerTerritoryEdges}
                 innerEdges={borderEdges}
+                showInnerEdges={showTerrainView}
                 hasSelection={hasSelection}
                 selectionEdges={selectionBorderEdges}
               />

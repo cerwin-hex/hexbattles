@@ -6,6 +6,13 @@ import { areBorderEdgeLayerEqual } from "@/components/layerEquality";
 export interface BorderEdgeLayerProps {
   outerEdges: BorderEdge[];
   innerEdges: BorderEdge[];
+  /**
+   * Whether to draw the owner-coloured inner boundary lines. True whenever the
+   * player-colour fill is hidden and terrain shows (a tile selection, or the
+   * dev-mode AI-turn terrain view), so ownership still reads via the coloured
+   * borders. Independent of `hasSelection` so the dev view gets them too.
+   */
+  showInnerEdges: boolean;
   hasSelection: boolean;
   selectionEdges: BorderEdge[];
 }
@@ -13,6 +20,7 @@ export interface BorderEdgeLayerProps {
 function BorderEdgeLayerInner({
   outerEdges,
   innerEdges,
+  showInnerEdges,
   hasSelection,
   selectionEdges,
 }: BorderEdgeLayerProps) {
@@ -30,7 +38,7 @@ function BorderEdgeLayerInner({
           strokeLinecap="round"
         />
       ))}
-      {hasSelection &&
+      {showInnerEdges &&
         innerEdges.map((edge, i) => (
           <Line
             key={i}
