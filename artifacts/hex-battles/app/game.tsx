@@ -1455,6 +1455,25 @@ export default function GameScreen() {
               </View>
             ))}
           </View>
+          <View
+            style={{
+              marginTop: 2,
+              backgroundColor: "rgba(0,0,0,0.6)",
+              borderRadius: 4,
+              paddingHorizontal: 6,
+              paddingVertical: 1,
+            }}
+          >
+            <Text
+              style={{
+                color: "#FFFFFF",
+                fontSize: 10,
+                fontWeight: "bold",
+              }}
+            >
+              Turn {turn}
+            </Text>
+          </View>
         </View>
       )}
 
