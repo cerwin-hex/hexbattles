@@ -435,6 +435,54 @@ export function simulateAction(s0: SimState, a: ExpertAction, owner: TerritoryOw
   }
 }
 
+/**
+ * The opponent's single most damaging immediate reply to the current board, from
+ * `owner`'s perspective: across every enemy unit, the highest-`tileValue` owned
+ * tile it can capture (strength beats the defending ZoC). Bounded to ONE capture
+ * — never a re-search of the opponent's whole turn. Returns the resulting state
+ * (with that capture applied) and the chosen move, or the unchanged state + null
+ * when no enemy can capture. Pure.
+ */
+export function opponentBestResponse(
+  owner: TerritoryOwner,
+  s: SimState,
+  w: EvalWeights = DEFAULT_WEIGHTS,
+): { state: SimState; move: ExpertAction | null } {
+  void w; // accepted for signature symmetry with evaluatePosition; valuation via tileValue
+  let bestFrom: string | null = null;
+  let bestTo: string | null = null;
+  let bestOwnerOfAttacker: TerritoryOwner | null = null;
+  let bestValue = -Infinity;
+  for (const [k, e] of s.entities) {
+    if (!ENTITY_META[e].isUnit) continue;
+    const t = s.tileMap.get(k);
+    if (!t || t.owner === owner || t.owner === "neutral") continue;
+    const enemyOwner = t.owner as TerritoryOwner;
+    const strength = ENTITY_META[e].strength;
+    const [kq, kr] = k.split(",").map(Number);
+    for (const { dir: [dq, dr] } of HEX_EDGES) {
+      const nk = tileKey(kq + dq, kr + dr);
+      const nt = s.tileMap.get(nk);
+      if (!nt || nt.owner !== owner) continue;
+      if (nt.terrain === "mountain" || nt.terrain === "lake") continue;
+      if (strength <= getMaxEnemyZoC(nk, enemyOwner, s.entities, s.tileMap)) continue;
+      const v = tileValue(nk, s.tileMap, s.entities, s.cities);
+      if (v > bestValue) {
+        bestValue = v;
+        bestFrom = k;
+        bestTo = nk;
+        bestOwnerOfAttacker = enemyOwner;
+      }
+    }
+  }
+  if (bestFrom === null || bestTo === null || bestOwnerOfAttacker === null) {
+    return { state: s, move: null };
+  }
+  const move: ExpertAction = { kind: "move", from: bestFrom, to: bestTo };
+  const state = simulateAction(s, move, bestOwnerOfAttacker);
+  return { state, move };
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // Candidate generation — must cover every category the heuristic loop handles
 // (moves, buys, builds, upgrades, removes) so expert has no blind spots.

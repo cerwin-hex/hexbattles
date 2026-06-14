@@ -4,6 +4,7 @@ import {
   simulateAction,
   generateCandidateActions,
   runExpertTerritoryDecisionLoop,
+  opponentBestResponse,
   DEFAULT_WEIGHTS,
   type SimState,
   type ExpertAction,
@@ -414,5 +415,54 @@ describe("runExpertTerritoryDecisionLoop", () => {
 
     const first = await firstExpertAction("0,0", ctx);
     expect(first).toEqual({ kind: "move", from: "0,0", to: "1,0" });
+  });
+});
+
+// ─── opponentBestResponse ────────────────────────────────────────────────────
+
+describe("opponentBestResponse", () => {
+  it("returns null when no enemy can capture an owned tile", () => {
+    // ai1 owns (0,0)-(1,0); ai2 owns (3,0) — not adjacent, no capture possible.
+    const tileMap = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai1"),
+      makeTile(3, 0, "ai2"),
+    ]);
+    const entities = new Map<string, EntityType>([["3,0", "swordsman"]]);
+    const res = opponentBestResponse("ai1", simState(tileMap, entities), DEFAULT_WEIGHTS);
+    expect(res.move).toBeNull();
+  });
+
+  it("picks the highest-value capturable owned tile as the counter", () => {
+    // ai1 owns (1,0) [bare grass] and (1,1) [holds a city — higher tileValue].
+    // An ai2 swordsman sits adjacent to BOTH at (2,0) and (2,1). It should
+    // choose to take the city tile (1,1), the more damaging capture.
+    const tileMap = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai1"),
+      makeTile(1, 1, "ai1"),
+      makeTile(2, 0, "ai2"),
+      makeTile(2, 1, "ai2"),
+    ]);
+    const entities = new Map<string, EntityType>([
+      ["2,0", "swordsman"],
+      ["2,1", "swordsman"],
+    ]);
+    const cities = new Set<string>(["1,1"]);
+    const s: SimState = { tileMap, entities, balances: new Map(), cities };
+    const res = opponentBestResponse("ai1", s, DEFAULT_WEIGHTS);
+    expect(res.move).not.toBeNull();
+    expect(res.move!.kind).toBe("move");
+    if (res.move!.kind === "move") expect(res.move!.to).toBe("1,1");
+    // The returned state has the city tile flipped to ai2.
+    expect(res.state.tileMap.get("1,1")!.owner).toBe("ai2");
+  });
+
+  it("does not treat a fortification/tower as an attacker", () => {
+    // Only a tower (non-unit) borders ai1 — towers don't move, so no counter.
+    const tileMap = makeTileMap([makeTile(0, 0, "ai1"), makeTile(1, 0, "ai2")]);
+    const entities = new Map<string, EntityType>([["1,0", "tower"]]);
+    const res = opponentBestResponse("ai1", simState(tileMap, entities), DEFAULT_WEIGHTS);
+    expect(res.move).toBeNull();
   });
 });
