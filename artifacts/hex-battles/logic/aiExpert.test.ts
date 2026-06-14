@@ -6,6 +6,7 @@ import {
   runExpertTerritoryDecisionLoop,
   opponentBestResponse,
   DEFAULT_WEIGHTS,
+  __setExpertSearchConfig,
   type SimState,
   type ExpertAction,
 } from "@/logic/aiExpert";
@@ -479,5 +480,12 @@ describe("opponentBestResponse", () => {
     ]);
     const res = opponentBestResponse("ai1", simState(tileMap, entities), DEFAULT_WEIGHTS);
     expect(res.move).toBeNull();
+  });
+});
+
+describe("__setExpertSearchConfig", () => {
+  it("is callable and resets to default with null", () => {
+    expect(() => __setExpertSearchConfig({ twoPly: false, k: 8 })).not.toThrow();
+    expect(() => __setExpertSearchConfig(null)).not.toThrow();
   });
 });

@@ -714,6 +714,20 @@ export function __setExpertWeightsOverride(w: EvalWeights | null): void {
   WEIGHTS_OVERRIDE = w;
 }
 
+export interface SearchConfig {
+  /** When true, rank the top-K candidates by their post-opponent-reply score. */
+  twoPly: boolean;
+  /** How many top 1-ply candidates get the expensive 2-ply reply pass. */
+  k: number;
+}
+
+export const DEFAULT_SEARCH: SearchConfig = { twoPly: true, k: 4 };
+
+let SEARCH_OVERRIDE: SearchConfig | null = null;
+export function __setExpertSearchConfig(c: SearchConfig | null): void {
+  SEARCH_OVERRIDE = c;
+}
+
 export async function runExpertTerritoryDecisionLoop(
   startTileKey: string,
   ctx: AiContext,
