@@ -228,10 +228,17 @@ describe("cavalry single-turn sweep (end-to-end)", () => {
     return n;
   }
 
-  it("expert knight captures >=2 open neutral tiles in a single turn", async () => {
+  it("expert knight captures exactly 2 tiles (the charge cap) and is then spent", async () => {
     // ai1 base: knight at (0,0) with a backing tile (0,1) so the territory is
-    // not a single penalised hex. A straight line of open neutral grass runs
-    // east — distances 1..4, all within the knight's movement of 5.
+    // not a single penalised hex. A straight line of FOUR open neutral grass
+    // tiles runs east — distances 1..4, all within the knight's movement of 5.
+    //
+    // The point of the test: a cavalry unit may make at most 2 combat captures
+    // per turn (maxAttacks: 2 → isChargeAttack stops after the 2nd), even though
+    // its movement of 5 could physically reach all four tiles. With NO money the
+    // AI cannot buy units onto the other tiles, so the territory gain measures
+    // ONLY the knight's own sweep. It must capture exactly 2 (1,0)+(2,0), end on
+    // (2,0) spent, and leave (3,0)+(4,0) neutral — the charge cap, not reach.
     const tiles: HexTile[] = [
       grass(0, 0, "ai1"), // knight start
       grass(0, 1, "ai1"), // backing tile (real contiguous territory)
@@ -259,21 +266,28 @@ describe("cavalry single-turn sweep (end-to-end)", () => {
       freeTowerUsed: new Map(),
     };
 
-    // Plenty of money so economy never blocks; open captures cost nothing, so
-    // only the starting territory's balance matters.
+    // Zero balance: open captures cost nothing, but NO unit can be bought, so the
+    // only way ai1 can gain ground is the knight's own movement-and-capture chain.
     const startTerr = getContiguousTerritory(tileMap, "0,0", "ai1", entities);
     const startTid = getTerritoryId(startTerr);
     expect(startTid).not.toBeNull();
-    ws.balances.set(startTid!, 999);
+    ws.balances.set(startTid!, 0);
 
     const before = countLand(ws, "ai1");
     await runOneAiTurnHeadless(ws, "ai1", 5, "expert");
     const after = countLand(ws, "ai1");
 
-    // The knight must have swept at least two new tiles in the single turn.
-    // (runAiTurn replaces ws.entities with fresh maps, so read from ws.)
-    expect(after - before).toBeGreaterThanOrEqual(2);
-    // And it must have left its start tile (it moved).
+    // Exactly two new tiles — the charge cap, isolated from any buying.
+    // (runAiTurn replaces ws.entities/tileMap with fresh maps, so read from ws.)
+    expect(after - before).toBe(2);
+    // The knight swept (1,0) then (2,0) and is now spent on (2,0).
     expect(ws.entities.get("0,0")).toBeUndefined();
+    expect(ws.entities.get("2,0")).toBe("knight");
+    expect(ws.tileMap.get("1,0")?.owner).toBe("ai1");
+    expect(ws.tileMap.get("2,0")?.owner).toBe("ai1");
+    // The tiles beyond the 2-capture cap remain neutral, even though movement (5)
+    // could have physically reached them — proving the cap is on captures, not reach.
+    expect(ws.tileMap.get("3,0")?.owner).toBe("neutral");
+    expect(ws.tileMap.get("4,0")?.owner).toBe("neutral");
   });
 });
