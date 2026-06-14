@@ -1,5 +1,5 @@
 import type { HexTile, EntityType, TerritoryOwner } from "@/types";
-import { HEX_EDGES, tileKey } from "@/utils/hexMath";
+import { HEX_EDGES, tileKey, hexDistance } from "@/utils/hexMath";
 import {
   ENTITY_META,
   UNIT_UPGRADE,
@@ -32,6 +32,9 @@ import type { AiDecisionExec } from "@/logic/aiStrategy";
 // ════════════════════════════════════════════════════════════════════════════
 
 const OPPONENT_OWNERS: TerritoryOwner[] = ["player", "ai1", "ai2", "ai3", "ai4", "ai5"];
+
+/** Hex range over which the `advance` gradient pulls idle units toward the enemy. */
+const ADVANCE_REACH = 6;
 
 export interface EvalWeights {
   /** Reward per point of gross territory income (drives expansion). */
@@ -81,6 +84,15 @@ export interface EvalWeights {
    * idle where they defend nothing.
    */
   frontline: number;
+  /**
+   * Gentle gradient pulling idle units toward the enemy. Each owned unit scores
+   * `max(0, ADVANCE_REACH - distToNearestEnemyTile)`, so a unit far from any
+   * front is drawn forward turn by turn. Small weight: this is a low-priority
+   * filler that only matters when a unit has nothing better to do, never
+   * overriding a capture or defence. `frontline` rewards arrival at the front;
+   * this rewards the march toward it (frontline is dist-1 only, a flat gate).
+   */
+  advance: number;
   /** Reward per owned-tile edge facing enemy territory (the contested front). */
   frontier: number;
   /** Reward per owned-tile edge facing void / mountain (a "covered back"). */
@@ -110,6 +122,7 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   enemyMilitary: 6,
   borderBonus: 1.5,
   frontline: 1,
+  advance: 0.5,
   frontier: 0.8,
   secured: 0.4,
   fragmentation: 2,
@@ -205,6 +218,14 @@ export function evaluatePosition(
   let breakthrough = 0;
   let assault = 0;
   let enemyMilitary = 0;
+  let advance = 0;
+  // Enemy-owned land tiles (targets the advance gradient pulls units toward).
+  const enemyCoords: Array<[number, number]> = [];
+  for (const t of tileMap.values()) {
+    if (t.owner !== owner && t.owner !== "neutral" && t.terrain !== "mountain") {
+      enemyCoords.push([t.q, t.r]);
+    }
+  }
   for (const [k, e] of entities) {
     const t = tileMap.get(k);
     if (!t) continue;
@@ -231,6 +252,16 @@ export function evaluatePosition(
       unitStrength += meta.strength;
       if (onBorder) borderBonus += meta.strength;
       if (enemyAdjacent) frontline += meta.strength;
+      // Advance gradient: a unit far from any enemy is drawn forward. Diminishing
+      // (capped at ADVANCE_REACH) so it never outweighs a real action.
+      if (enemyCoords.length > 0) {
+        let minD = Infinity;
+        for (const [eq, er] of enemyCoords) {
+          const d = hexDistance(kq, kr, eq, er);
+          if (d < minD) minD = d;
+        }
+        advance += Math.max(0, ADVANCE_REACH - minD);
+      }
       // Breakthrough: can this unit capture an adjacent non-owned tile (any)?
       // Assault: same, but only against a *defended* tile (ZoC ≥ 1) — rewards
       // concentrating force into a unit strong enough to break real resistance.
@@ -345,6 +376,7 @@ export function evaluatePosition(
     enemyMilitary * w.enemyMilitary +
     borderBonus * w.borderBonus +
     frontline * w.frontline +
+    advance * w.advance +
     frontier * w.frontier +
     secured * w.secured -
     clusters * w.fragmentation -
@@ -587,6 +619,31 @@ export function generateCandidateActions(
     });
   });
 
+  // Enemy land tiles + nearest-distance helper, for forward repositioning of
+  // idle rear units (the `advance` gradient's candidate side).
+  const enemyCoords: Array<[number, number]> = [];
+  for (const t of ctx.tileMap.values()) {
+    if (t.owner !== owner && t.owner !== "neutral" && t.terrain !== "mountain") {
+      enemyCoords.push([t.q, t.r]);
+    }
+  }
+  const distToEnemy = (key: string): number => {
+    const [q, r] = key.split(",").map(Number);
+    let m = Infinity;
+    for (const [eq, er] of enemyCoords) {
+      const d = hexDistance(q, r, eq, er);
+      if (d < m) m = d;
+    }
+    return m;
+  };
+  const onFront = (key: string): boolean => {
+    const [q, r] = key.split(",").map(Number);
+    return HEX_EDGES.some(({ dir: [dq, dr] }) => {
+      const nt = ctx.tileMap.get(tileKey(q + dq, r + dr));
+      return !!nt && nt.owner !== owner && nt.owner !== "neutral";
+    });
+  };
+
   // ── Moves: each available unit to each valid destination ──
   // Cap moves PER UNIT (not with a single shared counter), so a unit listed late
   // in availUnits — typically high-mobility cavalry whose whole value is a long
@@ -599,6 +656,10 @@ export function generateCandidateActions(
     let perUnit = 0;
     const range = ctx.partialMoves.get(uk) ?? unitMovement(ue);
     const vm = getValidMoves(uk, owner, ctx.entities, ctx.tileMap, ctx.spentUnits, range, ctx.combatSpentUnits);
+    // A unit already on the front never needs a forward reposition; only idle
+    // rear units (not enemy-adjacent) get advance candidates.
+    const uAdvanceEligible = enemyCoords.length > 0 && !onFront(uk);
+    const uDist = uAdvanceEligible ? distToEnemy(uk) : 0;
     for (const mk of vm) {
       if (perUnit >= capPerKind || totalMoveCount >= globalMoveCeiling) break;
       const mt = ctx.tileMap.get(mk);
@@ -620,7 +681,11 @@ export function generateCandidateActions(
         const isMerge = !!destE && destE !== "bridge" && !!mergeResult(ue, destE);
         const isRebelClear = destE === "rebel";
         const isBorderReposition = borderTiles.some((b) => b.key === mk) && !destE;
-        if (isMerge || isRebelClear || isBorderReposition) {
+        // Forward reposition: an idle rear unit steps to an empty owned tile that
+        // is strictly closer to the nearest enemy (paired with the `advance`
+        // eval term, this marches stranded units toward the front).
+        const isAdvance = uAdvanceEligible && !destE && distToEnemy(mk) < uDist;
+        if (isMerge || isRebelClear || isBorderReposition || isAdvance) {
           out.push({ kind: "move", from: uk, to: mk });
           perUnit++;
           totalMoveCount++;

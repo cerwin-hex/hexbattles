@@ -270,6 +270,40 @@ describe("evaluatePosition", () => {
     });
     expect(neutralWith).toBe(neutralWithout);
   });
+
+  it("draws an idle unit toward the enemy (advance gradient)", () => {
+    // Same 6-tile line with an enemy at (6,0). The unit's only difference is its
+    // owned tile: (3,0) is closer to the enemy than (1,0). Both are interior
+    // (non-adjacent to the enemy), so border/frontline are equal — the advance
+    // gradient alone makes the closer position score higher.
+    const line = [
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai1"),
+      makeTile(2, 0, "ai1"),
+      makeTile(3, 0, "ai1"),
+      makeTile(4, 0, "ai1"),
+      makeTile(5, 0, "ai1"),
+      makeTile(6, 0, "ai2"),
+    ];
+    const w = { ...DEFAULT_WEIGHTS, advance: 10 };
+    const closer = evaluatePosition(
+      "ai1",
+      makeTileMap(line),
+      new Map<string, EntityType>([["3,0", "peasant"]]),
+      new Map(),
+      new Set(),
+      w,
+    );
+    const farther = evaluatePosition(
+      "ai1",
+      makeTileMap(line),
+      new Map<string, EntityType>([["1,0", "peasant"]]),
+      new Map(),
+      new Set(),
+      w,
+    );
+    expect(closer).toBeGreaterThan(farther);
+  });
 });
 
 // ─── simulateAction ─────────────────────────────────────────────────────────
@@ -534,6 +568,89 @@ describe("runExpertTerritoryDecisionLoop", () => {
     expect(first?.kind).toBe("move");
     if (first?.kind === "move") {
       expect(new Set([first.from, first.to])).toEqual(new Set(["0,0", "1,0"]));
+    }
+  });
+
+  it("upgrades a peasant to a warrior so it can capture an adjacent enemy tower", async () => {
+    // A peasant (str 1) on (1,0) sits next to an enemy tower (str 1) on (2,0).
+    // It cannot take the tower (needs str > 1). A fresh warrior is unaffordable
+    // (balance 19 < cost 20), so the ONLY path to a str-2 unit on the front is to
+    // upgrade the peasant. The 5-tile territory (income 10) sustains the warrior
+    // (upkeep 9), so the deficit term does not block it — the upgrade is the
+    // cheapest route to capturing the tower next turn.
+    const tileMap = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(0, 1, "ai1"),
+      makeTile(0, 2, "ai1"),
+      makeTile(0, 3, "ai1"),
+      makeTile(1, 0, "ai1"),
+      makeTile(2, 0, "ai2"),
+    ]);
+    const entities = new Map<string, EntityType>([
+      ["1,0", "peasant"],
+      ["2,0", "tower"],
+    ]);
+    const balances = new Map<string, number>();
+    const terr = getContiguousTerritory(tileMap, "0,0", "ai1", entities);
+    balances.set(getTerritoryId(terr)!, 19);
+    const ctx = makeCtx(tileMap, entities, "ai1", balances);
+
+    const first = await firstExpertAction("0,0", ctx);
+    expect(first).toEqual({ kind: "upgrade", target: "1,0", to: "warrior", cost: 10 });
+  });
+
+  it("upgrades a threatened tower to a castle rather than buying a unit to defend", async () => {
+    // A tower (str 1) on the front tile (1,0) is threatened by an adjacent enemy
+    // warrior (str 2): it can capture the tower (ZoC 1 < 2). Upgrading to a castle
+    // (str 2) raises (1,0)'s ZoC to 2, neutralising the threat — and a castle's
+    // upkeep (5) is far cheaper than a defending warrior's (9). With funds for
+    // either (balance 30), the expert should pick the cheaper, equally-strong
+    // castle upgrade over buying a str-2 unit purely to defend.
+    const tileMap = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(0, 1, "ai1"),
+      makeTile(0, 2, "ai1"),
+      makeTile(0, 3, "ai1"),
+      makeTile(1, 0, "ai1"),
+      makeTile(2, 0, "ai2"),
+    ]);
+    const entities = new Map<string, EntityType>([
+      ["1,0", "tower"],
+      ["2,0", "warrior"],
+    ]);
+    const balances = new Map<string, number>();
+    const terr = getContiguousTerritory(tileMap, "0,0", "ai1", entities);
+    balances.set(getTerritoryId(terr)!, 30);
+    const ctx = makeCtx(tileMap, entities, "ai1", balances);
+
+    const first = await firstExpertAction("0,0", ctx);
+    expect(first).toEqual({ kind: "upgrade", target: "1,0", to: "castle", cost: 15 });
+  });
+
+  it("advances an idle rear unit toward the enemy front", async () => {
+    // ai1 owns a 5-tile line (0,0)..(4,0); an enemy sits at (5,0), so (4,0) is the
+    // front. A lone peasant idles at the far-rear (0,0), facing only void — it
+    // defends nothing and cannot reach the front in one move. With nothing to
+    // capture or build (no funds), the expert should still march it forward
+    // instead of leaving it stranded on an irrelevant edge.
+    const tileMap = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai1"),
+      makeTile(2, 0, "ai1"),
+      makeTile(3, 0, "ai1"),
+      makeTile(4, 0, "ai1"),
+      makeTile(5, 0, "ai2"),
+    ]);
+    const entities = new Map<string, EntityType>([["0,0", "peasant"]]);
+    const ctx = makeCtx(tileMap, entities, "ai1", new Map());
+
+    const first = await firstExpertAction("0,0", ctx);
+    expect(first?.kind).toBe("move");
+    if (first?.kind === "move") {
+      expect(first.from).toBe("0,0");
+      // Destination must be strictly closer to the enemy at (5,0) than the start.
+      const dist = (k: string) => Math.abs(Number(k.split(",")[0]) - 5);
+      expect(dist(first.to)).toBeLessThan(dist("0,0"));
     }
   });
 
