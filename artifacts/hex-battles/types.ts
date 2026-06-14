@@ -56,6 +56,8 @@ export type MoveHistorySnapshot = {
   partialMoves: Map<string, number>;
   attacksUsed: Map<string, number>;
   freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
+  graveyard: Set<string>;
+  ruins: Set<string>;
   selectedTileKey: string | null;
 };
 

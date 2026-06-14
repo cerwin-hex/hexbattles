@@ -74,21 +74,39 @@ export function useDevEconomicOverlays({
         const central = findCentralTile(territory);
         if (!central) continue;
         const [centQ, centR] = central.key.split(",").map(Number);
-        const vacantTiles = territory.filter(
+        // Pick which tile the label sits on, in priority order:
+        //   1. an empty land tile (nothing on it), as central as possible
+        //   2. a city   3. a rebel   4. a fortification   5. any unit
+        // Cities live in their own Set, so "empty" must also exclude them.
+        const isFort = (e: EntityType | undefined) =>
+          e === "tower" || e === "castle";
+        const isUnit = (e: EntityType | undefined) =>
+          !!e && e !== "rebel" && e !== "bridge" && !isFort(e);
+        const emptyTiles = territory.filter(
           (t) =>
             t.terrain !== "mountain" &&
             t.terrain !== "lake" &&
-            !entities.has(t.key),
+            !entities.has(t.key) &&
+            !cities.has(t.key),
         );
-        const towerTiles = territory.filter(
-          (t) => entities.get(t.key) === "tower",
+        const cityTiles = territory.filter((t) => cities.has(t.key));
+        const rebelTiles = territory.filter(
+          (t) => entities.get(t.key) === "rebel",
         );
+        const fortTiles = territory.filter((t) => isFort(entities.get(t.key)));
+        const unitTiles = territory.filter((t) => isUnit(entities.get(t.key)));
         const labelCandidates =
-          vacantTiles.length > 0
-            ? vacantTiles
-            : towerTiles.length > 0
-              ? towerTiles
-              : [central];
+          emptyTiles.length > 0
+            ? emptyTiles
+            : cityTiles.length > 0
+              ? cityTiles
+              : rebelTiles.length > 0
+                ? rebelTiles
+                : fortTiles.length > 0
+                  ? fortTiles
+                  : unitTiles.length > 0
+                    ? unitTiles
+                    : [central];
         let labelTile = labelCandidates[0];
         let labelDist = hexDistance(centQ, centR, labelTile.q, labelTile.r);
         for (const t of labelCandidates) {

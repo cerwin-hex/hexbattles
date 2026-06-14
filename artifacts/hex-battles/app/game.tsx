@@ -853,13 +853,22 @@ export default function GameScreen() {
   const devTileCounts = useMemo(() => {
     if (!isDeveloperModeActive) return [];
     const counts = new Map<TerritoryOwner, number>();
+    // Denominator matches the 70% dominance trigger in winLossChecker: all
+    // playable tiles (non-mountain, non-lake) including neutral ones.
+    let playableTotal = 0;
     for (const t of activeTileMap.values()) {
-      if (t.owner === "neutral") continue;
       if (t.terrain === "lake" || t.terrain === "mountain") continue;
+      playableTotal += 1;
+      if (t.owner === "neutral") continue;
       counts.set(t.owner, (counts.get(t.owner) ?? 0) + 1);
     }
     const order: TerritoryOwner[] = ["player", ...aiOwners];
-    return order.map((owner) => ({ owner, count: counts.get(owner) ?? 0 }));
+    return order.map((owner) => {
+      const count = counts.get(owner) ?? 0;
+      const percent =
+        playableTotal > 0 ? Math.round((count / playableTotal) * 100) : 0;
+      return { owner, count, percent };
+    });
   }, [isDeveloperModeActive, activeTileMap, aiOwners]);
 
   const { moveHistory, setMoveHistory, pushHistory, handleUndo } = useMoveHistory({
@@ -873,6 +882,8 @@ export default function GameScreen() {
     partialMoves,
     attacksUsed,
     freeTowerUsedTiles,
+    graveyard,
+    ruins,
     selectedTileKey,
     isAiTurn,
     gameResult,
@@ -888,6 +899,8 @@ export default function GameScreen() {
     setPartialMoves,
     setAttacksUsed,
     setFreeTowerUsedTiles,
+    setGraveyard,
+    setRuins,
     setSelectedTileKey,
     setSelectedEntityKey,
     setArmedEntityId,
@@ -1392,17 +1405,28 @@ export default function GameScreen() {
               paddingVertical: 2,
             }}
           >
-            {devTileCounts.map(({ owner, count }) => (
-              <Text
-                key={owner}
-                style={{
-                  color: ownerColorMaps.fills[owner] ?? "#FFFFFF",
-                  fontSize: 11,
-                  fontWeight: "bold",
-                }}
-              >
-                {owner === "player" ? "You" : owner.replace("ai", "AI")}:{count}
-              </Text>
+            {devTileCounts.map(({ owner, count, percent }) => (
+              <View key={owner} style={{ alignItems: "center" }}>
+                <Text
+                  style={{
+                    color: ownerColorMaps.fills[owner] ?? "#FFFFFF",
+                    fontSize: 11,
+                    fontWeight: "bold",
+                  }}
+                >
+                  {owner === "player" ? "You" : owner.replace("ai", "AI")}:{count}
+                </Text>
+                <Text
+                  style={{
+                    color: ownerColorMaps.fills[owner] ?? "#FFFFFF",
+                    fontSize: 9,
+                    fontWeight: "bold",
+                    opacity: 0.85,
+                  }}
+                >
+                  {percent}%
+                </Text>
+              </View>
             ))}
           </View>
         </View>
