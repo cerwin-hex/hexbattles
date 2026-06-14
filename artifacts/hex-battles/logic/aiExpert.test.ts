@@ -452,8 +452,7 @@ describe("opponentBestResponse", () => {
     const s: SimState = { tileMap, entities, balances: new Map(), cities };
     const res = opponentBestResponse("ai1", s, DEFAULT_WEIGHTS);
     expect(res.move).not.toBeNull();
-    expect(res.move!.kind).toBe("move");
-    if (res.move!.kind === "move") expect(res.move!.to).toBe("1,1");
+    expect(res.move).toMatchObject({ kind: "move", to: "1,1" });
     // The returned state has the city tile flipped to ai2.
     expect(res.state.tileMap.get("1,1")!.owner).toBe("ai2");
   });
@@ -462,6 +461,22 @@ describe("opponentBestResponse", () => {
     // Only a tower (non-unit) borders ai1 — towers don't move, so no counter.
     const tileMap = makeTileMap([makeTile(0, 0, "ai1"), makeTile(1, 0, "ai2")]);
     const entities = new Map<string, EntityType>([["1,0", "tower"]]);
+    const res = opponentBestResponse("ai1", simState(tileMap, entities), DEFAULT_WEIGHTS);
+    expect(res.move).toBeNull();
+  });
+
+  it("does not let enemy cavalry 'capture' a fortified owned tile", () => {
+    // ai1 owns (1,0) holding a tower; an ai2 knight (cavalry) on (2,0) is adjacent
+    // but cavalry cannot assault buildings, so there is no valid counter.
+    const tileMap = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai1"),
+      makeTile(2, 0, "ai2"),
+    ]);
+    const entities = new Map<string, EntityType>([
+      ["1,0", "tower"],
+      ["2,0", "knight"],
+    ]);
     const res = opponentBestResponse("ai1", simState(tileMap, entities), DEFAULT_WEIGHTS);
     expect(res.move).toBeNull();
   });

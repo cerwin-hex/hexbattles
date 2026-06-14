@@ -465,6 +465,8 @@ export function opponentBestResponse(
       const nt = s.tileMap.get(nk);
       if (!nt || nt.owner !== owner) continue;
       if (nt.terrain === "mountain" || nt.terrain === "lake") continue;
+      const targetE = s.entities.get(nk);
+      if (isCavalry(e) && cavalryMoveKind(targetE) === "building") continue;
       if (strength <= getMaxEnemyZoC(nk, enemyOwner, s.entities, s.tileMap)) continue;
       const v = tileValue(nk, s.tileMap, s.entities, s.cities);
       if (v > bestValue) {
