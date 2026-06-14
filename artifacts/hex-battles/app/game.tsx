@@ -1133,7 +1133,6 @@ export default function GameScreen() {
       setEntities,
       setGraveyard,
       setRuins,
-      setTurn,
       setSelectedTileKey,
       setArmedEntityId,
       setSelectedEntityKey,

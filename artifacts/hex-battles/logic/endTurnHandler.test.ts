@@ -45,7 +45,6 @@ function makeParams(overrides: Partial<EndTurnParams> = {}): EndTurnParams {
     setEntities: vi.fn(),
     setGraveyard: vi.fn(),
     setRuins: vi.fn(),
-    setTurn: vi.fn(),
     setSelectedTileKey: vi.fn(),
     setArmedEntityId: vi.fn(),
     setSelectedEntityKey: vi.fn(),
@@ -67,22 +66,18 @@ describe("handleEndTurnLogic guard conditions", () => {
   it("does nothing when isAiTurn is true", () => {
     const params = makeParams({ isAiTurn: true });
     handleEndTurnLogic(params);
-    expect(params.setTurn).not.toHaveBeenCalled();
+    expect(params.setMoveHistory).not.toHaveBeenCalled();
   });
 
   it("does nothing when gameResult is not null", () => {
     const params = makeParams({ gameResult: "victory" });
     handleEndTurnLogic(params);
-    expect(params.setTurn).not.toHaveBeenCalled();
+    expect(params.setMoveHistory).not.toHaveBeenCalled();
   });
 
-  it("increments the turn counter", () => {
-    const params = makeParams({ turn: 3 });
-    handleEndTurnLogic(params);
-    const setter = params.setTurn as ReturnType<typeof vi.fn>;
-    const updater = setter.mock.calls[0][0];
-    expect(updater(3)).toBe(4);
-  });
+  // Note: the round counter is no longer advanced here — it advances when the AI
+  // phase completes (see aiStrategy.runAiTurn → cbs.state.advanceTurn). That
+  // behaviour is covered in logic/aiStrategy.test.ts.
 });
 
 // ─── Income cadence (characterization) ────────────────────────────────────────
