@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import {
   evaluatePosition,
   simulateAction,
@@ -487,5 +487,72 @@ describe("__setExpertSearchConfig", () => {
   it("is callable and resets to default with null", () => {
     expect(() => __setExpertSearchConfig({ twoPly: false, k: 8 })).not.toThrow();
     expect(() => __setExpertSearchConfig(null)).not.toThrow();
+  });
+});
+
+// ─── two-ply best-response ───────────────────────────────────────────────────
+
+describe("two-ply best-response", () => {
+  afterEach(() => __setExpertSearchConfig(null));
+
+  // Board geometry (flat-top axial; neighbours of (q,r):
+  //   (q±1,r),(q,r±1),(q+1,r-1),(q-1,r+1)).
+  //
+  //   ai1 owns an empty CITY at (0,0) that connects a left lobe
+  //   {(-1,0),(-2,0),(-1,1)} to a right lobe {(1,0)}. The lone ai1 swordsman sits
+  //   on the right lobe (1,0); from there its ZoC (strength 3) defends BOTH the
+  //   city (0,0) and its own tile against the ai2 swordsman parked at (1,-1).
+  //   An ai2 peasant on (2,0) is a tempting grab for the ai1 swordsman.
+  //
+  //   The trap: capturing (2,0) requires the swordsman to vacate (1,0). It still
+  //   covers (1,0) from (2,0), but the city (0,0) is no longer adjacent to any
+  //   ai1 unit — so the ai2 swordsman on (1,-1) walks straight onto the city,
+  //   slicing ai1's territory in two. The 1-ply threat term charges only the
+  //   city tile's flat value and so undervalues the loss; the realised
+  //   post-reply position is catastrophic (the cut fragments the territory and
+  //   strands the left lobe's income).
+  //
+  //   Verified divergence (DEFAULT_WEIGHTS, balances empty so no buy/build
+  //   candidates exist): base has no capturable ai1 tile, so
+  //   baseScore == baseScore2. The grab move (1,0)->(2,0) is the ONLY candidate
+  //   with a positive 1-ply delta (+0.2), but its post-opponent-reply delta is
+  //   ~-115; the safe interior step (1,0)->(0,0) is ~-1.5. Hence 1-ply picks the
+  //   grab and 2-ply refuses it (doing nothing keeps the defender on station).
+  function buildTrapCtx(): AiContext {
+    const tiles = [
+      makeTile(0, 0, "ai1"), // city connector (empty)
+      makeTile(-1, 0, "ai1"), // left lobe
+      makeTile(-2, 0, "ai1"),
+      makeTile(-1, 1, "ai1"),
+      makeTile(1, 0, "ai1"), // right lobe, holds the lone defender
+      makeTile(2, 0, "ai2"), // grab target (ai2 peasant)
+      makeTile(1, -1, "ai2"), // city attacker
+    ];
+    const tileMap = makeTileMap(tiles);
+    const entities = new Map<string, EntityType>([
+      ["1,0", "swordsman"],
+      ["1,-1", "swordsman"],
+      ["2,0", "peasant"],
+    ]);
+    const ctx = makeCtx(tileMap, entities, "ai1", new Map());
+    ctx.cities = new Set<string>(["0,0"]);
+    return ctx;
+  }
+
+  it("greedy 1-ply walks into the punished capture (grab that vacates the city defender)", async () => {
+    __setExpertSearchConfig({ twoPly: false, k: 8 });
+    const first = await firstExpertAction("0,0", buildTrapCtx());
+    // The defender abandons (1,0) to grab the peasant on (2,0).
+    expect(first).toEqual({ kind: "move", from: "1,0", to: "2,0" });
+  });
+
+  it("2-ply rejects the punished capture and keeps the defender on station", async () => {
+    __setExpertSearchConfig({ twoPly: true, k: 8 });
+    const first = await firstExpertAction("0,0", buildTrapCtx());
+    // It must NOT vacate the defender into the trap...
+    expect(first).not.toEqual({ kind: "move", from: "1,0", to: "2,0" });
+    // ...and concretely, here it does nothing rather than expose the city
+    // (every candidate has a negative post-reply delta).
+    expect(first).toBeNull();
   });
 });

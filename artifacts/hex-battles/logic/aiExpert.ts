@@ -736,6 +736,7 @@ export async function runExpertTerritoryDecisionLoop(
   weights: EvalWeights = WEIGHTS_OVERRIDE ?? DEFAULT_WEIGHTS,
 ): Promise<void> {
   const owner = ctx.aiOwner;
+  const search = SEARCH_OVERRIDE ?? DEFAULT_SEARCH;
   let iter = 0;
   while (iter++ < 100) {
     if (!isTurnActive()) return;
@@ -755,15 +756,50 @@ export async function runExpertTerritoryDecisionLoop(
     const baseScore = evaluatePosition(owner, base.tileMap, base.entities, base.balances, base.cities, weights);
 
     const candidates = generateCandidateActions(ctx, territory, bal);
-    let best: ExpertAction | null = null;
-    let bestDelta = SCORE_EPSILON;
-    for (const cand of candidates) {
+
+    // Pass 1 (cheap): 1-ply score every candidate.
+    const scored = candidates.map((cand) => {
       const after = simulateAction(base, cand, owner);
-      const score = evaluatePosition(owner, after.tileMap, after.entities, after.balances, after.cities, weights);
-      const delta = score - baseScore;
-      if (delta > bestDelta) {
-        bestDelta = delta;
-        best = cand;
+      const score1 = evaluatePosition(
+        owner, after.tileMap, after.entities, after.balances, after.cities, weights,
+      );
+      return { cand, after, score1 };
+    });
+
+    let best: ExpertAction | null = null;
+    if (!search.twoPly) {
+      // 1-ply: pick the best immediate-delta action (original behaviour).
+      let bestDelta = SCORE_EPSILON;
+      for (const sc of scored) {
+        const delta = sc.score1 - baseScore;
+        if (delta > bestDelta) {
+          bestDelta = delta;
+          best = sc.cand;
+        }
+      }
+    } else {
+      // Pass 2 (expensive, top-K only): score each by the position AFTER the
+      // opponent's single best reply. The enemy gets to reply whether or not we
+      // act, so compare against the do-nothing post-reply baseline.
+      const baseReplied = opponentBestResponse(owner, base, weights).state;
+      const baseScore2 = evaluatePosition(
+        owner, baseReplied.tileMap, baseReplied.entities, baseReplied.balances, baseReplied.cities, weights,
+      );
+      const topK = scored
+        .slice()
+        .sort((a, b) => b.score1 - a.score1)
+        .slice(0, Math.max(1, search.k));
+      let bestDelta = SCORE_EPSILON;
+      for (const sc of topK) {
+        const replied = opponentBestResponse(owner, sc.after, weights).state;
+        const score2 = evaluatePosition(
+          owner, replied.tileMap, replied.entities, replied.balances, replied.cities, weights,
+        );
+        const delta = score2 - baseScore2;
+        if (delta > bestDelta) {
+          bestDelta = delta;
+          best = sc.cand;
+        }
       }
     }
 
