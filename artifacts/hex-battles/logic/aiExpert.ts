@@ -442,13 +442,19 @@ export function simulateAction(s0: SimState, a: ExpertAction, owner: TerritoryOw
  * — never a re-search of the opponent's whole turn. Returns the resulting state
  * (with that capture applied) and the chosen move, or the unchanged state + null
  * when no enemy can capture. Pure.
+ *
+ * Limitation: the reply is ranked by `tileValue` (the value of the captured tile),
+ * not by the full drop in `evaluatePosition` it would cause. A low-value connector
+ * capture that fragments our territory is therefore under-weighted here. Scoring
+ * each enemy capture by re-evaluating the position would be faithful but costs an
+ * `evaluatePosition` per candidate reply — deferred for the turn-time budget.
  */
 export function opponentBestResponse(
   owner: TerritoryOwner,
   s: SimState,
   w: EvalWeights = DEFAULT_WEIGHTS,
 ): { state: SimState; move: ExpertAction | null } {
-  void w; // accepted for signature symmetry with evaluatePosition; valuation via tileValue
+  void w; // reserved for future weighting of tileValue; currently unused
   let bestFrom: string | null = null;
   let bestTo: string | null = null;
   let bestOwnerOfAttacker: TerritoryOwner | null = null;

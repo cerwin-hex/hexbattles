@@ -17,7 +17,7 @@ import {
 import { applySingleHexPenalty, calcTerritoryUpkeep } from "@/logic/gameLogic";
 import { runAiTurn } from "@/logic/aiStrategy";
 import type { AiWorkingState, AiTurnCallbacks } from "@/logic/aiStrategy";
-import { __setExpertWeightsOverride, type EvalWeights } from "@/logic/aiExpert";
+import { __setExpertWeightsOverride, __setExpertSearchConfig, type EvalWeights } from "@/logic/aiExpert";
 
 // ════════════════════════════════════════════════════════════════════════════
 // Headless AI-vs-AI self-play harness.
@@ -311,6 +311,7 @@ export async function playMatch(cfg: MatchConfig): Promise<MatchResult> {
   } finally {
     Math.random = origRandom;
     __setExpertWeightsOverride(null);
+    __setExpertSearchConfig(null);
   }
 }
 
@@ -436,6 +437,7 @@ export async function playFreeForAll(cfg: FreeForAllConfig): Promise<FreeForAllR
   } finally {
     Math.random = origRandom;
     __setExpertWeightsOverride(null);
+    __setExpertSearchConfig(null);
   }
 }
 
