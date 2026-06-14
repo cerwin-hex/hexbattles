@@ -528,13 +528,19 @@ export function generateCandidateActions(
   });
 
   // ── Moves: each available unit to each valid destination ──
-  let moveCount = 0;
+  // Cap moves PER UNIT (not with a single shared counter), so a unit listed late
+  // in availUnits — typically high-mobility cavalry whose whole value is a long
+  // multi-tile sweep — is never starved of candidates by earlier units. A global
+  // ceiling still bounds the total work.
+  let totalMoveCount = 0;
+  const globalMoveCeiling = capPerKind * 4;
   for (const [uk, ue] of availUnits) {
-    if (moveCount >= capPerKind) break;
+    if (totalMoveCount >= globalMoveCeiling) break;
+    let perUnit = 0;
     const range = ctx.partialMoves.get(uk) ?? unitMovement(ue);
     const vm = getValidMoves(uk, owner, ctx.entities, ctx.tileMap, ctx.spentUnits, range, ctx.combatSpentUnits);
     for (const mk of vm) {
-      if (moveCount >= capPerKind) break;
+      if (perUnit >= capPerKind || totalMoveCount >= globalMoveCeiling) break;
       const mt = ctx.tileMap.get(mk);
       if (!mt) continue;
       if (mt.owner !== owner) {
@@ -544,7 +550,8 @@ export function generateCandidateActions(
         const zoc = getMaxEnemyZoC(mk, owner, ctx.entities, ctx.tileMap);
         if (ENTITY_META[ue].strength <= zoc) continue;
         out.push({ kind: "move", from: uk, to: mk });
-        moveCount++;
+        perUnit++;
+        totalMoveCount++;
       } else {
         const destE = ctx.entities.get(mk);
         // own-tile move worth considering as: a merge, clearing a rebel (an owned
@@ -555,7 +562,8 @@ export function generateCandidateActions(
         const isBorderReposition = borderTiles.some((b) => b.key === mk) && !destE;
         if (isMerge || isRebelClear || isBorderReposition) {
           out.push({ kind: "move", from: uk, to: mk });
-          moveCount++;
+          perUnit++;
+          totalMoveCount++;
         }
       }
     }
