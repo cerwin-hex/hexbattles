@@ -139,6 +139,68 @@ describe("evaluatePosition", () => {
     });
     expect(withSecured).toBeGreaterThan(noSecured);
   });
+
+  it("penalises leaving an own city capturable by an adjacent enemy (assetThreat)", () => {
+    // ai1 owns (0,0)-(1,0) with a city on the exposed border tile (1,0); an enemy
+    // swordsman on (2,0) can take it (a city has no defensive ZoC of its own).
+    const map = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai1"),
+      makeTile(2, 0, "ai2"),
+    ]);
+    const entities = new Map<string, EntityType>([["2,0", "swordsman"]]);
+    const cities = new Set<string>(["1,0"]);
+    const withAsset = evaluatePosition("ai1", map, entities, new Map(), cities, {
+      ...DEFAULT_WEIGHTS,
+      assetThreat: 30,
+    });
+    const noAsset = evaluatePosition("ai1", map, entities, new Map(), cities, {
+      ...DEFAULT_WEIGHTS,
+      assetThreat: 0,
+    });
+    expect(withAsset).toBeLessThan(noAsset);
+  });
+
+  it("rewards a capture that splits the strongest enemy (enemyFragmentation, through the sim)", () => {
+    // ai2 holds a 5-tile line; (2,0) is its sole connector. ai1 has a swordsman
+    // adjacent to the connector (2,-1) and one adjacent to an end tile (4,-1).
+    // Capturing the connector must leave ai2 in two clusters; capturing the end
+    // leaves it in one. We assert the enemyFragmentation term's *contribution* is
+    // strictly larger for the connector capture — proving the sim actually split
+    // the enemy (the term is not dead).
+    const tiles = [
+      makeTile(0, 0, "ai2"),
+      makeTile(1, 0, "ai2"),
+      makeTile(2, 0, "ai2"),
+      makeTile(3, 0, "ai2"),
+      makeTile(4, 0, "ai2"),
+      makeTile(2, -1, "ai1"),
+      makeTile(4, -1, "ai1"),
+    ];
+    const s0: SimState = {
+      tileMap: makeTileMap(tiles),
+      entities: new Map<string, EntityType>([
+        ["2,-1", "swordsman"],
+        ["4,-1", "swordsman"],
+      ]),
+      balances: new Map(),
+      cities: new Set(),
+    };
+    const afterConnector = simulateAction(s0, { kind: "move", from: "2,-1", to: "2,0" }, "ai1");
+    const afterEnd = simulateAction(s0, { kind: "move", from: "4,-1", to: "4,0" }, "ai1");
+
+    const contribution = (s: SimState) =>
+      evaluatePosition("ai1", s.tileMap, s.entities, s.balances, s.cities, {
+        ...DEFAULT_WEIGHTS,
+        enemyFragmentation: 50,
+      }) -
+      evaluatePosition("ai1", s.tileMap, s.entities, s.balances, s.cities, {
+        ...DEFAULT_WEIGHTS,
+        enemyFragmentation: 0,
+      });
+
+    expect(contribution(afterConnector)).toBeGreaterThan(contribution(afterEnd));
+  });
 });
 
 // ─── simulateAction ─────────────────────────────────────────────────────────

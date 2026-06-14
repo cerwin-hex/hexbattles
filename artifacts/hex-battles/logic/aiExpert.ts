@@ -57,6 +57,10 @@ export interface EvalWeights {
   secured: number;
   fragmentation: number;
   threat: number;
+  /** Extra penalty per own city/fort tile left capturable by an adjacent enemy. */
+  assetThreat: number;
+  /** Reward per cluster the strongest opponent's territory is split into. */
+  enemyFragmentation: number;
   leader: number;
 }
 
@@ -76,6 +80,8 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   secured: 0.4,
   fragmentation: 2,
   threat: 4,
+  assetThreat: 8,
+  enemyFragmentation: 2,
   leader: 1.5,
 };
 
@@ -88,10 +94,16 @@ function tileValue(
   const t = tileMap.get(key);
   if (!t) return 0;
   const e = entities.get(key);
+  const isFort = e === "tower" || e === "castle";
   return (
     (TERRAIN_INCOME[t.terrain] ?? 0) +
     (cities.has(key) ? CITY_BONUS : 0) +
     (e && ENTITY_META[e].isUnit ? ENTITY_META[e].strength : 0) +
+    // A fortification's defensive strength is real value: losing the tile both
+    // hands the enemy ground and demolishes the fort. Without this a tower tile
+    // scored the same as bare grass, so the AI never prioritised protecting (or
+    // picking off) forts — exactly the gap a human exploits.
+    (isFort ? ENTITY_META[e as EntityType].strength : 0) +
     1
   );
 }
@@ -216,10 +228,19 @@ export function evaluatePosition(
     }
   }
   let threat = 0;
-  for (const v of threatened.values()) threat += v;
+  let assetThreat = 0;
+  for (const [nk, v] of threatened) {
+    threat += v;
+    const ae = entities.get(nk);
+    // A threatened tile that holds a city or fortification is a high-value loss
+    // (income / defence both gone). Count these so the AI prioritises shielding
+    // them — the defensive half of the human "bait + counterattack" play.
+    if (cities.has(nk) || ae === "tower" || ae === "castle") assetThreat += 1;
+  }
 
   // ── Leader pressure: suppress the strongest opponent (modest weight) ──
   let leaderIncome = 0;
+  let leaderOwner: TerritoryOwner | null = null;
   for (const o of OPPONENT_OWNERS) {
     if (o === owner) continue;
     let inc = 0;
@@ -228,8 +249,16 @@ export function evaluatePosition(
       if (entities.get(t.key) === "rebel") continue;
       inc += (TERRAIN_INCOME[t.terrain] ?? 0) + (cities.has(t.key) ? CITY_BONUS : 0);
     }
-    if (inc > leaderIncome) leaderIncome = inc;
+    if (inc > leaderIncome) {
+      leaderIncome = inc;
+      leaderOwner = o;
+    }
   }
+
+  // ── Enemy fragmentation: reward splitting the strongest opponent's territory.
+  // Capturing a tile that connects two of their clusters raises this count, so a
+  // cut move (exploiting a gap in their defence) outscores a plain grab. ──
+  const enemyClusters = leaderOwner ? dtCountClusters(leaderOwner, tileMap) : 0;
 
   const clusters = dtCountClusters(owner, tileMap);
 
@@ -247,6 +276,8 @@ export function evaluatePosition(
     secured * w.secured -
     clusters * w.fragmentation -
     threat * w.threat -
+    assetThreat * w.assetThreat +
+    enemyClusters * w.enemyFragmentation -
     leaderIncome * w.leader
   );
 }
