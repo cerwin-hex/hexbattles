@@ -304,6 +304,33 @@ describe("evaluatePosition", () => {
     );
     expect(closer).toBeGreaterThan(farther);
   });
+
+  it("values a scout's mobility over an equal-strength peasant (mobility term)", () => {
+    // 3 grass tiles (income 6) sustain a scout's upkeep (6) just as a peasant's
+    // (3), and a 20g reserve clears the buffer for both — so the deficit/buffer
+    // terms are equal and only mobility distinguishes the two.
+    const map = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(0, 1, "ai1"),
+      makeTile(0, 2, "ai1"),
+    ]);
+    const scoutEnts = new Map<string, EntityType>([["0,0", "scout"]]);
+    const peasantEnts = new Map<string, EntityType>([["0,0", "peasant"]]);
+    const balances = new Map<string, number>();
+    balances.set(getTerritoryId(getContiguousTerritory(map, "0,0", "ai1"))!, 20);
+    const withTerm = { ...DEFAULT_WEIGHTS, mobility: 10 };
+    const noTerm = { ...DEFAULT_WEIGHTS, mobility: 0 };
+    // With the term, the scout (movement 5 / 2 attacks) outscores the peasant…
+    expect(
+      evaluatePosition("ai1", map, scoutEnts, balances, new Set(), withTerm),
+    ).toBeGreaterThan(
+      evaluatePosition("ai1", map, peasantEnts, balances, new Set(), withTerm),
+    );
+    // …and without it they score identically (proves only mobility differs).
+    expect(
+      evaluatePosition("ai1", map, scoutEnts, balances, new Set(), noTerm),
+    ).toBe(evaluatePosition("ai1", map, peasantEnts, balances, new Set(), noTerm));
+  });
 });
 
 // ─── simulateAction ─────────────────────────────────────────────────────────
@@ -652,6 +679,30 @@ describe("runExpertTerritoryDecisionLoop", () => {
       const dist = (k: string) => Math.abs(Number(k.split(",")[0]) - 5);
       expect(dist(first.to)).toBeLessThan(dist("0,0"));
     }
+  });
+
+  it("buys a mobile scout over a cheaper peasant when the territory can sustain it", async () => {
+    // ai1 (income 6) can grab the neutral (1,0). With a healthy reserve (30) a
+    // scout (cost 15, upkeep 6) neither drains the cash buffer nor runs a deficit,
+    // so it is the sustainable choice — and its movement 5 / 2 attacks grab far
+    // more ground per turn than the cheaper peasant. The expert should prefer it
+    // rather than spamming peasants. (At tight cash the buffer penalty correctly
+    // still favours the cheaper peasant — this is the "saved enough" case.)
+    const tileMap = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(0, 1, "ai1"),
+      makeTile(0, 2, "ai1"),
+      makeTile(1, 0, "neutral"),
+    ]);
+    const entities = new Map<string, EntityType>();
+    const balances = new Map<string, number>();
+    const terr = getContiguousTerritory(tileMap, "0,0", "ai1", entities);
+    balances.set(getTerritoryId(terr)!, 30);
+    const ctx = makeCtx(tileMap, entities, "ai1", balances);
+
+    const first = await firstExpertAction("0,0", ctx);
+    expect(first?.kind).toBe("buy");
+    if (first?.kind === "buy") expect(first.unitType).toBe("scout");
   });
 
   it("captures toward the enemy before capturing toward the void", async () => {

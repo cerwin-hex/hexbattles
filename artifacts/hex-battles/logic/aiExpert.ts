@@ -11,8 +11,10 @@ import {
   getMaxEnemyZoC,
   recalculateTerritoriesForCapture,
   unitMovement,
+  unitMaxAttacks,
   isCavalry,
   cavalryMoveKind,
+  DEFAULT_MOVEMENT,
 } from "@/utils/hexGrid";
 import { calcTerritoryUpkeep, mergeResult } from "@/logic/gameLogic";
 import { dtCountClusters } from "@/logic/aiHelpers";
@@ -93,6 +95,16 @@ export interface EvalWeights {
    * this rewards the march toward it (frontline is dist-1 only, a flat gate).
    */
   advance: number;
+  /**
+   * Reward per point of a unit's *extra* mobility over base infantry — its
+   * movement above the default plus its attacks above one. A scout/knight grabs
+   * far more ground per turn than an equal-strength peasant/warrior, but the
+   * strength-only terms scored them identically (so the eval preferred the
+   * cheaper peasant). This makes the AI field cavalry when it can afford it
+   * instead of spamming peasants to crawl over empty ground. It does NOT
+   * implement cross-turn saving — that needs lookahead the greedy loop lacks.
+   */
+  mobility: number;
   /** Reward per owned-tile edge facing enemy territory (the contested front). */
   frontier: number;
   /** Reward per owned-tile edge facing void / mountain (a "covered back"). */
@@ -123,6 +135,7 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   borderBonus: 1.5,
   frontline: 1,
   advance: 0.5,
+  mobility: 1,
   frontier: 0.8,
   secured: 0.4,
   fragmentation: 2,
@@ -219,6 +232,7 @@ export function evaluatePosition(
   let assault = 0;
   let enemyMilitary = 0;
   let advance = 0;
+  let mobility = 0;
   // Enemy-owned land tiles (targets the advance gradient pulls units toward).
   const enemyCoords: Array<[number, number]> = [];
   for (const t of tileMap.values()) {
@@ -250,6 +264,7 @@ export function evaluatePosition(
     });
     if (meta.isUnit) {
       unitStrength += meta.strength;
+      mobility += (unitMovement(e) - DEFAULT_MOVEMENT) + (unitMaxAttacks(e) - 1);
       if (onBorder) borderBonus += meta.strength;
       if (enemyAdjacent) frontline += meta.strength;
       // Advance gradient: a unit far from any enemy is drawn forward. Diminishing
@@ -377,6 +392,7 @@ export function evaluatePosition(
     borderBonus * w.borderBonus +
     frontline * w.frontline +
     advance * w.advance +
+    mobility * w.mobility +
     frontier * w.frontier +
     secured * w.secured -
     clusters * w.fragmentation -
