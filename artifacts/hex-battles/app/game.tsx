@@ -523,6 +523,8 @@ export default function GameScreen() {
     setTerritoryBalances(snap.territoryBalances);
     setLiveOwnerMap(snap.liveOwnerMap);
     setGraveyard(snap.graveyard);
+    setRuins(snap.ruins);
+    setCities(snap.cities);
     setFreeTowerUsedTiles(snap.freeTowerUsedTiles);
   }, []);
 
@@ -1191,9 +1193,9 @@ export default function GameScreen() {
   const showGold = hasSelection;
   // Show the terrain layer (instead of owner colours) whenever the player has a
   // selection, and — in dev mode — during the AI's turn so terrain stays
-  // readable while the AI plays. In the dev case the player-colour layer is
-  // kept as a 30% overlay (devTerrainView) so ownership and terrain read at
-  // once; on a normal selection ownership stays visible via the borders.
+  // readable while the AI plays. In both cases the player-colour fill is hidden
+  // entirely; ownership still reads via the territory border lines drawn by
+  // BorderEdgeLayer over the terrain.
   const devTerrainView = isDeveloperModeActive && isAiTurn;
   const showTerrainView = hasSelection || devTerrainView;
   const goldDisplayValue = selectedTerritoryBalance;
@@ -1235,7 +1237,8 @@ export default function GameScreen() {
                * permanently mounted, switched only via G opacity (cheap, native):
                *   - default play:  territory fully opaque, covers the terrain
                *   - tile selected: territory hidden so terrain reads; ownership via borders
-               *   - dev + AI turn: territory at 30% over terrain so BOTH read at once
+               *   - dev + AI turn: same as a selection — terrain reads, ownership
+               *                    via the border lines (no player-colour overlay)
                */}
               <G opacity={showTerrainView ? 1 : 0}>
                 <HexTileTerrainLayer
@@ -1243,7 +1246,7 @@ export default function GameScreen() {
                   HEX_SIZE={HEX_SIZE}
                 />
               </G>
-              <G opacity={devTerrainView ? 0.3 : showTerrainView ? 0 : 1}>
+              <G opacity={showTerrainView ? 0 : 1}>
                 <HexTileTerritoryLayer
                   tileData={tileData}
                   activeTileMap={activeTileMap}
