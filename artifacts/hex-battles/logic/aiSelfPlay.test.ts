@@ -5,6 +5,7 @@ import {
   playFreeForAll,
   runOneAiTurnHeadless,
 } from "@/logic/aiSelfPlay";
+import { __setExpertSearchConfig } from "@/logic/aiExpert";
 import type { TerritoryOwner, Difficulty, HexTile, EntityType } from "@/types";
 import type { AiWorkingState } from "@/logic/aiStrategy";
 import {
@@ -149,6 +150,48 @@ describe("expert strength (self-play)", () => {
       // Observed expert 3 / others ≤1. Require expert the strict top winner.
       expect(expertWins).toBeGreaterThan(bestOther);
       expect(expertWins).toBeGreaterThanOrEqual(Math.ceil(N / 2));
+    },
+    600000,
+  );
+
+  fullIt(
+    "2-ply expert beats hard at least as well as 1-ply expert (same opponent/seeds)",
+    async () => {
+      const run = async () => {
+        let wins = 0;
+        for (let s = 7000; s < 7016; s++) {
+          const r = await playMatch({
+            seed: s, tiles: 50, difficultyA: "expert", difficultyB: "hard", maxTurns: 45,
+          });
+          expect(r.minBalance).toBeGreaterThanOrEqual(0);
+          if (r.winner === "ai1") wins++;
+        }
+        return wins;
+      };
+      __setExpertSearchConfig({ twoPly: false, k: 4 });
+      const onePlyWins = await run();
+      __setExpertSearchConfig({ twoPly: true, k: 4 });
+      const twoPlyWins = await run();
+      __setExpertSearchConfig(null);
+      // High variance over 16 snowball games — require non-regression on aggregate.
+      // Observed: 1-ply 15/16, 2-ply 16/16.
+      expect(twoPlyWins).toBeGreaterThanOrEqual(onePlyWins);
+    },
+    600000,
+  );
+
+  fullIt(
+    "AI turn compute stays within budget on a large board",
+    async () => {
+      __setExpertSearchConfig({ twoPly: true, k: 4 });
+      const r = await playMatch({
+        seed: 8000, tiles: 80, difficultyA: "expert", difficultyB: "expert", maxTurns: 30,
+      });
+      __setExpertSearchConfig(null);
+      const msPerTurn = r.elapsedMs / Math.max(1, r.turns);
+      // Ceiling calibrated from first observed value: observed ~144 ms/turn on 80-tile board.
+      // Ceiling set to 300 ms/turn for comfortable headroom — guards gross regressions only.
+      expect(msPerTurn).toBeLessThan(300);
     },
     600000,
   );
