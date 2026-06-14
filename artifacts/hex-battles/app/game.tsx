@@ -504,6 +504,20 @@ export default function GameScreen() {
     }
   }, [isDeveloperModeActive, isAiPaused, isAiTurnDone]);
 
+  // Dev builds: auto-enable developer mode once the first full round (the player
+  // plus every AI) has completed, so the terrain/AI overlays come on without a
+  // manual tap. `turn` is incremented at the player's end-of-turn, so it already
+  // reads 2 during the AIs' first turn; the round is done when that AI turn ends
+  // and `isAiTurn` flips back to false. Fires once; a later manual toggle sticks.
+  const devAutoActivatedRef = useRef(false);
+  useEffect(() => {
+    if (!__DEV__ || devAutoActivatedRef.current) return;
+    if (turn >= 2 && !isAiTurn) {
+      devAutoActivatedRef.current = true;
+      setIsDeveloperModeActive(true);
+    }
+  }, [turn, isAiTurn]);
+
   const restoreAiSnapshot = useCallback((snap: AiStepSnapshot) => {
     setEntities(snap.entities);
     setMutableTileMap(snap.mutableTileMap);
@@ -1178,8 +1192,11 @@ export default function GameScreen() {
   const showGold = hasSelection;
   // Show the terrain layer (instead of owner colours) whenever the player has a
   // selection, and — in dev mode — during the AI's turn so terrain stays
-  // readable while the AI plays. Ownership remains visible via the borders.
-  const showTerrainView = hasSelection || (isDeveloperModeActive && isAiTurn);
+  // readable while the AI plays. In the dev case the player-colour layer is
+  // kept as a 30% overlay (devTerrainView) so ownership and terrain read at
+  // once; on a normal selection ownership stays visible via the borders.
+  const devTerrainView = isDeveloperModeActive && isAiTurn;
+  const showTerrainView = hasSelection || devTerrainView;
   const goldDisplayValue = selectedTerritoryBalance;
 
   return (
@@ -1214,17 +1231,24 @@ export default function GameScreen() {
                * G wrapper's opacity prop is updated, which is a cheap native
                * operation and makes the terrain/territory switch instant.
                */}
-              <G opacity={showTerrainView ? 0 : 1}>
+              {/*
+               * Terrain on the bottom, territory (player colours) on top — both
+               * permanently mounted, switched only via G opacity (cheap, native):
+               *   - default play:  territory fully opaque, covers the terrain
+               *   - tile selected: territory hidden so terrain reads; ownership via borders
+               *   - dev + AI turn: territory at 30% over terrain so BOTH read at once
+               */}
+              <G opacity={showTerrainView ? 1 : 0}>
+                <HexTileTerrainLayer
+                  tileData={tileData}
+                  HEX_SIZE={HEX_SIZE}
+                />
+              </G>
+              <G opacity={devTerrainView ? 0.3 : showTerrainView ? 0 : 1}>
                 <HexTileTerritoryLayer
                   tileData={tileData}
                   activeTileMap={activeTileMap}
                   cities={cities}
-                  HEX_SIZE={HEX_SIZE}
-                />
-              </G>
-              <G opacity={showTerrainView ? 1 : 0}>
-                <HexTileTerrainLayer
-                  tileData={tileData}
                   HEX_SIZE={HEX_SIZE}
                 />
               </G>
