@@ -203,6 +203,73 @@ describe("evaluatePosition", () => {
 
     expect(contribution(afterConnector)).toBeGreaterThan(contribution(afterEnd));
   });
+
+  it("penalises standing enemy units and forts (enemyMilitary term)", () => {
+    // Identical board; the only difference is the weight, so the penalty is
+    // isolated. An enemy warrior on the board lowers the score — making its
+    // removal (a capture) a score gain.
+    const map = makeTileMap([makeTile(0, 0, "ai1"), makeTile(1, 0, "ai2")]);
+    const entities = new Map<string, EntityType>([["1,0", "warrior"]]);
+    const withTerm = evaluatePosition("ai1", map, entities, new Map(), new Set(), {
+      ...DEFAULT_WEIGHTS,
+      enemyMilitary: 10,
+    });
+    const without = evaluatePosition("ai1", map, entities, new Map(), new Set(), {
+      ...DEFAULT_WEIGHTS,
+      enemyMilitary: 0,
+    });
+    expect(withTerm).toBeLessThan(without);
+  });
+
+  it("rewards a unit positioned to break a defended tile (assault term)", () => {
+    // ai1 warrior (str 2) is adjacent to ai2 (1,0), which a peasant on (2,0)
+    // defends with ZoC 1. The warrior beats that ZoC, so it can assault — a free
+    // grab would not count. Isolated by varying only the assault weight.
+    const map = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai2"),
+      makeTile(2, 0, "ai2"),
+    ]);
+    const entities = new Map<string, EntityType>([
+      ["0,0", "warrior"],
+      ["2,0", "peasant"],
+    ]);
+    const withTerm = evaluatePosition("ai1", map, entities, new Map(), new Set(), {
+      ...DEFAULT_WEIGHTS,
+      assault: 10,
+    });
+    const without = evaluatePosition("ai1", map, entities, new Map(), new Set(), {
+      ...DEFAULT_WEIGHTS,
+      assault: 0,
+    });
+    expect(withTerm).toBeGreaterThan(without);
+  });
+
+  it("rewards an enemy-facing unit but not a neutral-facing one (frontline term)", () => {
+    const enemyMap = makeTileMap([makeTile(0, 0, "ai1"), makeTile(1, 0, "ai2")]);
+    const entities = new Map<string, EntityType>([["0,0", "warrior"]]);
+    const enemyWith = evaluatePosition("ai1", enemyMap, entities, new Map(), new Set(), {
+      ...DEFAULT_WEIGHTS,
+      frontline: 10,
+    });
+    const enemyWithout = evaluatePosition("ai1", enemyMap, entities, new Map(), new Set(), {
+      ...DEFAULT_WEIGHTS,
+      frontline: 0,
+    });
+    expect(enemyWith).toBeGreaterThan(enemyWithout);
+
+    // Facing only neutral territory earns no frontline reward.
+    const neutralMap = makeTileMap([makeTile(0, 0, "ai1"), makeTile(1, 0, "neutral")]);
+    const neutralWith = evaluatePosition("ai1", neutralMap, entities, new Map(), new Set(), {
+      ...DEFAULT_WEIGHTS,
+      frontline: 10,
+    });
+    const neutralWithout = evaluatePosition("ai1", neutralMap, entities, new Map(), new Set(), {
+      ...DEFAULT_WEIGHTS,
+      frontline: 0,
+    });
+    expect(neutralWith).toBe(neutralWithout);
+  });
 });
 
 // ─── simulateAction ─────────────────────────────────────────────────────────
@@ -580,12 +647,20 @@ describe("two-ply best-response", () => {
   //   post-reply position is catastrophic (the cut fragments the territory and
   //   strands the left lobe's income).
   //
+  //   An empty ai2 tile at (3,0) sits beyond the grab target so that capturing
+  //   (2,0) keeps the swordsman enemy-adjacent (it now borders (3,0)). This
+  //   isolates the test on the *threat-lookahead* difference: the positional
+  //   terms (frontline/borderBonus) score the before/after front position
+  //   equally, so the only thing that condemns the grab is the 2-ply city-cut
+  //   reply — not a positional shuffle.
+  //
   //   Verified divergence (DEFAULT_WEIGHTS, balances empty so no buy/build
   //   candidates exist): base has no capturable ai1 tile, so
-  //   baseScore == baseScore2. The grab move (1,0)->(2,0) is the ONLY candidate
-  //   with a positive 1-ply delta (+0.2), but its post-opponent-reply delta is
-  //   ~-115; the safe interior step (1,0)->(0,0) is ~-1.5. Hence 1-ply picks the
-  //   grab and 2-ply refuses it (doing nothing keeps the defender on station).
+  //   baseScore == baseScore2. The grab move (1,0)->(2,0) is the dominant
+  //   positive 1-ply candidate (it also kills the peasant), but its
+  //   post-opponent-reply delta is deeply negative (the city cut fragments the
+  //   territory); the safe interior step (1,0)->(0,0) is mildly negative. Hence
+  //   1-ply picks the grab and 2-ply refuses it (keeping the defender on station).
   function buildTrapCtx(): AiContext {
     const tiles = [
       makeTile(0, 0, "ai1"), // city connector (empty)
@@ -594,6 +669,7 @@ describe("two-ply best-response", () => {
       makeTile(-1, 1, "ai1"),
       makeTile(1, 0, "ai1"), // right lobe, holds the lone defender
       makeTile(2, 0, "ai2"), // grab target (ai2 peasant)
+      makeTile(3, 0, "ai2"), // empty — keeps the swordsman enemy-adjacent post-grab
       makeTile(1, -1, "ai2"), // city attacker
     ];
     const tileMap = makeTileMap(tiles);

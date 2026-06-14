@@ -57,8 +57,30 @@ export interface EvalWeights {
   unitStrength: number;
   /** Reward per owned unit that can capture an adjacent non-owned tile. */
   breakthrough: number;
+  /**
+   * Reward per owned unit positioned to capture an adjacent *defended* tile
+   * (defender ZoC ≥ 1). Unlike `breakthrough` (which counts any capture, incl.
+   * free grabs), this only fires against resistance, so it rewards concentrating
+   * force — e.g. merging two peasants into a warrior that can break a ZoC-1
+   * defence neither could. A positional proxy for "ready to attack now / next
+   * turn", since true multi-turn attack setups are beyond the 2-ply reply search.
+   */
+  assault: number;
   fortification: number;
+  /** Penalty per strength point of enemy (non-owner) units and fortifications.
+   * Enemy military is otherwise invisible to the eval, so capturing a unit or
+   * fort scored the same as grabbing an equal-terrain empty tile. This makes
+   * destroying enemy forces strictly outweigh taking empty ground. */
+  enemyMilitary: number;
   borderBonus: number;
+  /**
+   * Reward per strength point of an owned unit/fort adjacent to *enemy*
+   * territory (not merely any non-owned tile). Layered on top of `borderBonus`
+   * so an enemy-facing front position outscores one facing neutral/void, pulling
+   * stranded outlying units toward the contested front instead of leaving them
+   * idle where they defend nothing.
+   */
+  frontline: number;
   /** Reward per owned-tile edge facing enemy territory (the contested front). */
   frontier: number;
   /** Reward per owned-tile edge facing void / mountain (a "covered back"). */
@@ -83,8 +105,11 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   deficitGraceTurns: 2,
   unitStrength: 2,
   breakthrough: 1.5,
+  assault: 4,
   fortification: 3,
+  enemyMilitary: 6,
   borderBonus: 1.5,
+  frontline: 1,
   frontier: 0.8,
   secured: 0.4,
   fragmentation: 2,
@@ -171,37 +196,63 @@ export function evaluatePosition(
     }
   }
 
-  // ── Military: unit strength, fortifications, border presence, breakthrough ──
+  // ── Military: unit strength, fortifications, border/front presence,
+  // breakthrough, assault, and the enemy's standing military (kill incentive) ──
   let unitStrength = 0;
   let fortification = 0;
   let borderBonus = 0;
+  let frontline = 0;
   let breakthrough = 0;
+  let assault = 0;
+  let enemyMilitary = 0;
   for (const [k, e] of entities) {
     const t = tileMap.get(k);
-    if (!t || t.owner !== owner) continue;
+    if (!t) continue;
     const meta = ENTITY_META[e];
+    // Enemy standing military: every enemy unit and fortification is a target
+    // whose removal improves our position. Counted regardless of adjacency so a
+    // capture that destroys it shows up as a score gain.
+    if (t.owner !== owner && t.owner !== "neutral") {
+      if (meta.isUnit || e === "tower" || e === "castle") enemyMilitary += meta.strength;
+      continue;
+    }
+    if (t.owner !== owner) continue; // neutral-owned entity (none today) — skip
     const [kq, kr] = k.split(",").map(Number);
     const onBorder = HEX_EDGES.some(({ dir: [dq, dr] }) => {
       const nt = tileMap.get(tileKey(kq + dq, kr + dr));
       return !!nt && nt.owner !== owner;
     });
+    // Enemy-facing (the actual front) vs merely non-owned (incl. neutral/void).
+    const enemyAdjacent = HEX_EDGES.some(({ dir: [dq, dr] }) => {
+      const nt = tileMap.get(tileKey(kq + dq, kr + dr));
+      return !!nt && nt.owner !== owner && nt.owner !== "neutral";
+    });
     if (meta.isUnit) {
       unitStrength += meta.strength;
       if (onBorder) borderBonus += meta.strength;
-      // Breakthrough: can this unit capture an adjacent non-owned tile? Rewards
-      // concentrating force (e.g. merging two weak units into one strong enough
-      // to break a defence) and keeping attack-capable units at the front.
-      const canCapture = HEX_EDGES.some(({ dir: [dq, dr] }) => {
+      if (enemyAdjacent) frontline += meta.strength;
+      // Breakthrough: can this unit capture an adjacent non-owned tile (any)?
+      // Assault: same, but only against a *defended* tile (ZoC ≥ 1) — rewards
+      // concentrating force into a unit strong enough to break real resistance.
+      let canCapture = false;
+      let canAssault = false;
+      for (const { dir: [dq, dr] } of HEX_EDGES) {
         const nk = tileKey(kq + dq, kr + dr);
         const nt = tileMap.get(nk);
-        if (!nt || nt.owner === owner) return false;
-        if (nt.terrain === "lake" || nt.terrain === "mountain") return false;
-        return meta.strength > getMaxEnemyZoC(nk, owner, entities, tileMap);
-      });
+        if (!nt || nt.owner === owner) continue;
+        if (nt.terrain === "lake" || nt.terrain === "mountain") continue;
+        const zoc = getMaxEnemyZoC(nk, owner, entities, tileMap);
+        if (meta.strength > zoc) {
+          canCapture = true;
+          if (zoc >= 1) canAssault = true;
+        }
+      }
       if (canCapture) breakthrough += 1;
+      if (canAssault) assault += 1;
     } else if (e === "tower" || e === "castle") {
       fortification += meta.strength;
       if (onBorder) borderBonus += meta.strength;
+      if (enemyAdjacent) frontline += meta.strength;
     }
   }
 
@@ -289,8 +340,11 @@ export function evaluatePosition(
     deficitCount * w.bankruptcyPenalty +
     unitStrength * w.unitStrength +
     breakthrough * w.breakthrough +
-    fortification * w.fortification +
+    assault * w.assault +
+    fortification * w.fortification -
+    enemyMilitary * w.enemyMilitary +
     borderBonus * w.borderBonus +
+    frontline * w.frontline +
     frontier * w.frontier +
     secured * w.secured -
     clusters * w.fragmentation -
