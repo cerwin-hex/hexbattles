@@ -1010,6 +1010,8 @@ function snapFromWs(ws: AiWorkingState): AiStepSnapshot {
     territoryBalances: new Map(ws.balances),
     liveOwnerMap: new Map(ws.liveOwnerMap),
     graveyard: new Set(ws.graveyard),
+    ruins: new Set(ws.ruins),
+    cities: new Set(ws.cities),
     freeTowerUsedTiles: new Map(
       [...ws.freeTowerUsed.entries()].map(([k, v]) => [k, new Set(v)]),
     ),

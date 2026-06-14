@@ -69,5 +69,7 @@ export type AiStepSnapshot = {
   territoryBalances: Map<string, number>;
   liveOwnerMap: Map<string, TerritoryOwner>;
   graveyard: Set<string>;
+  ruins: Set<string>;
+  cities: Set<string>;
   freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
 };
