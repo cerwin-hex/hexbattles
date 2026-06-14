@@ -1,6 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { playMatch, playSeries, playFreeForAll } from "@/logic/aiSelfPlay";
-import type { TerritoryOwner, Difficulty } from "@/types";
+import {
+  playMatch,
+  playSeries,
+  playFreeForAll,
+  runOneAiTurnHeadless,
+} from "@/logic/aiSelfPlay";
+import type { TerritoryOwner, Difficulty, HexTile, EntityType } from "@/types";
+import type { AiWorkingState } from "@/logic/aiStrategy";
+import {
+  getContiguousTerritory,
+  getTerritoryId,
+} from "@/utils/hexGrid";
 
 // The strength series are real games (~1.3s each), too slow for the default
 // suite. They run only when AI_SELFPLAY is set; the headline results are
@@ -142,4 +152,85 @@ describe("expert strength (self-play)", () => {
     },
     600000,
   );
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// Cavalry single-turn sweep — end-to-end through the REAL `runAiTurn`.
+//
+// A knight (movement 5, maxAttacks 2, strength 2) standing next to a line of
+// open neutral grass tiles must capture at least TWO of them in ONE turn by
+// chaining moves: the AI exec updates partialMoves/combatSpentUnits between
+// hops and the expert loop re-derives valid moves under the unit's new tile.
+// This guards the chaining mechanic (a prior fix stopped a shared cap from
+// dropping the cavalry's extra move-candidates).
+// ════════════════════════════════════════════════════════════════════════════
+describe("cavalry single-turn sweep (end-to-end)", () => {
+  function grass(q: number, r: number, owner: TerritoryOwner): HexTile {
+    return {
+      q,
+      r,
+      terrain: "grass",
+      owner,
+      key: `${q},${r}`,
+      cityBuffer: false,
+      isCity: false,
+    };
+  }
+
+  function countLand(ws: AiWorkingState, owner: TerritoryOwner): number {
+    let n = 0;
+    for (const t of ws.tileMap.values()) {
+      if (t.owner === owner && t.terrain !== "lake" && t.terrain !== "mountain") n++;
+    }
+    return n;
+  }
+
+  it("expert knight captures >=2 open neutral tiles in a single turn", async () => {
+    // ai1 base: knight at (0,0) with a backing tile (0,1) so the territory is
+    // not a single penalised hex. A straight line of open neutral grass runs
+    // east — distances 1..4, all within the knight's movement of 5.
+    const tiles: HexTile[] = [
+      grass(0, 0, "ai1"), // knight start
+      grass(0, 1, "ai1"), // backing tile (real contiguous territory)
+      grass(1, 0, "neutral"),
+      grass(2, 0, "neutral"),
+      grass(3, 0, "neutral"),
+      grass(4, 0, "neutral"),
+    ];
+    const tileMap = new Map<string, HexTile>(tiles.map((t) => [t.key, t]));
+
+    const entities = new Map<string, EntityType>([["0,0", "knight"]]);
+
+    const ws: AiWorkingState = {
+      tileMap,
+      entities,
+      balances: new Map(),
+      liveOwnerMap: new Map(),
+      graveyard: new Set(),
+      ruins: new Set(),
+      cities: new Set(),
+      spentUnits: new Set(),
+      partialMoves: new Map(),
+      attacksUsed: new Map(),
+      combatSpentUnits: new Set(),
+      freeTowerUsed: new Map(),
+    };
+
+    // Plenty of money so economy never blocks; open captures cost nothing, so
+    // only the starting territory's balance matters.
+    const startTerr = getContiguousTerritory(tileMap, "0,0", "ai1", entities);
+    const startTid = getTerritoryId(startTerr);
+    expect(startTid).not.toBeNull();
+    ws.balances.set(startTid!, 999);
+
+    const before = countLand(ws, "ai1");
+    await runOneAiTurnHeadless(ws, "ai1", 5, "expert");
+    const after = countLand(ws, "ai1");
+
+    // The knight must have swept at least two new tiles in the single turn.
+    // (runAiTurn replaces ws.entities with fresh maps, so read from ws.)
+    expect(after - before).toBeGreaterThanOrEqual(2);
+    // And it must have left its start tile (it moved).
+    expect(ws.entities.get("0,0")).toBeUndefined();
+  });
 });

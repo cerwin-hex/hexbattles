@@ -181,6 +181,26 @@ function makeHeadlessCbs(): AiTurnCallbacks {
   };
 }
 
+/**
+ * Run exactly one AI owner-turn headlessly against the real `runAiTurn`,
+ * resetting the per-turn movement/attack budgets first (mirrors the end-of-turn
+ * reset inside `playMatch`). Lets tests drive the genuine AI decision loop —
+ * including faithful cavalry move-chaining — without standing up a parallel
+ * exec mock.
+ */
+export async function runOneAiTurnHeadless(
+  ws: AiWorkingState,
+  owner: TerritoryOwner,
+  turn: number,
+  difficulty: Difficulty,
+): Promise<void> {
+  ws.spentUnits = new Set();
+  ws.partialMoves = new Map();
+  ws.attacksUsed = new Map();
+  ws.combatSpentUnits = new Set();
+  await runAiTurn(ws, makeHeadlessCbs(), [owner], turn, difficulty);
+}
+
 export interface MatchConfig {
   seed: number;
   tiles: number;
