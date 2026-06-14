@@ -13,7 +13,7 @@ import {
 import type { AiDecisionExec } from "@/logic/aiStrategy";
 import type { AiContext } from "@/logic/aiHelpers";
 import type { HexTile, EntityType, TerritoryOwner } from "@/types";
-import { getContiguousTerritory, getTerritoryId } from "@/utils/hexGrid";
+import { getContiguousTerritory, getTerritoryId, getValidMoves } from "@/utils/hexGrid";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -302,6 +302,74 @@ describe("generateCandidateActions", () => {
         expect(t.terrain).not.toBe("lake");
       }
     }
+  });
+
+  it("still generates cavalry sweep moves when an earlier unit fills the move cap", () => {
+    // Repro for Suspect B: generateCandidateActions caps total move candidates
+    // with a SINGLE shared counter across all units. A filler unit listed before
+    // the cavalry can fill that cap, after which the cavalry — whose entire value
+    // is a multi-tile sweep — produces ZERO move candidates.
+    //
+    // Board:
+    //  - Filler peasant at (0,0) owned by ai1, surrounded by 6 neutral grass
+    //    tiles → 6 pushable open captures (strength 1 > ZoC 0).
+    //  - Cavalry scout at (10,10) owned by ai1, with neutral grass tiles within
+    //    its movement (5) → many open sweep captures, all independent of the
+    //    peasant's neighbours.
+    // With an explicit cap of 6, the peasant's 6 captures exhaust the shared
+    // counter and the cavalry never gets a single move candidate.
+    const tiles: HexTile[] = [
+      makeTile(0, 0, "ai1"), // filler peasant tile (listed FIRST)
+    ];
+    // Six neutral grass neighbours of the peasant → six pushable captures.
+    for (const [dq, dr] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+      [1, -1],
+      [-1, 1],
+    ] as const) {
+      tiles.push(makeTile(0 + dq, 0 + dr, "neutral"));
+    }
+    // Cavalry tile (listed LAST) plus a patch of neutral grass within range 5.
+    const cavTiles: HexTile[] = [];
+    for (let q = 10; q <= 13; q++) {
+      for (let r = 10; r <= 13; r++) {
+        if (q === 10 && r === 10) continue;
+        cavTiles.push(makeTile(q, r, "neutral"));
+      }
+    }
+    tiles.push(...cavTiles);
+    tiles.push(makeTile(10, 10, "ai1")); // cavalry tile, LAST in territory order
+
+    const tileMap = makeTileMap(tiles);
+    const entities = new Map<string, EntityType>([
+      ["0,0", "peasant"],
+      ["10,10", "scout"],
+    ]);
+    const ctx = makeCtx(tileMap, entities, "ai1", new Map());
+    // Territory passed in deterministic order: peasant first, cavalry last.
+    const terr = [tileMap.get("0,0")!, tileMap.get("10,10")!];
+
+    // Independent existence check: the cavalry genuinely HAS open sweep moves.
+    const cavMoves = getValidMoves(
+      "10,10",
+      "ai1",
+      entities,
+      tileMap,
+      ctx.spentUnits,
+      5,
+      ctx.combatSpentUnits,
+    );
+    expect(cavMoves.size).toBeGreaterThan(0);
+
+    // Cap = 6 → peasant's six neutral captures fill the shared counter.
+    const cands = generateCandidateActions(ctx, terr, 0, 6);
+    const cavalryMoves = cands.filter(
+      (c: ExpertAction) => c.kind === "move" && c.from === "10,10",
+    );
+    expect(cavalryMoves.length).toBeGreaterThan(0);
   });
 });
 
