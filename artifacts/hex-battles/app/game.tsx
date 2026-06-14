@@ -505,10 +505,9 @@ export default function GameScreen() {
   }, [isDeveloperModeActive, isAiPaused, isAiTurnDone]);
 
   // Dev builds: auto-enable developer mode once the first full round (the player
-  // plus every AI) has completed, so the terrain/AI overlays come on without a
-  // manual tap. `turn` is incremented at the player's end-of-turn, so it already
-  // reads 2 during the AIs' first turn; the round is done when that AI turn ends
-  // and `isAiTurn` flips back to false. Fires once; a later manual toggle sticks.
+  // plus every AI) has completed. The round counter advances when the AI phase
+  // ends, so `turn` becomes 2 exactly as `isAiTurn` flips back to false — this
+  // fires once at that boundary. A later manual toggle sticks.
   const devAutoActivatedRef = useRef(false);
   useEffect(() => {
     if (!__DEV__ || devAutoActivatedRef.current) return;
