@@ -270,7 +270,10 @@ export function handleTileTapLogic(params: TileTapParams): void {
 
       const newGraveyard = new Set(graveyard);
       const newRuins = new Set(ruins);
+      // A unit stepping onto a grave/ruin tile clears the marker for good — it
+      // must not reappear once the unit moves on again.
       newGraveyard.delete(key);
+      newRuins.delete(key);
       applySingleHexPenalty(
         activeTileMap,
         newTileMap,
@@ -586,6 +589,13 @@ export function handleTileTapLogic(params: TileTapParams): void {
           );
         const newGraveyard2 = new Set(graveyard);
         const newRuins2 = new Set(ruins);
+        // Capturing a grave/ruin tile by buying a unit onto it clears the marker
+        // for good, same as walking onto it. Buildings don't (the rule is about
+        // active units), so guard on meta.isUnit.
+        if (meta.isUnit) {
+          newGraveyard2.delete(key);
+          newRuins2.delete(key);
+        }
         applySingleHexPenalty(
           activeTileMap,
           newTileMap,

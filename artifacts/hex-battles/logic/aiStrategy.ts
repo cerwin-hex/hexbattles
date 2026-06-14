@@ -1262,6 +1262,9 @@ export async function runAiTurn(
         ws.liveOwnerMap.set(toKey, aiOwner);
         ws.graveyard = new Set(ws.graveyard);
         ws.graveyard.delete(toKey);
+        // A unit stepping onto a grave/ruin tile clears the marker for good.
+        ws.ruins = new Set(ws.ruins);
+        ws.ruins.delete(toKey);
         cbs.applySingleHexPenalty(
           prevTileMapSnapshot, ws.tileMap, ws.balances, ws.entities,
           ws.graveyard, ws.ruins,
@@ -1369,6 +1372,21 @@ export async function runAiTurn(
           }
           cbs.state.setMutableTileMap(new Map(ws.tileMap));
           cbs.state.setLiveOwnerMap(new Map(ws.liveOwnerMap));
+        }
+
+        // Buying an active unit onto a grave/ruin tile clears the marker for
+        // good (same rule as walking onto it). Cities/buildings don't, so guard
+        // on isUnit.
+        if (
+          ENTITY_META[unitType].isUnit &&
+          (ws.graveyard.has(target) || ws.ruins.has(target))
+        ) {
+          ws.graveyard = new Set(ws.graveyard);
+          ws.graveyard.delete(target);
+          ws.ruins = new Set(ws.ruins);
+          ws.ruins.delete(target);
+          cbs.state.setGraveyard(new Set(ws.graveyard));
+          cbs.state.setRuins(new Set(ws.ruins));
         }
 
         cbs.state.setEntities(new Map(ws.entities));

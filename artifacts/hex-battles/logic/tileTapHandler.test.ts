@@ -248,6 +248,26 @@ describe("unit move", () => {
     expect(spent.has("1,0")).toBe(true);
   });
 
+  it("clears grave and ruin markers for good when a unit steps onto the tile", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "neutral")];
+    const map = tileMap(tiles);
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: map,
+      selectedEntityKey: "0,0",
+      validMoveTiles: new Set(["1,0"]),
+      entities: ents([["0,0", "peasant"]]),
+      liveOwnerMap: new Map([["0,0", "player"], ["1,0", "neutral"]]),
+      graveyard: new Set(["1,0"]),
+      ruins: new Set(["1,0"]),
+    });
+    handleTileTapLogic(params);
+    const newGrave: Set<string> = (params.setGraveyard as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const newRuins: Set<string> = (params.setRuins as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(newGrave.has("1,0")).toBe(false);
+    expect(newRuins.has("1,0")).toBe(false);
+  });
+
   it("capturing a neutral tile counts as combat and spends an infantry unit", () => {
     const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "neutral")];
     const map = tileMap(tiles);
