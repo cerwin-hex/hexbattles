@@ -61,6 +61,33 @@ describe("no over-spend invariant", () => {
     },
     900000,
   );
+
+  // The reserve-gated tempo term lets expert run deliberate short deficits. An
+  // aggregate win-rate can hide a collapse *tail* — a few games where the AI
+  // over-invests and bankrupts itself. A weaker opponent surfaces it: if tempo
+  // ever self-destructs, expert drops games it should never lose. Guard both the
+  // win floor and the no-negative-balance invariant.
+  fullIt(
+    "expert never throws games to a weaker AI (tempo collapse-tail guard)",
+    async () => {
+      let wins = 0;
+      let games = 0;
+      for (let s = 6000; s < 6020; s++) {
+        const r = await playMatch({
+          seed: s,
+          tiles: 50,
+          difficultyA: "expert",
+          difficultyB: "medium",
+          maxTurns: 45,
+        });
+        expect(r.minBalance).toBeGreaterThanOrEqual(0);
+        games++;
+        if (r.winner === "ai1") wins++;
+      }
+      expect(wins / games).toBeGreaterThan(0.8);
+    },
+    600000,
+  );
 });
 
 describe("expert strength (self-play)", () => {

@@ -46,6 +46,14 @@ export interface EvalWeights {
   deficitMag: number;
   /** Flat penalty per territory currently running a deficit. */
   bankruptcyPenalty: number;
+  /**
+   * Turns of reserves that excuse a deficit as a deliberate investment. A
+   * territory whose reserves cover its deficit for this many turns (e.g. merging
+   * to a strong unit now to take a key tile next turn) pays only a light penalty
+   * and no bankruptcy flag; one that can't is a real spiral and keeps the full
+   * penalty. This is the tempo lever — a cheap proxy for 1-2 turn lookahead.
+   */
+  deficitGraceTurns: number;
   unitStrength: number;
   /** Reward per owned unit that can capture an adjacent non-owned tile. */
   breakthrough: number;
@@ -72,6 +80,7 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   buffer: 1,
   deficitMag: 6,
   bankruptcyPenalty: 15,
+  deficitGraceTurns: 2,
   unitStrength: 2,
   breakthrough: 1.5,
   fortification: 3,
@@ -147,8 +156,18 @@ export function evaluatePosition(
     const net = terrIncome - calcTerritoryUpkeep(terr, entities);
     // Asymmetric: only deficits are penalised; a profitable army is free.
     if (net < 0) {
-      deficitMag += -net;
-      deficitCount += 1;
+      // Tempo: a deficit whose reserves cover it for `deficitGraceTurns` turns is
+      // a deliberate investment (go briefly into the red to take a key tile), so
+      // it pays only a quarter penalty and no bankruptcy flag. One the reserves
+      // can't sustain is the start of a death-spiral — full penalty. The reserve
+      // gate is what keeps this from reviving the old bankruptcy collapse.
+      const sustainable = bal + w.deficitGraceTurns * net >= 0;
+      if (sustainable) {
+        deficitMag += -net * 0.25;
+      } else {
+        deficitMag += -net;
+        deficitCount += 1;
+      }
     }
   }
 
