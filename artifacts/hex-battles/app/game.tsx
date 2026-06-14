@@ -1163,6 +1163,10 @@ export default function GameScreen() {
 
   const hasSelection = selectedTerritory.length > 0;
   const showGold = hasSelection;
+  // Show the terrain layer (instead of owner colours) whenever the player has a
+  // selection, and — in dev mode — during the AI's turn so terrain stays
+  // readable while the AI plays. Ownership remains visible via the borders.
+  const showTerrainView = hasSelection || (isDeveloperModeActive && isAiTurn);
   const goldDisplayValue = selectedTerritoryBalance;
 
   return (
@@ -1197,7 +1201,7 @@ export default function GameScreen() {
                * G wrapper's opacity prop is updated, which is a cheap native
                * operation and makes the terrain/territory switch instant.
                */}
-              <G opacity={hasSelection ? 0 : 1}>
+              <G opacity={showTerrainView ? 0 : 1}>
                 <HexTileTerritoryLayer
                   tileData={tileData}
                   activeTileMap={activeTileMap}
@@ -1205,7 +1209,7 @@ export default function GameScreen() {
                   HEX_SIZE={HEX_SIZE}
                 />
               </G>
-              <G opacity={hasSelection ? 1 : 0}>
+              <G opacity={showTerrainView ? 1 : 0}>
                 <HexTileTerrainLayer
                   tileData={tileData}
                   HEX_SIZE={HEX_SIZE}

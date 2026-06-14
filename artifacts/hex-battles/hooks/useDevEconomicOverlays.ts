@@ -65,9 +65,12 @@ export function useDevEconomicOverlays({
         }, 0);
         const upkeep = calcTerritoryUpkeep(territory, entities);
         const net = income - upkeep;
-        const label = net >= 0 ? `${balance}(+${net})` : `${balance}(${net})`;
-        const stateVal = aiStateMap.get(territoryId);
-        const aiLabel = stateVal === "attacking" ? "Atk" : "Def";
+        const money = net >= 0 ? `${balance}(+${net})` : `${balance}(${net})`;
+        // State (only the heuristic AIs act on it; for the expert brain it is a
+        // display-only "is this territory threatened" flag). Shown as a single
+        // A/D prefix in front of the money.
+        const stateChar = aiStateMap.get(territoryId) === "defending" ? "D" : "A";
+        const label = `${stateChar} ${money}`;
         const central = findCentralTile(territory);
         if (!central) continue;
         const [centQ, centR] = central.key.split(",").map(Number);
@@ -97,7 +100,7 @@ export function useDevEconomicOverlays({
         }
         const pos = tileDataMap.get(labelTile.key);
         if (!pos) continue;
-        result.push({ cx: pos.cx, cy: pos.cy, label, aiLabel });
+        result.push({ cx: pos.cx, cy: pos.cy, label });
       }
     }
     return result;
