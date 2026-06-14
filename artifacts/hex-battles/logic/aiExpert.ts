@@ -737,6 +737,8 @@ export async function runExpertTerritoryDecisionLoop(
 ): Promise<void> {
   const owner = ctx.aiOwner;
   const search = SEARCH_OVERRIDE ?? DEFAULT_SEARCH;
+  const score = (st: SimState): number =>
+    evaluatePosition(owner, st.tileMap, st.entities, st.balances, st.cities, weights);
   let iter = 0;
   while (iter++ < 100) {
     if (!isTurnActive()) return;
@@ -753,22 +755,20 @@ export async function runExpertTerritoryDecisionLoop(
       balances: ctx.balances,
       cities: ctx.cities,
     };
-    const baseScore = evaluatePosition(owner, base.tileMap, base.entities, base.balances, base.cities, weights);
 
     const candidates = generateCandidateActions(ctx, territory, bal);
 
     // Pass 1 (cheap): 1-ply score every candidate.
     const scored = candidates.map((cand) => {
       const after = simulateAction(base, cand, owner);
-      const score1 = evaluatePosition(
-        owner, after.tileMap, after.entities, after.balances, after.cities, weights,
-      );
+      const score1 = score(after);
       return { cand, after, score1 };
     });
 
     let best: ExpertAction | null = null;
     if (!search.twoPly) {
       // 1-ply: pick the best immediate-delta action (original behaviour).
+      const baseScore = score(base);
       let bestDelta = SCORE_EPSILON;
       for (const sc of scored) {
         const delta = sc.score1 - baseScore;
@@ -782,9 +782,7 @@ export async function runExpertTerritoryDecisionLoop(
       // opponent's single best reply. The enemy gets to reply whether or not we
       // act, so compare against the do-nothing post-reply baseline.
       const baseReplied = opponentBestResponse(owner, base, weights).state;
-      const baseScore2 = evaluatePosition(
-        owner, baseReplied.tileMap, baseReplied.entities, baseReplied.balances, baseReplied.cities, weights,
-      );
+      const baseScore2 = score(baseReplied);
       const topK = scored
         .slice()
         .sort((a, b) => b.score1 - a.score1)
@@ -792,9 +790,7 @@ export async function runExpertTerritoryDecisionLoop(
       let bestDelta = SCORE_EPSILON;
       for (const sc of topK) {
         const replied = opponentBestResponse(owner, sc.after, weights).state;
-        const score2 = evaluatePosition(
-          owner, replied.tileMap, replied.entities, replied.balances, replied.cities, weights,
-        );
+        const score2 = score(replied);
         const delta = score2 - baseScore2;
         if (delta > bestDelta) {
           bestDelta = delta;

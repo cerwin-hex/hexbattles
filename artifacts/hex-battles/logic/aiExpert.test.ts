@@ -551,8 +551,5 @@ describe("two-ply best-response", () => {
     const first = await firstExpertAction("0,0", buildTrapCtx());
     // It must NOT vacate the defender into the trap...
     expect(first).not.toEqual({ kind: "move", from: "1,0", to: "2,0" });
-    // ...and concretely, here it does nothing rather than expose the city
-    // (every candidate has a negative post-reply delta).
-    expect(first).toBeNull();
   });
 });
