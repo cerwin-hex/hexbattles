@@ -561,6 +561,10 @@ export async function runAiTerritoryDecisionLoop(
             });
             if (connectsOtherAiTerritory) {
               actionTaken = await exec.build("bridge", nk, bridgeCost);
+              // Only ONE bridge per loop iteration: affordability was checked once
+              // for this iteration, so building more would over-spend. The while
+              // loop re-evaluates (and re-checks canAfford) for the next bridge.
+              if (actionTaken) break;
             }
           }
         }
@@ -1100,6 +1104,18 @@ export async function runAiTurn(
         await cbs.awaitStep(snapFromWs(ws));
       };
 
+      // Defense-in-depth: an AI can NEVER spend more than the paying territory
+      // holds. Every buy/build/upgrade is funded by the territory being
+      // processed (startTile's contiguous territory); if it can't cover `cost`,
+      // the action is refused outright. This guarantees the invariant even if a
+      // decision branch forgets to re-check affordability.
+      const canPay = (cost: number): boolean => {
+        const terr = getContiguousTerritory(ws.tileMap, startTile.key, aiOwner, ws.entities);
+        const id = getTerritoryId(terr);
+        const bal = id ? (ws.balances.get(id) ?? 0) : 0;
+        return bal >= cost;
+      };
+
       const dtPublishState = (anchorKey: string): void => {
         const updTerr = getContiguousTerritory(ws.tileMap, anchorKey, aiOwner, ws.entities);
         const updId = getTerritoryId(updTerr);
@@ -1277,6 +1293,7 @@ export async function runAiTurn(
         unitType: EntityType, target: string, cost: number, outside: boolean,
       ): Promise<boolean> => {
         if (!cbs.refs.isTurnActive()) return false;
+        if (!canPay(cost)) return false;
         ws.entities = new Map(ws.entities);
         ws.balances = new Map(ws.balances);
 
@@ -1360,6 +1377,7 @@ export async function runAiTurn(
 
       const dtExecUpgrade = async (targetKey: string, to: EntityType, cost: number): Promise<boolean> => {
         if (!cbs.refs.isTurnActive()) return false;
+        if (!canPay(cost)) return false;
         ws.entities = new Map(ws.entities);
         ws.entities.set(targetKey, to);
         cache.clear();
@@ -1375,6 +1393,7 @@ export async function runAiTurn(
 
       const dtExecBuild = async (buildingType: EntityType, targetKey: string, cost: number): Promise<boolean> => {
         if (!cbs.refs.isTurnActive()) return false;
+        if (!canPay(cost)) return false;
 
         // Bridge: lake tile needs ownership change + entity + territory recalculation
         if (buildingType === "bridge") {

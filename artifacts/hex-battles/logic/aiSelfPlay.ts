@@ -202,6 +202,8 @@ export interface MatchResult {
   turns: number;
   landA: number;
   landB: number;
+  /** Lowest territory balance seen at any point (must stay >= 0: no over-spend). */
+  minBalance: number;
 }
 
 /** Play one full headless AI-vs-AI game and report the winner by land control. */
@@ -248,6 +250,7 @@ export async function playMatch(cfg: MatchConfig): Promise<MatchResult> {
     };
     const cbs = makeHeadlessCbs();
 
+    let minBalance = 0;
     let turn = 1;
     for (; turn <= cfg.maxTurns; turn++) {
       // AI income is credited from turn 3 onward (matches endTurnHandler cadence).
@@ -261,6 +264,10 @@ export async function playMatch(cfg: MatchConfig): Promise<MatchResult> {
         ws.attacksUsed = new Map();
         ws.combatSpentUnits = new Set();
         await runAiTurn(ws, cbs, [owner], turn, diffByOwner[owner]);
+        // Invariant: no territory may ever hold a negative balance (over-spend).
+        for (const bal of ws.balances.values()) {
+          if (bal < minBalance) minBalance = bal;
+        }
       }
 
       const a = landTiles(ws, "ai1");
@@ -277,7 +284,7 @@ export async function playMatch(cfg: MatchConfig): Promise<MatchResult> {
     const landB = landTiles(ws, "ai2");
     const winner: TerritoryOwner | "draw" =
       landA === landB ? "draw" : landA > landB ? "ai1" : "ai2";
-    return { winner, turns: Math.min(turn, cfg.maxTurns), landA, landB };
+    return { winner, turns: Math.min(turn, cfg.maxTurns), landA, landB, minBalance };
   } finally {
     Math.random = origRandom;
     __setExpertWeightsOverride(null);

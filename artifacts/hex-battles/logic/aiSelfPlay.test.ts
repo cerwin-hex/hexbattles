@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { playMatch, playSeries, playFreeForAll } from "@/logic/aiSelfPlay";
-import type { TerritoryOwner } from "@/types";
+import type { TerritoryOwner, Difficulty } from "@/types";
 
 // The strength series are real games (~1.3s each), too slow for the default
 // suite. They run only when AI_SELFPLAY is set; the headline results are
@@ -25,6 +25,42 @@ describe("playMatch (smoke)", () => {
     // Per-seed land outcome is high-variance in this snowball game; expert's
     // overall edge is asserted by the env-gated strength series below.
   });
+});
+
+describe("no over-spend invariant", () => {
+  it("never lets a territory balance go negative (regression: D2a multi-bridge)", async () => {
+    // Seeds 5005/5011 (hard) and 5034 (super_hard) previously over-spent by
+    // building several consolidation bridges on a single canAfford check.
+    const cases: Array<["hard" | "super_hard", number]> = [
+      ["hard", 5005],
+      ["hard", 5011],
+      ["super_hard", 5034],
+    ];
+    for (const [diff, seed] of cases) {
+      const r = await playMatch({
+        seed,
+        tiles: 60,
+        difficultyA: diff,
+        difficultyB: diff,
+        maxTurns: 12,
+      });
+      expect(r.minBalance).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  fullIt(
+    "stays non-negative across many games and all difficulties",
+    async () => {
+      const diffs: Difficulty[] = ["easy", "medium", "hard", "super_hard", "expert", "super_expert"];
+      for (const d of diffs) {
+        for (let s = 5000; s < 5030; s++) {
+          const r = await playMatch({ seed: s, tiles: 60, difficultyA: d, difficultyB: d, maxTurns: 40 });
+          expect(r.minBalance).toBeGreaterThanOrEqual(0);
+        }
+      }
+    },
+    900000,
+  );
 });
 
 describe("expert strength (self-play)", () => {
