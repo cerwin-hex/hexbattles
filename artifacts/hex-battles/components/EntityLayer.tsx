@@ -83,8 +83,14 @@ function EntityLayerInner({
               ? 0.9
               : 1.0;
         return (
+          // Key by entity type as well as tile: when a tile's entity changes
+          // type in place (e.g. AI-step undo reverts a captured tower from the
+          // attacker's unit back to the building), a tile-only key would make
+          // React reuse the same SvgAst instance and swap its `ast` prop in
+          // place, which react-native-svg renders as a black/broken icon.
+          // Including entityId forces a clean remount on a type change.
           <View
-            key={`entity-${key}`}
+            key={`entity-${key}-${entityId}`}
             style={{ position: "absolute", left: pos.cx - r, top: pos.cy - r }}
           >
             <UnitToken
