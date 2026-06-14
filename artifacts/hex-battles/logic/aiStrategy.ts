@@ -959,6 +959,8 @@ export interface AiTurnCallbacks {
     setFreeTowerUsedTiles(v: Map<TerritoryOwner, Set<string>>): void;
     setAiStateMap(v: Map<string, AiState>): void;
     setIsAiTurn(v: boolean): void;
+    /** Advance the round counter; called once when the whole AI phase completes. */
+    advanceTurn(): void;
   };
   refs: {
     getAiStateMap(): Map<string, AiState>;
@@ -1586,5 +1588,9 @@ export async function runAiTurn(
   cbs.state.setFreeTowerUsedTiles(new Map(ws.freeTowerUsed));
   cbs.refs.setAiTurn(false);
   await cbs.awaitPostAiResume();
+  // The whole AI phase is done and control returns to the player — advance the
+  // round counter HERE (not at the player's End Turn), so the counter equals the
+  // round number: everyone acts in round R while it reads R.
+  cbs.state.advanceTurn();
   cbs.state.setIsAiTurn(false);
 }

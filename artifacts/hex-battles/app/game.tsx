@@ -694,6 +694,7 @@ export default function GameScreen() {
         setFreeTowerUsedTiles,
         setAiStateMap,
         setIsAiTurn,
+        advanceTurn: () => setTurn((t) => t + 1),
         setIsAiPaused,
         setIsAiTurnDone,
         setAiHistoryIndex,

@@ -160,6 +160,9 @@ function makeHeadlessCbs(): AiTurnCallbacks {
       setFreeTowerUsedTiles: noop,
       setAiStateMap: noop,
       setIsAiTurn: noop,
+      // The headless harness counts rounds in its own loop, so the AI-phase
+      // advance is a no-op here.
+      advanceTurn: noop,
     },
     refs: {
       getAiStateMap: () => aiStateMap,

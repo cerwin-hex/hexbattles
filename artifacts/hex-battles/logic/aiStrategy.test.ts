@@ -56,6 +56,7 @@ function makeCbs(overrides: CbsOverrides = {}): AiTurnCallbacks {
       setFreeTowerUsedTiles: vi.fn(),
       setAiStateMap: vi.fn(),
       setIsAiTurn: vi.fn(),
+      advanceTurn: vi.fn(),
       ...stateOverrides,
     },
     refs: {
@@ -97,11 +98,19 @@ describe("makeCbs helper — per-member overrides", () => {
       "setFreeTowerUsedTiles",
       "setAiStateMap",
       "setIsAiTurn",
+      "advanceTurn",
     ];
     for (const key of siblingKeys) {
       expect(vi.isMockFunction(cbs.state[key]), `state.${key} should be vi.fn()`).toBe(true);
       expect(cbs.state[key]).not.toBe(customSetEntities);
     }
+  });
+
+  it("advances the turn exactly once when the AI phase completes", async () => {
+    const ws = makeEmptyWs(makeTileMap([makeTile(0, 0, "ai1"), makeTile(1, 0, "ai1")]));
+    const cbs = makeCbs();
+    await runAiTurn(ws, cbs, ["ai1"], 3, "easy");
+    expect(cbs.state.advanceTurn).toHaveBeenCalledTimes(1);
   });
 
   it("overriding one refs member leaves all other refs mocks as vi.fn()", () => {

@@ -19,6 +19,7 @@ export interface AiTurnCallbacksParams {
   setFreeTowerUsedTiles: (v: Map<TerritoryOwner, Set<string>>) => void;
   setAiStateMap: (v: Map<string, AiState>) => void;
   setIsAiTurn: (v: boolean) => void;
+  advanceTurn: () => void;
   setIsAiPaused: (v: boolean) => void;
 
   setIsAiTurnDone: (v: boolean) => void;
@@ -50,6 +51,7 @@ export function makeAiTurnCallbacks(p: AiTurnCallbacksParams): AiTurnCallbacks {
       setFreeTowerUsedTiles: p.setFreeTowerUsedTiles,
       setAiStateMap: p.setAiStateMap,
       setIsAiTurn: p.setIsAiTurn,
+      advanceTurn: p.advanceTurn,
     },
     refs: {
       getAiStateMap: () => p.aiStateMapRef.current,
