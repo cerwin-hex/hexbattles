@@ -300,8 +300,10 @@ export function canDevelopTile(o: {
   terrain: TerrainType;
   isSpent: boolean;
   balance: number;
+  isCity: boolean;
 }): boolean {
   if (o.entityId !== "peasant") return false;
+  if (o.isCity) return false;
   if (o.isSpent) return false;
   if (developTargetFor(o.terrain) === null) return false;
   return o.balance >= DEVELOP_COST;

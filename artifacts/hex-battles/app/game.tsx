@@ -1027,6 +1027,7 @@ export default function GameScreen() {
   const handleDevelopTile = useCallback(
     (targetTerrain: TerrainType) => {
       if (isAiTurn || gameResult !== null || !selectedEntityKey) return;
+      if (cities.has(selectedEntityKey)) return;
       const tile = activeTileMap.get(selectedEntityKey);
       if (!tile) return;
       const territory = getContiguousTerritory(
@@ -1060,6 +1061,7 @@ export default function GameScreen() {
       activeTileMap,
       entities,
       territoryBalances,
+      cities,
       pushHistory,
     ],
   );
@@ -1538,6 +1540,7 @@ export default function GameScreen() {
           activeTileMap={activeTileMap}
           spentUnits={spentUnits}
           territoryBalances={territoryBalances}
+          cities={cities}
           isAiTurn={isAiTurn}
           gameResult={gameResult}
           botInset={botInset}

@@ -398,4 +398,20 @@ describe("dtFindDevelopMove", () => {
     const ctx = makeCtx(tiles, [["0,0", "peasant"]], [], "ai1");
     expect(dtFindDevelopMove(tiles, ctx, new Set(["0,0"]), 10)).toBeNull();
   });
+
+  it("skips a peasant standing on an own city tile", () => {
+    // Single grass tile at 0,0 that is a CITY, with a peasant on it.
+    const tiles = [makeTile(0, 0, "ai1", "grass")];
+    const ctx: AiContext = {
+      tileMap: tileMap(tiles),
+      entities: ents([["0,0", "peasant"]]),
+      balances: new Map(),
+      cities: new Set(["0,0"]),
+      spentUnits: new Set(),
+      partialMoves: new Map(),
+      combatSpentUnits: new Set(),
+      aiOwner: "ai1",
+    };
+    expect(dtFindDevelopMove(tiles, ctx, new Set(), 10)).toBeNull();
+  });
 });

@@ -575,13 +575,16 @@ describe("calcTerritoryUpkeep admin burden", () => {
 // ─── canDevelopTile ───────────────────────────────────────────────────────────
 
 describe("canDevelopTile", () => {
-  const base = { entityId: "peasant" as const, terrain: "grass" as const, isSpent: false, balance: 5 };
+  const base = { entityId: "peasant" as const, terrain: "grass" as const, isSpent: false, balance: 5, isCity: false };
   it("allows a non-spent peasant on grass/forest with >=5 gold", () => {
     expect(canDevelopTile(base)).toBe(true);
     expect(canDevelopTile({ ...base, terrain: "forest" })).toBe(true);
   });
   it("rejects non-peasants", () => {
     expect(canDevelopTile({ ...base, entityId: "warrior" })).toBe(false);
+  });
+  it("rejects a peasant standing on a city tile", () => {
+    expect(canDevelopTile({ ...base, isCity: true })).toBe(false);
   });
   it("rejects spent peasants", () => {
     expect(canDevelopTile({ ...base, isSpent: true })).toBe(false);

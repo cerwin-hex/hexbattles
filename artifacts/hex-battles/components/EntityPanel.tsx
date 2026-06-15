@@ -19,6 +19,7 @@ interface EntityPanelProps {
   activeTileMap: Map<string, HexTile>;
   spentUnits: Set<string>;
   territoryBalances: Map<string, number>;
+  cities: Set<string>;
   isAiTurn: boolean;
   gameResult: "victory" | "defeat" | null;
   botInset: number;
@@ -36,6 +37,7 @@ export default function EntityPanel({
   activeTileMap,
   spentUnits,
   territoryBalances,
+  cities,
   isAiTurn,
   gameResult,
   botInset,
@@ -82,6 +84,7 @@ export default function EntityPanel({
       terrain: entityTile.terrain,
       isSpent,
       balance: entityTerritoryBalance,
+      isCity: cities.has(selectedEntityKey),
     });
 
   return (

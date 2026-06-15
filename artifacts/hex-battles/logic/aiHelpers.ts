@@ -234,6 +234,7 @@ export function dtFindDevelopMove(
     const target = developTargetFor(t.terrain);
     if (!target) continue;
     if (ctx.entities.get(t.key) !== "peasant") continue;
+    if (ctx.cities.has(t.key)) continue;
     if (spentUnits.has(t.key)) continue;
     let prio = 1;
     const [q, r] = t.key.split(",").map(Number);
