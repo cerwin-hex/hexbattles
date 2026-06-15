@@ -12,11 +12,11 @@ import {
   unitMaxAttacks,
   isCavalry,
   calcAdminBurden,
-  DEVELOPED_TERRAINS,
+  IMPROVED_TERRAINS,
   HEX_EDGES,
   tileKey,
-  DEVELOP_COST,
-  developTargetFor,
+  IMPROVE_COST,
+  improveTargetFor,
 } from "@/utils/hexGrid";
 import { STRENGTH_TO_UNIT, STRENGTH_TO_CAVALRY } from "@/constants/gameConstants";
 
@@ -291,11 +291,11 @@ export function resolveMovedUnitMoves(o: {
 }
 
 /**
- * Whether a selected unit may develop the tile it stands on: a non-spent peasant
- * on developable terrain (grass/forest) whose territory holds at least
- * DEVELOP_COST gold. Shared by the player UI (EntityPanel) and the AI.
+ * Whether a selected unit may improve the tile it stands on: a non-spent peasant
+ * on improvable terrain (grass/forest) whose territory holds at least
+ * IMPROVE_COST gold. Shared by the player UI (EntityPanel) and the AI.
  */
-export function canDevelopTile(o: {
+export function canImproveTile(o: {
   entityId: EntityType | undefined;
   terrain: TerrainType;
   isSpent: boolean;
@@ -305,14 +305,14 @@ export function canDevelopTile(o: {
   if (o.entityId !== "peasant") return false;
   if (o.isCity) return false;
   if (o.isSpent) return false;
-  if (developTargetFor(o.terrain) === null) return false;
-  return o.balance >= DEVELOP_COST;
+  if (improveTargetFor(o.terrain) === null) return false;
+  return o.balance >= IMPROVE_COST;
 }
 
 /**
  * Single source of truth for a territory's per-turn income. Sums each non-rebel
  * tile's terrain income plus CITY_BONUS for city tiles, plus the city-adjacency
- * development bonus (added in a later task). Centralizing this avoids the income
+ * improvement bonus (added in a later task). Centralizing this avoids the income
  * formula drifting across the ~8 sites that previously inlined it.
  */
 export function calcTerritoryIncome(
@@ -325,7 +325,7 @@ export function calcTerritoryIncome(
   for (const t of territory) {
     if (entities.get(t.key) === "rebel") continue;
     income += (TERRAIN_INCOME[t.terrain] ?? 0) + (cities.has(t.key) ? CITY_BONUS : 0);
-    if (DEVELOPED_TERRAINS.has(t.terrain)) {
+    if (IMPROVED_TERRAINS.has(t.terrain)) {
       const [q, r] = t.key.split(",").map(Number);
       for (const { dir: [dq, dr] } of HEX_EDGES) {
         const nk = tileKey(q + dq, r + dr);

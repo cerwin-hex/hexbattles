@@ -16,10 +16,10 @@ import {
   isCavalry,
   cavalryMoveKind,
   DEFAULT_MOVEMENT,
-  DEVELOP_COST,
+  IMPROVE_COST,
 } from "@/utils/hexGrid";
 import { calcTerritoryIncome, calcTerritoryUpkeep, mergeResult } from "@/logic/gameLogic";
-import { dtCountClusters, dtFindDevelopMove } from "@/logic/aiHelpers";
+import { dtCountClusters, dtFindImproveMove } from "@/logic/aiHelpers";
 import type { AiContext } from "@/logic/aiHelpers";
 import type { AiDecisionExec } from "@/logic/aiStrategy";
 
@@ -966,15 +966,15 @@ export async function runExpertTerritoryDecisionLoop(
 
     if (!best) {
       // LAST RESORT: no action strictly improves the evaluated position. Before
-      // ending the territory's turn, develop an idle peasant's tile if there is
+      // ending the territory's turn, improve an idle peasant's tile if there is
       // one and the reserve can pay for it. This mirrors the heuristic loop's
-      // final develop priority (aiStrategy.ts) and is intentionally placed AFTER
+      // final improve priority (aiStrategy.ts) and is intentionally placed AFTER
       // the eval-driven selection so it never preempts a real combat / expansion
       // / economy action — it only ever spends a peasant that had nothing better
-      // to do. `ctx.spentUnits` is the live set `exec.develop` mutates, so a
-      // developed peasant is not re-picked on the next iteration.
-      const dev = dtFindDevelopMove(territory, ctx, ctx.spentUnits, bal);
-      if (dev && (await exec.develop(dev.key, dev.terrain, DEVELOP_COST))) continue;
+      // to do. `ctx.spentUnits` is the live set `exec.improve` mutates, so a
+      // improved peasant is not re-picked on the next iteration.
+      const dev = dtFindImproveMove(territory, ctx, ctx.spentUnits, bal);
+      if (dev && (await exec.improve(dev.key, dev.terrain, IMPROVE_COST))) continue;
       break;
     }
     let ok = false;

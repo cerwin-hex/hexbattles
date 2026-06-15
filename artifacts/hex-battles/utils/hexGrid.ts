@@ -102,26 +102,26 @@ export const TERRAIN_MOVE_COST: Record<TerrainType, number> = {
 
 export const CITY_BONUS = 2;
 
-/** Gold cost for a peasant to develop the tile it stands on. */
-export const DEVELOP_COST = 5;
+/** Gold cost for a peasant to improve the tile it stands on. */
+export const IMPROVE_COST = 5;
 
 /** Tile-count above which a single territory pays administrative burden. */
 export const ADMIN_BURDEN_THRESHOLD = 20;
 
-/** Terrain types produced by development (cannot be developed further). */
-export const DEVELOPED_TERRAINS: ReadonlySet<TerrainType> = new Set<TerrainType>([
+/** Terrain types produced by improvement (cannot be improved further). */
+export const IMPROVED_TERRAINS: ReadonlySet<TerrainType> = new Set<TerrainType>([
   "field",
   "sawmill",
 ]);
 
-const DEVELOP_TARGET: Partial<Record<TerrainType, TerrainType>> = {
+const IMPROVE_TARGET: Partial<Record<TerrainType, TerrainType>> = {
   grass: "field",
   forest: "sawmill",
 };
 
-/** The terrain a peasant would produce by developing `terrain`, or null. */
-export function developTargetFor(terrain: TerrainType): TerrainType | null {
-  return DEVELOP_TARGET[terrain] ?? null;
+/** The terrain a peasant would produce by improving `terrain`, or null. */
+export function improveTargetFor(terrain: TerrainType): TerrainType | null {
+  return IMPROVE_TARGET[terrain] ?? null;
 }
 
 /**

@@ -60,7 +60,7 @@ import {
 } from "@/utils/hexMath";
 import {
   ENTITY_META,
-  DEVELOP_COST,
+  IMPROVE_COST,
   generateHexGrid,
   getContiguousTerritory,
   getTerritoryId,
@@ -93,7 +93,7 @@ import {
   HexTileTerrainLayer,
   HexTileTerritoryLayer,
 } from "@/components/HexTileLayer";
-import { DevelopmentMarkerLayer } from "@/components/DevelopmentMarkerLayer";
+import { ImprovementMarkerLayer } from "@/components/ImprovementMarkerLayer";
 import { EntityLayer } from "@/components/EntityLayer";
 import { BorderEdgeLayer } from "@/components/BorderEdgeLayer";
 import { MovementHighlightTapTargets } from "@/components/MovementHighlightTapTargets";
@@ -1025,7 +1025,7 @@ export default function GameScreen() {
     pushHistory,
   ]);
 
-  const handleDevelopTile = useCallback(
+  const handleImproveTile = useCallback(
     (targetTerrain: TerrainType) => {
       if (isAiTurn || gameResult !== null || !selectedEntityKey) return;
       if (cities.has(selectedEntityKey)) return;
@@ -1040,7 +1040,7 @@ export default function GameScreen() {
       const tid = getTerritoryId(territory);
       if (!tid) return;
       const bal = territoryBalances.get(tid) ?? 0;
-      if (bal < DEVELOP_COST) return;
+      if (bal < IMPROVE_COST) return;
       pushHistory();
       setMutableTileMap((prev) => {
         const next = new Map(prev);
@@ -1050,7 +1050,7 @@ export default function GameScreen() {
       });
       setTerritoryBalances((prev) => {
         const next = new Map(prev);
-        next.set(tid, bal - DEVELOP_COST);
+        next.set(tid, bal - IMPROVE_COST);
         return next;
       });
       setSpentUnits((prev) => new Set(prev).add(selectedEntityKey));
@@ -1290,7 +1290,7 @@ export default function GameScreen() {
                   tileData={tileData}
                   HEX_SIZE={HEX_SIZE}
                 />
-                <DevelopmentMarkerLayer
+                <ImprovementMarkerLayer
                   tileData={tileData}
                   activeTileMap={activeTileMap}
                   HEX_SIZE={HEX_SIZE}
@@ -1559,7 +1559,7 @@ export default function GameScreen() {
               ? handleDemolishBridge
               : undefined
           }
-          onDevelop={handleDevelopTile}
+          onImprove={handleImproveTile}
         />
       )}
 

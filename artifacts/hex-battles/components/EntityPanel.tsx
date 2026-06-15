@@ -3,12 +3,12 @@ import { Text, TouchableOpacity, View } from "react-native";
 import {
   ENTITY_META,
   UNIT_UPGRADE,
-  DEVELOP_COST,
-  developTargetFor,
+  IMPROVE_COST,
+  improveTargetFor,
   getContiguousTerritory,
   getTerritoryId,
 } from "@/utils/hexGrid";
-import { canDevelopTile } from "@/logic/gameLogic";
+import { canImproveTile } from "@/logic/gameLogic";
 import type { EntityType, HexTile, TerrainType } from "@/types";
 import { BOTTOM_BAR_H } from "@/constants/gameConstants";
 import styles from "@/app/gameStyles";
@@ -28,7 +28,7 @@ interface EntityPanelProps {
   setTerritoryBalances: (updater: (prev: Map<string, number>) => Map<string, number>) => void;
   setSelectedEntityKey: (key: string | null) => void;
   onRemoveOverride?: () => void;
-  onDevelop?: (targetTerrain: TerrainType) => void;
+  onImprove?: (targetTerrain: TerrainType) => void;
 }
 
 export default function EntityPanel({
@@ -46,7 +46,7 @@ export default function EntityPanel({
   setTerritoryBalances,
   setSelectedEntityKey,
   onRemoveOverride,
-  onDevelop,
+  onImprove,
 }: EntityPanelProps) {
   const entityId = entities.get(selectedEntityKey);
   const isUnit = entityId ? ENTITY_META[entityId].isUnit : false;
@@ -75,11 +75,11 @@ export default function EntityPanel({
     ? !isSpent
     : !!entityTerritoryId && entityTerritoryBalance >= removeCost;
 
-  const developTarget = entityTile ? developTargetFor(entityTile.terrain) : null;
-  const developEnabled =
+  const improveTarget = entityTile ? improveTargetFor(entityTile.terrain) : null;
+  const improveEnabled =
     !!entityTile &&
-    !!developTarget &&
-    canDevelopTile({
+    !!improveTarget &&
+    canImproveTile({
       entityId,
       terrain: entityTile.terrain,
       isSpent,
@@ -166,23 +166,23 @@ export default function EntityPanel({
           ⬆ Upgrade {canUpgrade ? `(${upgradeCost})` : "(Max)"}
         </Text>
       </TouchableOpacity>
-      {developTarget && (
+      {improveTarget && (
         <TouchableOpacity
-          style={[styles.buildBtn, !developEnabled && styles.buildBtnDisabled]}
-          activeOpacity={developEnabled ? 0.75 : 1}
+          style={[styles.buildBtn, !improveEnabled && styles.buildBtnDisabled]}
+          activeOpacity={improveEnabled ? 0.75 : 1}
           onPress={() => {
             if (isAiTurn || gameResult !== null) return;
-            if (!developEnabled || !developTarget) return;
-            onDevelop?.(developTarget);
+            if (!improveEnabled || !improveTarget) return;
+            onImprove?.(improveTarget);
           }}
         >
           <Text
             style={[
               styles.buildBtnText,
-              !developEnabled && styles.buildBtnTextDisabled,
+              !improveEnabled && styles.buildBtnTextDisabled,
             ]}
           >
-            ⚒ Develop ({DEVELOP_COST})
+            ⚒ Improve ({IMPROVE_COST})
           </Text>
         </TouchableOpacity>
       )}

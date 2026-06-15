@@ -23,7 +23,7 @@ export interface EconBreakdown {
   sawmillBonus: number;
   desertIncome: number;
   cityIncome: number;
-  cityDevBonus: number;
+  cityImproveBonus: number;
   upkeepGroups: {
     id: EntityType;
     name: string;
@@ -33,6 +33,9 @@ export interface EconBreakdown {
     mostExpensiveCost: number | null;
     total: number;
   }[];
+  totalIncome: number;
+  totalUpkeep: number;
+  adminBurden: number;
   rebelCount: number;
   rebelTotalLoss: number;
   net: number;
@@ -143,14 +146,6 @@ export default function GameModals({
                   </Text>
                 </View>
               )}
-              {econBreakdown && econBreakdown.fieldCount > 0 && (
-                <View style={[styles.econRow, styles.econSubtotalRow]}>
-                  <Text style={styles.econSubtotalLabel}>Subtotal</Text>
-                  <Text style={styles.econRowValue}>
-                    +{econBreakdown.grassIncome + econBreakdown.fieldBonus}
-                  </Text>
-                </View>
-              )}
               {econBreakdown && econBreakdown.forestCount > 0 && (
                 <View style={[styles.econRow, styles.econGroupGap]}>
                   <Text style={styles.econRowLabel}>
@@ -170,14 +165,6 @@ export default function GameModals({
                   </Text>
                   <Text style={styles.econRowValue}>
                     +{econBreakdown.sawmillBonus}
-                  </Text>
-                </View>
-              )}
-              {econBreakdown && econBreakdown.sawmillCount > 0 && (
-                <View style={[styles.econRow, styles.econSubtotalRow]}>
-                  <Text style={styles.econSubtotalLabel}>Subtotal</Text>
-                  <Text style={styles.econRowValue}>
-                    +{econBreakdown.forestIncome + econBreakdown.sawmillBonus}
                   </Text>
                 </View>
               )}
@@ -206,31 +193,30 @@ export default function GameModals({
                   </Text>
                 </View>
               )}
-              {econBreakdown && econBreakdown.cityDevBonus > 0 && (
+              {econBreakdown && econBreakdown.cityImproveBonus > 0 && (
                 <View style={styles.econRow}>
                   <Text style={[styles.econRowLabel, styles.econIndentLabel]}>
                     ↳ Improvements{" "}
-                    <Text style={styles.econPer}>(+1 per adj. dev.)</Text>
+                    <Text style={styles.econPer}>(+1 per adj. improv.)</Text>
                   </Text>
                   <Text style={styles.econRowValue}>
-                    +{econBreakdown.cityDevBonus}
+                    +{econBreakdown.cityImproveBonus}
                   </Text>
                 </View>
               )}
-              {econBreakdown &&
-                econBreakdown.cityCount > 0 &&
-                econBreakdown.cityDevBonus > 0 && (
-                  <View style={[styles.econRow, styles.econSubtotalRow]}>
-                    <Text style={styles.econSubtotalLabel}>Subtotal</Text>
-                    <Text style={styles.econRowValue}>
-                      +{econBreakdown.cityIncome + econBreakdown.cityDevBonus}
-                    </Text>
-                  </View>
-                )}
+              {econBreakdown && (
+                <View style={[styles.econRow, styles.econTotalRow]}>
+                  <Text style={styles.econTotalLabel}>Total income</Text>
+                  <Text style={styles.econRowValue}>
+                    +{econBreakdown.totalIncome}
+                  </Text>
+                </View>
+              )}
             </View>
             {econBreakdown &&
               (econBreakdown.upkeepGroups.length > 0 ||
-                econBreakdown.rebelTotalLoss > 0) && (
+                econBreakdown.rebelTotalLoss > 0 ||
+                econBreakdown.adminBurden > 0) && (
                 <View style={styles.econSection}>
                   <Text style={styles.econSectionLabel}>UPKEEP / TURN</Text>
                   {econBreakdown.upkeepGroups.map((g, i) => (
@@ -279,6 +265,33 @@ export default function GameModals({
                       </Text>
                     </View>
                   )}
+                  {econBreakdown.adminBurden > 0 && (
+                    <View
+                      style={[
+                        styles.econRow,
+                        (econBreakdown.upkeepGroups.length > 0 ||
+                          econBreakdown.rebelTotalLoss > 0) &&
+                          styles.econUpkeepCategoryGap,
+                      ]}
+                    >
+                      <Text style={styles.econRowLabel}>
+                        Administrative burden{" "}
+                        <Text style={styles.econPer}>(size &gt; 20)</Text>
+                      </Text>
+                      <Text style={[styles.econRowValue, { color: "#E07060" }]}>
+                        −{econBreakdown.adminBurden}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={[styles.econRow, styles.econTotalRow]}>
+                    <Text style={styles.econTotalLabel}>Total upkeep</Text>
+                    <Text style={[styles.econRowValue, { color: "#E07060" }]}>
+                      −
+                      {econBreakdown.totalUpkeep +
+                        econBreakdown.rebelTotalLoss +
+                        econBreakdown.adminBurden}
+                    </Text>
+                  </View>
                 </View>
               )}
             <View style={styles.econDivider} />

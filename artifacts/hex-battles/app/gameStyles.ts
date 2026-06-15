@@ -482,18 +482,17 @@ const styles = StyleSheet.create({
   econIndentLabel: {
     paddingLeft: 16,
   },
-  econSubtotalRow: {
+  econTotalRow: {
     borderTopWidth: 1,
-    borderTopColor: "#4A3C1E",
-    marginTop: 2,
-    paddingTop: 2,
+    borderTopColor: "#6A5020",
+    marginTop: 4,
+    paddingTop: 4,
   },
-  econSubtotalLabel: {
-    fontSize: 12,
+  econTotalLabel: {
+    fontSize: 13,
     fontFamily: "Inter_700Bold",
-    color: "#A08C68",
+    color: "#D0B880",
     flex: 1,
-    paddingLeft: 16,
   },
   econGroupGap: {
     marginTop: 8,

@@ -10,7 +10,7 @@ import {
   dtDefenseMinDist,
   dtSpacedPlacements,
   dtFindMergeMove,
-  dtFindDevelopMove,
+  dtFindImproveMove,
 } from "@/logic/aiHelpers";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -346,25 +346,25 @@ describe("dtFindMergeMove", () => {
   });
 });
 
-// ─── dtFindDevelopMove ─────────────────────────────────────────────────────────
+// ─── dtFindImproveMove ─────────────────────────────────────────────────────────
 
-describe("dtFindDevelopMove", () => {
-  it("returns null when no own peasant stands on developable terrain", () => {
+describe("dtFindImproveMove", () => {
+  it("returns null when no own peasant stands on improvable terrain", () => {
     const tiles = [makeTile(0, 0, "ai1", "grass")];
     const ctx = makeCtx(tiles, [], [], "ai1");
-    expect(dtFindDevelopMove(tiles, ctx, new Set(), 10)).toBeNull();
+    expect(dtFindImproveMove(tiles, ctx, new Set(), 10)).toBeNull();
   });
 
-  it("returns null when balance < DEVELOP_COST (5)", () => {
+  it("returns null when balance < IMPROVE_COST (5)", () => {
     const tiles = [makeTile(0, 0, "ai1", "grass")];
     const ctx = makeCtx(tiles, [["0,0", "peasant"]], [], "ai1");
-    expect(dtFindDevelopMove(tiles, ctx, new Set(), 4)).toBeNull();
+    expect(dtFindImproveMove(tiles, ctx, new Set(), 4)).toBeNull();
   });
 
-  it("develops a peasant's grass tile into a field", () => {
+  it("improves a peasant's grass tile into a field", () => {
     const tiles = [makeTile(0, 0, "ai1", "grass")];
     const ctx = makeCtx(tiles, [["0,0", "peasant"]], [], "ai1");
-    expect(dtFindDevelopMove(tiles, ctx, new Set(), 10)).toEqual({
+    expect(dtFindImproveMove(tiles, ctx, new Set(), 10)).toEqual({
       key: "0,0",
       terrain: "field",
     });
@@ -387,7 +387,7 @@ describe("dtFindDevelopMove", () => {
       combatSpentUnits: new Set(),
       aiOwner: "ai1",
     };
-    expect(dtFindDevelopMove(territory, ctx, new Set(), 10)).toEqual({
+    expect(dtFindImproveMove(territory, ctx, new Set(), 10)).toEqual({
       key: "1,0",
       terrain: "sawmill",
     });
@@ -396,7 +396,7 @@ describe("dtFindDevelopMove", () => {
   it("skips spent peasants", () => {
     const tiles = [makeTile(0, 0, "ai1", "grass")];
     const ctx = makeCtx(tiles, [["0,0", "peasant"]], [], "ai1");
-    expect(dtFindDevelopMove(tiles, ctx, new Set(["0,0"]), 10)).toBeNull();
+    expect(dtFindImproveMove(tiles, ctx, new Set(["0,0"]), 10)).toBeNull();
   });
 
   it("skips a peasant standing on an own city tile", () => {
@@ -412,6 +412,6 @@ describe("dtFindDevelopMove", () => {
       combatSpentUnits: new Set(),
       aiOwner: "ai1",
     };
-    expect(dtFindDevelopMove(tiles, ctx, new Set(), 10)).toBeNull();
+    expect(dtFindImproveMove(tiles, ctx, new Set(), 10)).toBeNull();
   });
 });

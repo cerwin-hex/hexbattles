@@ -477,7 +477,7 @@ function makeExec(overrides: Partial<AiDecisionExec> = {}): AiDecisionExec {
     upgrade: vi.fn(async () => false),
     build: vi.fn(async () => false),
     remove: vi.fn(async () => false),
-    develop: vi.fn(async () => false),
+    improve: vi.fn(async () => false),
     markSpent: vi.fn(),
     setTerritoryState: vi.fn(),
     ...overrides,
@@ -923,11 +923,11 @@ describe("runAiTerritoryDecisionLoop", () => {
     });
   });
 
-  it("develops an idle peasant's tile when no combat is available", async () => {
+  it("improves an idle peasant's tile when no combat is available", async () => {
     // Pure AI-only map (no enemy/neutral tiles anywhere) so no attack, expansion,
     // or "move closer to enemy" action can fire. With nothing better to do and
-    // spare gold (balance >= DEVELOP_COST=5), the loop falls through to its
-    // last-resort develop attempt: the idle peasant on a grass tile is developed
+    // spare gold (balance >= IMPROVE_COST=5), the loop falls through to its
+    // last-resort improve attempt: the idle peasant on a grass tile is improved
     // in place (grass -> "field").
     const tiles = [
       makeTile(0, 0, "ai1"),
@@ -938,18 +938,18 @@ describe("runAiTerritoryDecisionLoop", () => {
     const balances = new Map([["0,0", 10]]);
     const aiCtx = makeAiCtx(tiles, "ai1", entities, balances);
 
-    // Recording develop mock. isTurnActive flips to false after the first
-    // develop so the loop exits next iteration (mirrors the existing harness's
+    // Recording improve mock. isTurnActive flips to false after the first
+    // improve so the loop exits next iteration (mirrors the existing harness's
     // `() => !moved` pattern) — guarantees finite progress / no infinite loop.
-    let developed = false;
+    let improved = false;
     const exec = makeExec({
-      develop: vi.fn(async () => { developed = true; return true; }),
+      improve: vi.fn(async () => { improved = true; return true; }),
     });
 
-    await runAiTerritoryDecisionLoop("0,0", aiCtx, exec, () => !developed, "hard");
+    await runAiTerritoryDecisionLoop("0,0", aiCtx, exec, () => !improved, "hard");
 
-    expect(exec.develop).toHaveBeenCalledTimes(1);
-    const [target, terrain, cost] = (exec.develop as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(exec.improve).toHaveBeenCalledTimes(1);
+    const [target, terrain, cost] = (exec.improve as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(target).toBe("0,0");
     expect(terrain).toBe("field");
     expect(cost).toBe(5);

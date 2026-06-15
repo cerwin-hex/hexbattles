@@ -4,20 +4,20 @@ import { hexCornersString } from "@/utils/hexMath";
 import { TERRAIN_FILLS } from "@/constants/colors";
 import type { HexTile } from "@/types";
 
-export interface DevelopmentMarkerLayerProps {
+export interface ImprovementMarkerLayerProps {
   tileData: Array<{ tile: HexTile; cx: number; cy: number }>;
   activeTileMap: Map<string, HexTile>;
   HEX_SIZE: number;
 }
 
-// Draws a half-size hex on top of developed tiles so the upgrade is visible in
+// Draws a half-size hex on top of improved tiles so the upgrade is visible in
 // terrain view (the base terrain layer keeps showing the original grass/forest
 // colour underneath). Field = corn-yellow, sawmill = brown.
-function DevelopmentMarkerLayerInner({
+function ImprovementMarkerLayerInner({
   tileData,
   activeTileMap,
   HEX_SIZE,
-}: DevelopmentMarkerLayerProps) {
+}: ImprovementMarkerLayerProps) {
   const markerSize = HEX_SIZE / 2;
   return (
     <>
@@ -39,8 +39,8 @@ function DevelopmentMarkerLayerInner({
 }
 
 function areEqual(
-  prev: DevelopmentMarkerLayerProps,
-  next: DevelopmentMarkerLayerProps,
+  prev: ImprovementMarkerLayerProps,
+  next: ImprovementMarkerLayerProps,
 ): boolean {
   return (
     prev.tileData === next.tileData &&
@@ -49,7 +49,7 @@ function areEqual(
   );
 }
 
-export const DevelopmentMarkerLayer = React.memo(
-  DevelopmentMarkerLayerInner,
+export const ImprovementMarkerLayer = React.memo(
+  ImprovementMarkerLayerInner,
   areEqual,
 );

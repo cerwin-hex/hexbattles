@@ -71,7 +71,7 @@ async function firstExpertAction(
       stop({ kind: "build", buildingType, target, cost }),
     upgrade: async (target, to, cost) => stop({ kind: "upgrade", target, to, cost }),
     remove: async (target) => stop({ kind: "remove", target }),
-    develop: async () => false,
+    improve: async () => false,
     markSpent: () => {},
     setTerritoryState: () => {},
   };
@@ -619,7 +619,7 @@ describe("runExpertTerritoryDecisionLoop", () => {
         calls.push({ kind: "remove", target });
         return false;
       },
-      develop: async () => false,
+      improve: async () => false,
       markSpent: () => {},
       setTerritoryState: () => {},
     };
@@ -946,16 +946,16 @@ describe("two-ply best-response", () => {
   });
 });
 
-// ─── develop as a last-resort action ─────────────────────────────────────────
+// ─── improve as a last-resort action ─────────────────────────────────────────
 
-describe("expert develop (last-resort)", () => {
-  it("develops an idle peasant's grass tile when no better action exists", async () => {
+describe("expert improve (last-resort)", () => {
+  it("improves an idle peasant's grass tile when no better action exists", async () => {
     // A fully interior, all-grass territory surrounded by void: no enemies, no
     // border tiles, nothing to capture. One idle peasant sits on grass. The
-    // balance (5) is exactly DEVELOP_COST — too little for any unit/building buy
+    // balance (5) is exactly IMPROVE_COST — too little for any unit/building buy
     // (cheapest unit is 10), so the candidate generator emits no score-improving
     // action and the expert loop's `best` is null. With nothing better to do, the
-    // expert should fall back to developing the peasant's tile (grass→field).
+    // expert should fall back to improving the peasant's tile (grass→field).
     const tileMap = makeTileMap([
       makeTile(0, 0, "ai1"),
       makeTile(1, 0, "ai1"),
@@ -975,10 +975,10 @@ describe("expert develop (last-resort)", () => {
       build: async () => false,
       upgrade: async () => false,
       remove: async () => false,
-      develop: async (target, terrain, cost) => {
+      improve: async (target, terrain, cost) => {
         calls.push({ target, terrain, cost });
         // Mirror production: mark the peasant spent so the loop never re-picks it
-        // (otherwise it would re-develop the same tile until iter<100 ends).
+        // (otherwise it would re-improve the same tile until iter<100 ends).
         ctx.spentUnits.add(target);
         return true;
       },
@@ -992,10 +992,10 @@ describe("expert develop (last-resort)", () => {
     expect(calls[0]).toEqual({ target: "0,0", terrain: "field", cost: 5 });
   });
 
-  it("prefers a capture over developing (develop is strictly last-resort)", async () => {
+  it("prefers a capture over improving (improve is strictly last-resort)", async () => {
     // Same idle peasant, but now an undefended enemy grass tile sits adjacent.
     // Capturing it is a real positive-score action, so it must be chosen over
-    // developing — develop only fires when nothing better exists.
+    // improving — improve only fires when nothing better exists.
     const tileMap = makeTileMap([
       makeTile(0, 0, "ai1"),
       makeTile(1, 0, "ai1"),
@@ -1021,7 +1021,7 @@ describe("expert develop (last-resort)", () => {
       build: async () => record("build"),
       upgrade: async () => record("upgrade"),
       remove: async () => record("remove"),
-      develop: async () => record("develop"),
+      improve: async () => record("improve"),
       markSpent: () => {},
       setTerritoryState: () => {},
     };

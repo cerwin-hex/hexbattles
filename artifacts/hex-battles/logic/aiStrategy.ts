@@ -16,7 +16,7 @@ import {
   unitMaxAttacks,
   isCavalry,
   cavalryMoveKind,
-  DEVELOP_COST,
+  IMPROVE_COST,
 } from "@/utils/hexGrid";
 import { advanceAttacksUsed, advanceCombatSpent, calcTerritoryIncome, calcTerritoryUpkeep, effectiveRemaining, isChargeAttack, mergeResult, resolveMovedUnitMoves } from "@/logic/gameLogic";
 import {
@@ -25,7 +25,7 @@ import {
   dtCaptureCreatesOneHex,
   dtSpacedPlacements,
   dtFindMergeMove,
-  dtFindDevelopMove,
+  dtFindImproveMove,
 } from "@/logic/aiHelpers";
 import type { AiContext } from "@/logic/aiHelpers";
 import { runExpertTerritoryDecisionLoop } from "@/logic/aiExpert";
@@ -54,7 +54,7 @@ export interface AiDecisionExec {
   upgrade(target: string, to: EntityType, cost: number): Promise<boolean>;
   build(type: EntityType, target: string, cost: number): Promise<boolean>;
   remove(target: string): Promise<boolean>;
-  develop(target: string, terrain: TerrainType, cost: number): Promise<boolean>;
+  improve(target: string, terrain: TerrainType, cost: number): Promise<boolean>;
   markSpent(key: string): void;
   setTerritoryState(tid: string, state: AiState): void;
 }
@@ -924,14 +924,14 @@ export async function runAiTerritoryDecisionLoop(
       }
     }
 
-    // ══ PRIORITY J (LAST RESORT): Develop an idle peasant's tile with spare gold ══
+    // ══ PRIORITY J (LAST RESORT): Improve an idle peasant's tile with spare gold ══
     // Only when nothing better happened this iteration, so the AI never skips
-    // combat or expansion to farm. dtFindDevelopMove prefers city-adjacent
+    // combat or expansion to farm. dtFindImproveMove prefers city-adjacent
     // peasants and skips already-spent units (aiCtx.spentUnits is the live set
-    // the loop filters availUnits against and that exec.develop mutates).
+    // the loop filters availUnits against and that exec.improve mutates).
     if (!actionTaken) {
-      const dev = dtFindDevelopMove(currTerr, aiCtx, aiCtx.spentUnits, currBal);
-      if (dev) actionTaken = await exec.develop(dev.key, dev.terrain, DEVELOP_COST);
+      const dev = dtFindImproveMove(currTerr, aiCtx, aiCtx.spentUnits, currBal);
+      if (dev) actionTaken = await exec.improve(dev.key, dev.terrain, IMPROVE_COST);
     }
 
     if (!actionTaken) break;
@@ -1498,7 +1498,7 @@ export async function runAiTurn(
         return true;
       };
 
-      const dtExecDevelop = async (
+      const dtExecImprove = async (
         target: string,
         terrain: TerrainType,
         cost: number,
@@ -1540,7 +1540,7 @@ export async function runAiTurn(
         upgrade: dtExecUpgrade,
         build: dtExecBuild,
         remove: dtExecRemove,
-        develop: dtExecDevelop,
+        improve: dtExecImprove,
         markSpent,
         setTerritoryState,
       };

@@ -11,7 +11,7 @@ import {
   advanceAttacksUsed,
   advanceCombatSpent,
   calcTerritoryIncome,
-  canDevelopTile,
+  canImproveTile,
 } from "@/logic/gameLogic";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -529,8 +529,8 @@ describe("calcTerritoryIncome", () => {
 });
 
 describe("calcTerritoryIncome city-adjacency bonus", () => {
-  it("grants +1 per developed same-owner tile adjacent to a city, stacking", () => {
-    // City at 0,0; two developed neighbours (field + sawmill) -> +2 bonus,
+  it("grants +1 per improved same-owner tile adjacent to a city, stacking", () => {
+    // City at 0,0; two improved neighbours (field + sawmill) -> +2 bonus,
     // plus their own income (3 + 3) and the city tile (grass 2 + city 2).
     const tiles = [
       makeTile(0, 0, "player", "grass"),    // city: 2 + CITY_BONUS 2
@@ -572,28 +572,28 @@ describe("calcTerritoryUpkeep admin burden", () => {
   });
 });
 
-// ─── canDevelopTile ───────────────────────────────────────────────────────────
+// ─── canImproveTile ───────────────────────────────────────────────────────────
 
-describe("canDevelopTile", () => {
+describe("canImproveTile", () => {
   const base = { entityId: "peasant" as const, terrain: "grass" as const, isSpent: false, balance: 5, isCity: false };
   it("allows a non-spent peasant on grass/forest with >=5 gold", () => {
-    expect(canDevelopTile(base)).toBe(true);
-    expect(canDevelopTile({ ...base, terrain: "forest" })).toBe(true);
+    expect(canImproveTile(base)).toBe(true);
+    expect(canImproveTile({ ...base, terrain: "forest" })).toBe(true);
   });
   it("rejects non-peasants", () => {
-    expect(canDevelopTile({ ...base, entityId: "warrior" })).toBe(false);
+    expect(canImproveTile({ ...base, entityId: "warrior" })).toBe(false);
   });
   it("rejects a peasant standing on a city tile", () => {
-    expect(canDevelopTile({ ...base, isCity: true })).toBe(false);
+    expect(canImproveTile({ ...base, isCity: true })).toBe(false);
   });
   it("rejects spent peasants", () => {
-    expect(canDevelopTile({ ...base, isSpent: true })).toBe(false);
+    expect(canImproveTile({ ...base, isSpent: true })).toBe(false);
   });
   it("rejects insufficient gold", () => {
-    expect(canDevelopTile({ ...base, balance: 4 })).toBe(false);
+    expect(canImproveTile({ ...base, balance: 4 })).toBe(false);
   });
-  it("rejects non-developable terrain", () => {
-    expect(canDevelopTile({ ...base, terrain: "desert" })).toBe(false);
-    expect(canDevelopTile({ ...base, terrain: "field" })).toBe(false);
+  it("rejects non-improvable terrain", () => {
+    expect(canImproveTile({ ...base, terrain: "desert" })).toBe(false);
+    expect(canImproveTile({ ...base, terrain: "field" })).toBe(false);
   });
 });

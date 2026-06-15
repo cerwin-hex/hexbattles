@@ -14,9 +14,9 @@ import {
   getContiguousTerritory,
   getTerritoryId,
   generateHexGrid,
-  DEVELOP_COST,
-  developTargetFor,
-  DEVELOPED_TERRAINS,
+  IMPROVE_COST,
+  improveTargetFor,
+  IMPROVED_TERRAINS,
   calcAdminBurden,
   ADMIN_BURDEN_THRESHOLD,
 } from "@/utils/hexGrid";
@@ -502,27 +502,27 @@ describe("generateHexGrid map options", () => {
   });
 });
 
-// ─── development constants ────────────────────────────────────────────────────
+// ─── improvement constants ────────────────────────────────────────────────────
 
-describe("development constants", () => {
-  it("maps developable terrain to its upgrade", () => {
-    expect(developTargetFor("grass")).toBe("field");
-    expect(developTargetFor("forest")).toBe("sawmill");
+describe("improvement constants", () => {
+  it("maps improvable terrain to its upgrade", () => {
+    expect(improveTargetFor("grass")).toBe("field");
+    expect(improveTargetFor("forest")).toBe("sawmill");
   });
-  it("returns null for non-developable terrain", () => {
-    expect(developTargetFor("desert")).toBeNull();
-    expect(developTargetFor("field")).toBeNull();
-    expect(developTargetFor("sawmill")).toBeNull();
-    expect(developTargetFor("lake")).toBeNull();
-    expect(developTargetFor("mountain")).toBeNull();
+  it("returns null for non-improvable terrain", () => {
+    expect(improveTargetFor("desert")).toBeNull();
+    expect(improveTargetFor("field")).toBeNull();
+    expect(improveTargetFor("sawmill")).toBeNull();
+    expect(improveTargetFor("lake")).toBeNull();
+    expect(improveTargetFor("mountain")).toBeNull();
   });
-  it("recognises developed terrains", () => {
-    expect(DEVELOPED_TERRAINS.has("field")).toBe(true);
-    expect(DEVELOPED_TERRAINS.has("sawmill")).toBe(true);
-    expect(DEVELOPED_TERRAINS.has("grass")).toBe(false);
+  it("recognises improved terrains", () => {
+    expect(IMPROVED_TERRAINS.has("field")).toBe(true);
+    expect(IMPROVED_TERRAINS.has("sawmill")).toBe(true);
+    expect(IMPROVED_TERRAINS.has("grass")).toBe(false);
   });
-  it("costs 5 to develop", () => {
-    expect(DEVELOP_COST).toBe(5);
+  it("costs 5 to improve", () => {
+    expect(IMPROVE_COST).toBe(5);
   });
 });
 
