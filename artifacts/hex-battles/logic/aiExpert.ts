@@ -16,9 +16,10 @@ import {
   isCavalry,
   cavalryMoveKind,
   DEFAULT_MOVEMENT,
+  DEVELOP_COST,
 } from "@/utils/hexGrid";
 import { calcTerritoryIncome, calcTerritoryUpkeep, mergeResult } from "@/logic/gameLogic";
-import { dtCountClusters } from "@/logic/aiHelpers";
+import { dtCountClusters, dtFindDevelopMove } from "@/logic/aiHelpers";
 import type { AiContext } from "@/logic/aiHelpers";
 import type { AiDecisionExec } from "@/logic/aiStrategy";
 
@@ -963,7 +964,19 @@ export async function runExpertTerritoryDecisionLoop(
       territoryThreatened(ctx.tileMap, ctx.entities, territory, owner) ? "defending" : "attacking",
     );
 
-    if (!best) break;
+    if (!best) {
+      // LAST RESORT: no action strictly improves the evaluated position. Before
+      // ending the territory's turn, develop an idle peasant's tile if there is
+      // one and the reserve can pay for it. This mirrors the heuristic loop's
+      // final develop priority (aiStrategy.ts) and is intentionally placed AFTER
+      // the eval-driven selection so it never preempts a real combat / expansion
+      // / economy action — it only ever spends a peasant that had nothing better
+      // to do. `ctx.spentUnits` is the live set `exec.develop` mutates, so a
+      // developed peasant is not re-picked on the next iteration.
+      const dev = dtFindDevelopMove(territory, ctx, ctx.spentUnits, bal);
+      if (dev && (await exec.develop(dev.key, dev.terrain, DEVELOP_COST))) continue;
+      break;
+    }
     let ok = false;
     switch (best.kind) {
       case "move":
