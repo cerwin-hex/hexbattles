@@ -102,6 +102,39 @@ export const TERRAIN_MOVE_COST: Record<TerrainType, number> = {
 
 export const CITY_BONUS = 2;
 
+/** Gold cost for a peasant to develop the tile it stands on. */
+export const DEVELOP_COST = 5;
+
+/** Tile-count above which a single territory pays administrative burden. */
+export const ADMIN_BURDEN_THRESHOLD = 20;
+
+/** Terrain types produced by development (cannot be developed further). */
+export const DEVELOPED_TERRAINS: ReadonlySet<TerrainType> = new Set<TerrainType>([
+  "field",
+  "sawmill",
+]);
+
+const DEVELOP_TARGET: Partial<Record<TerrainType, TerrainType>> = {
+  grass: "field",
+  forest: "sawmill",
+};
+
+/** The terrain a peasant would produce by developing `terrain`, or null. */
+export function developTargetFor(terrain: TerrainType): TerrainType | null {
+  return DEVELOP_TARGET[terrain] ?? null;
+}
+
+/**
+ * Administrative burden (extra upkeep) for a territory of `tileCount` tiles:
+ * ceil(max(0, tileCount - ADMIN_BURDEN_THRESHOLD) / 2). Only the tiles ABOVE
+ * the threshold are charged, at half a gold each (rounded up).
+ */
+export function calcAdminBurden(tileCount: number): number {
+  const excess = tileCount - ADMIN_BURDEN_THRESHOLD;
+  if (excess <= 0) return 0;
+  return Math.ceil(excess / 2);
+}
+
 export const UNIT_UPGRADE: Partial<Record<EntityType, EntityType>> = {
   peasant: 'warrior',
   warrior: 'swordsman',

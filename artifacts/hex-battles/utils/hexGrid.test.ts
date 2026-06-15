@@ -14,6 +14,11 @@ import {
   getContiguousTerritory,
   getTerritoryId,
   generateHexGrid,
+  DEVELOP_COST,
+  developTargetFor,
+  DEVELOPED_TERRAINS,
+  calcAdminBurden,
+  ADMIN_BURDEN_THRESHOLD,
 } from "@/utils/hexGrid";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -494,5 +499,46 @@ describe("generateHexGrid map options", () => {
     // post-generation reachability fixup that converts some mountains to grass.
     expect(mountainShare).toBeGreaterThanOrEqual(0.1);
     expect(mountainShare).toBeLessThanOrEqual(0.35);
+  });
+});
+
+// ─── development constants ────────────────────────────────────────────────────
+
+describe("development constants", () => {
+  it("maps developable terrain to its upgrade", () => {
+    expect(developTargetFor("grass")).toBe("field");
+    expect(developTargetFor("forest")).toBe("sawmill");
+  });
+  it("returns null for non-developable terrain", () => {
+    expect(developTargetFor("desert")).toBeNull();
+    expect(developTargetFor("field")).toBeNull();
+    expect(developTargetFor("sawmill")).toBeNull();
+    expect(developTargetFor("lake")).toBeNull();
+    expect(developTargetFor("mountain")).toBeNull();
+  });
+  it("recognises developed terrains", () => {
+    expect(DEVELOPED_TERRAINS.has("field")).toBe(true);
+    expect(DEVELOPED_TERRAINS.has("sawmill")).toBe(true);
+    expect(DEVELOPED_TERRAINS.has("grass")).toBe(false);
+  });
+  it("costs 5 to develop", () => {
+    expect(DEVELOP_COST).toBe(5);
+  });
+});
+
+// ─── calcAdminBurden ─────────────────────────────────────────────────────────
+
+describe("calcAdminBurden", () => {
+  it("is zero at or below the threshold", () => {
+    expect(ADMIN_BURDEN_THRESHOLD).toBe(20);
+    expect(calcAdminBurden(0)).toBe(0);
+    expect(calcAdminBurden(20)).toBe(0);
+  });
+  it("charges ceil((n-20)/2) for the excess only", () => {
+    expect(calcAdminBurden(21)).toBe(1);
+    expect(calcAdminBurden(22)).toBe(1);
+    expect(calcAdminBurden(26)).toBe(3);
+    expect(calcAdminBurden(30)).toBe(5);
+    expect(calcAdminBurden(40)).toBe(10);
   });
 });
