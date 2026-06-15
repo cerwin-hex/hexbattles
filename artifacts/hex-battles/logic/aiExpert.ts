@@ -17,6 +17,7 @@ import {
   cavalryMoveKind,
   DEFAULT_MOVEMENT,
   IMPROVE_COST,
+  IMPROVED_TERRAINS,
 } from "@/utils/hexGrid";
 import { calcTerritoryIncome, calcTerritoryUpkeep, mergeResult } from "@/logic/gameLogic";
 import { dtCountClusters, dtFindImproveMove } from "@/logic/aiHelpers";
@@ -778,7 +779,9 @@ export function generateCandidateActions(
   const cityCost = ENTITY_META.city.cost;
   const hasCity = territory.some((t) => ctx.cities.has(t.key));
   if (!hasCity && territory.length >= 6 && canAfford(cityCost)) {
+    // A city cannot be founded on an improved tile (field/sawmill).
     for (const t of innerPlacements) {
+      if (IMPROVED_TERRAINS.has(t.terrain)) continue;
       out.push({ kind: "build", buildingType: "city", target: t.key, cost: cityCost });
     }
   }

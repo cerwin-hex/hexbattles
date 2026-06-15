@@ -4,6 +4,7 @@ const unstable_batchedUpdates = (fn: () => void) => fn();
 import type { EntityType, HexTile, TerritoryOwner } from "@/types";
 import {
   ENTITY_META,
+  IMPROVED_TERRAINS,
   getContiguousTerritory,
   getTerritoryId,
   getMoveCost,
@@ -419,6 +420,16 @@ export function handleTileTapLogic(params: TileTapParams): void {
     // Don't allow placement on lake tiles unless there's a bridge (bridges are placed via validBridgePlacementTiles path)
     const tileData = activeTileMap.get(key);
     if (tileData?.terrain === "lake" && existingOnTile !== "bridge") {
+      triggerErrorFlash(key);
+      return;
+    }
+    // A city cannot be founded on an improved tile (field/sawmill) — the
+    // improvement and the city are mutually exclusive land uses.
+    if (
+      armedEntityId === "city" &&
+      tileData &&
+      IMPROVED_TERRAINS.has(tileData.terrain)
+    ) {
       triggerErrorFlash(key);
       return;
     }

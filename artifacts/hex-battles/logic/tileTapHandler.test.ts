@@ -681,6 +681,45 @@ describe("armed entity placement on own territory", () => {
     handleTileTapLogic(params);
     expect(params.triggerErrorFlash).toHaveBeenCalledWith("1,0");
   });
+
+  it("cannot found a city on an improved (field) tile", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player", "field")];
+    const territory = [
+      makeTile(0, 0, "player"),
+      makeTile(1, 0, "player", "field"),
+    ];
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: tileMap(tiles),
+      armedEntityId: "city",
+      selectedTileKeys: new Set(["0,0", "1,0"]),
+      selectedTerritoryId: "0,0",
+      selectedTerritory: territory,
+      entities: new Map(),
+      territoryBalances: new Map([["0,0", 100]]),
+    });
+    handleTileTapLogic(params);
+    expect(params.triggerErrorFlash).toHaveBeenCalledWith("1,0");
+    expect(params.setCities).not.toHaveBeenCalled();
+  });
+
+  it("can found a city on a plain grass tile", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
+    const territory = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: tileMap(tiles),
+      armedEntityId: "city",
+      selectedTileKeys: new Set(["0,0", "1,0"]),
+      selectedTerritoryId: "0,0",
+      selectedTerritory: territory,
+      entities: new Map(),
+      territoryBalances: new Map([["0,0", 100]]),
+    });
+    handleTileTapLogic(params);
+    expect(params.triggerErrorFlash).not.toHaveBeenCalled();
+    expect(params.setCities).toHaveBeenCalled();
+  });
 });
 
 // ─── Armed entity attack (outside own territory) ──────────────────────────────

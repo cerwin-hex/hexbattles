@@ -17,6 +17,7 @@ import {
   isCavalry,
   cavalryMoveKind,
   IMPROVE_COST,
+  IMPROVED_TERRAINS,
 } from "@/utils/hexGrid";
 import { advanceAttacksUsed, advanceCombatSpent, calcTerritoryIncome, calcTerritoryUpkeep, effectiveRemaining, isChargeAttack, mergeResult, resolveMovedUnitMoves } from "@/logic/gameLogic";
 import {
@@ -524,6 +525,7 @@ export async function runAiTerritoryDecisionLoop(
         const [lEq, lEr] = largestEnemyKey ? largestEnemyKey.split(",").map(Number) : [0, 0];
         const cityCands = currTerr.filter((t) => {
           if (t.terrain === "mountain" || t.terrain === "lake" || aiCtx.cities.has(t.key)) return false;
+          if (IMPROVED_TERRAINS.has(t.terrain)) return false;
           if (aiCtx.entities.has(t.key)) return false;
           return bldgZoC.has(t.key);
         }).sort((a, b) => {
