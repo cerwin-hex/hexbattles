@@ -13,6 +13,11 @@ import { HEX_EDGES, tileKey } from "@/utils/hexMath";
 import { ENTITY_UPKEEP_ORDER } from "@/constants/gameConstants";
 
 export interface EconBreakdownResult {
+  // grass/forest counts are the whole terrain family (base + developed); the
+  // developed tiles also appear in fieldCount/sawmillCount. grassIncome /
+  // forestIncome are the BASE income of the whole family (counted at the base
+  // rate); fieldBonus / sawmillBonus are only the +1 development delta per
+  // developed tile, mirroring how the city-adjacency bonus is shown.
   grassCount: number;
   fieldCount: number;
   forestCount: number;
@@ -20,9 +25,9 @@ export interface EconBreakdownResult {
   desertCount: number;
   cityCount: number;
   grassIncome: number;
-  fieldIncome: number;
+  fieldBonus: number;
   forestIncome: number;
-  sawmillIncome: number;
+  sawmillBonus: number;
   desertIncome: number;
   cityIncome: number;
   cityDevBonus: number;
@@ -64,11 +69,12 @@ export function useEconBreakdown({
     let cityCount = 0;
     const upkeepGroupMap = new Map<EntityType, number>();
     for (const t of selectedTerritory) {
-      if (t.terrain === "grass") grassCount++;
-      else if (t.terrain === "field") fieldCount++;
-      else if (t.terrain === "forest") forestCount++;
-      else if (t.terrain === "sawmill") sawmillCount++;
-      else if (t.terrain === "desert") desertCount++;
+      // Developed tiles count toward their base family AND their own line.
+      if (t.terrain === "grass" || t.terrain === "field") grassCount++;
+      if (t.terrain === "field") fieldCount++;
+      if (t.terrain === "forest" || t.terrain === "sawmill") forestCount++;
+      if (t.terrain === "sawmill") sawmillCount++;
+      if (t.terrain === "desert") desertCount++;
       const entityId = entities.get(t.key);
       if (cities.has(t.key)) cityCount++;
       if (entityId && entityId !== "rebel") {
@@ -109,22 +115,18 @@ export function useEconBreakdown({
         total,
       };
     });
-    let grassIncome = 0;
-    let fieldIncome = 0;
-    let forestIncome = 0;
-    let sawmillIncome = 0;
-    let desertIncome = 0;
-    // Rebel-occupied tiles are intentionally NOT skipped here: their income is
-    // counted into the per-terrain lines and then offset by rebelTotalLoss in
-    // `net` below (so a rebel tile nets to zero, matching the real end-turn
-    // math). Skipping here as well would double-count the loss.
-    for (const t of selectedTerritory) {
-      if (t.terrain === "grass") grassIncome += TERRAIN_INCOME[t.terrain];
-      else if (t.terrain === "field") fieldIncome += TERRAIN_INCOME[t.terrain];
-      else if (t.terrain === "forest") forestIncome += TERRAIN_INCOME[t.terrain];
-      else if (t.terrain === "sawmill") sawmillIncome += TERRAIN_INCOME[t.terrain];
-      else if (t.terrain === "desert") desertIncome += TERRAIN_INCOME[t.terrain];
-    }
+    // Income is derived from the family counts. grass/forest are charged the
+    // base rate across the whole family (including developed tiles); the
+    // development delta (+1 per developed tile) is broken out as a bonus line.
+    // Rebel-occupied tiles are intentionally still counted here: their income
+    // is offset by rebelTotalLoss in `net` below (so a rebel tile nets to zero,
+    // matching the real end-turn math). Skipping would double-count the loss.
+    const grassIncome = grassCount * TERRAIN_INCOME.grass;
+    const fieldBonus = fieldCount * (TERRAIN_INCOME.field - TERRAIN_INCOME.grass);
+    const forestIncome = forestCount * TERRAIN_INCOME.forest;
+    const sawmillBonus =
+      sawmillCount * (TERRAIN_INCOME.sawmill - TERRAIN_INCOME.forest);
+    const desertIncome = desertCount * TERRAIN_INCOME.desert;
     const cityIncome = cityCount * CITY_BONUS;
     // City-adjacency development bonus: +1 per developed tile neighbouring a
     // same-owner city. Mirrors calcTerritoryIncome — a city in the same
@@ -142,9 +144,9 @@ export function useEconBreakdown({
     }
     const totalIncome =
       grassIncome +
-      fieldIncome +
+      fieldBonus +
       forestIncome +
-      sawmillIncome +
+      sawmillBonus +
       desertIncome +
       cityIncome +
       cityDevBonus;
@@ -166,9 +168,9 @@ export function useEconBreakdown({
       desertCount,
       cityCount,
       grassIncome,
-      fieldIncome,
+      fieldBonus,
       forestIncome,
-      sawmillIncome,
+      sawmillBonus,
       desertIncome,
       cityIncome,
       cityDevBonus,
