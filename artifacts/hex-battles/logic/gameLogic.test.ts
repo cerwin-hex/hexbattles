@@ -10,6 +10,7 @@ import {
   isChargeAttack,
   advanceAttacksUsed,
   advanceCombatSpent,
+  calcTerritoryIncome,
 } from "@/logic/gameLogic";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -504,5 +505,23 @@ describe("advanceCombatSpent", () => {
     });
     expect(r.has("0,0")).toBe(false);
     expect(r.has("1,0")).toBe(false);
+  });
+});
+
+// ─── calcTerritoryIncome ──────────────────────────────────────────────────────
+
+describe("calcTerritoryIncome", () => {
+  it("sums terrain income and city bonus, skipping rebel tiles", () => {
+    const tiles = [
+      makeTile(0, 0, "player", "grass"),   // 2
+      makeTile(1, 0, "player", "forest"),  // 2 (but rebel — skipped)
+      makeTile(2, 0, "player", "field"),   // 3
+      makeTile(3, 0, "player", "grass"),   // city +2, terrain 2
+    ];
+    const map = new Map(tiles.map((t) => [t.key, t]));
+    const entities = new Map<string, EntityType>([["1,0", "rebel"]]); // forest suppressed
+    const cities = new Set<string>(["3,0"]);
+    // grass 2 + (forest rebel 0) + field 3 + grass 2 + city 2 = 9
+    expect(calcTerritoryIncome(tiles, entities, cities, map)).toBe(9);
   });
 });

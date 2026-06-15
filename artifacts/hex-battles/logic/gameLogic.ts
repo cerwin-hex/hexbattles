@@ -7,6 +7,7 @@ import {
   getContiguousTerritory,
   getTerritoryId,
   TERRAIN_INCOME,
+  CITY_BONUS,
   unitMaxAttacks,
   isCavalry,
 } from "@/utils/hexGrid";
@@ -274,4 +275,25 @@ export function resolveMovedUnitMoves(o: {
     spent: false,
     remaining: o.remainingAfterMove < o.maxRange ? o.remainingAfterMove : null,
   };
+}
+
+/**
+ * Single source of truth for a territory's per-turn income. Sums each non-rebel
+ * tile's terrain income plus CITY_BONUS for city tiles, plus the city-adjacency
+ * development bonus (added in a later task). Centralizing this avoids the income
+ * formula drifting across the ~8 sites that previously inlined it.
+ */
+export function calcTerritoryIncome(
+  territory: HexTile[],
+  entities: Map<string, EntityType>,
+  cities: Set<string>,
+  tileMap: Map<string, HexTile>,
+): number {
+  void tileMap; // consumed by the city-adjacency bonus added in the next task
+  let income = 0;
+  for (const t of territory) {
+    if (entities.get(t.key) === "rebel") continue;
+    income += (TERRAIN_INCOME[t.terrain] ?? 0) + (cities.has(t.key) ? CITY_BONUS : 0);
+  }
+  return income;
 }
