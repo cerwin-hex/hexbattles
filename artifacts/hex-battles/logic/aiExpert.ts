@@ -17,7 +17,7 @@ import {
   cavalryMoveKind,
   DEFAULT_MOVEMENT,
 } from "@/utils/hexGrid";
-import { calcTerritoryUpkeep, mergeResult } from "@/logic/gameLogic";
+import { calcTerritoryIncome, calcTerritoryUpkeep, mergeResult } from "@/logic/gameLogic";
 import { dtCountClusters } from "@/logic/aiHelpers";
 import type { AiContext } from "@/logic/aiHelpers";
 import type { AiDecisionExec } from "@/logic/aiStrategy";
@@ -200,10 +200,7 @@ export function evaluatePosition(
     const bal = tid ? balances.get(tid) ?? 0 : 0;
     reserves += Math.max(-w.reservesCap, Math.min(bal, w.reservesCap));
     bufferShortfall += Math.max(0, w.bufferThreshold - bal);
-    const terrIncome = terr.reduce((s, x) => {
-      if (entities.get(x.key) === "rebel") return s;
-      return s + (TERRAIN_INCOME[x.terrain] ?? 0) + (cities.has(x.key) ? CITY_BONUS : 0);
-    }, 0);
+    const terrIncome = calcTerritoryIncome(terr, entities, cities, tileMap);
     income += terrIncome;
     const net = terrIncome - calcTerritoryUpkeep(terr, entities);
     // Asymmetric: only deficits are penalised; a profitable army is free.
@@ -613,10 +610,7 @@ export function generateCandidateActions(
   const owner = ctx.aiOwner;
   const terrKeys = new Set(territory.map((t) => t.key));
 
-  const income = territory.reduce((s, t) => {
-    if (ctx.entities.get(t.key) === "rebel") return s;
-    return s + (TERRAIN_INCOME[t.terrain] ?? 0) + (ctx.cities.has(t.key) ? CITY_BONUS : 0);
-  }, 0);
+  const income = calcTerritoryIncome(territory, ctx.entities, ctx.cities, ctx.tileMap);
   const upkeep = calcTerritoryUpkeep(territory, ctx.entities);
   const canAfford = (cost: number, extraUpkeep = 0): boolean =>
     balanceForTid >= cost && balanceForTid + (income - (upkeep + extraUpkeep)) >= 0;

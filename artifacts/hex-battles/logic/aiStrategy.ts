@@ -17,7 +17,7 @@ import {
   isCavalry,
   cavalryMoveKind,
 } from "@/utils/hexGrid";
-import { advanceAttacksUsed, advanceCombatSpent, calcTerritoryUpkeep, effectiveRemaining, isChargeAttack, mergeResult, resolveMovedUnitMoves } from "@/logic/gameLogic";
+import { advanceAttacksUsed, advanceCombatSpent, calcTerritoryIncome, calcTerritoryUpkeep, effectiveRemaining, isChargeAttack, mergeResult, resolveMovedUnitMoves } from "@/logic/gameLogic";
 import {
   dtSplitScore,
   dtCaptureNegatesIncome,
@@ -81,10 +81,7 @@ export async function runAiTerritoryDecisionLoop(
     if (!currTid) break;
     const currBal = aiCtx.balances.get(currTid) ?? 0;
 
-    const currIncome = currTerr.reduce((s, t) => {
-      if (aiCtx.entities.get(t.key) === "rebel") return s;
-      return s + (TERRAIN_INCOME[t.terrain] ?? 0) + (aiCtx.cities.has(t.key) ? CITY_BONUS : 0);
-    }, 0);
+    const currIncome = calcTerritoryIncome(currTerr, aiCtx.entities, aiCtx.cities, aiCtx.tileMap);
     const currUpkeep = calcTerritoryUpkeep(currTerr, aiCtx.entities);
 
     const canAfford = (cost: number, extraUpkeep: number = 0): boolean =>
@@ -1542,14 +1539,7 @@ export async function runAiTurn(
       for (const t of territory) playerVisited.add(t.key);
       const territoryId = getTerritoryId(territory);
       if (!territoryId) continue;
-      const income = territory.reduce((s, t) => {
-        if (ws.entities.get(t.key) === "rebel") return s;
-        return (
-          s +
-          TERRAIN_INCOME[t.terrain] +
-          (ws.cities.has(t.key) ? CITY_BONUS : 0)
-        );
-      }, 0);
+      const income = calcTerritoryIncome(territory, ws.entities, ws.cities, ws.tileMap);
       const upkeep = calcTerritoryUpkeep(territory, ws.entities);
       const current = ws.balances.get(territoryId) ?? 0;
       const delta = income - upkeep;

@@ -2,15 +2,13 @@ import type { EntityType, HexTile, TerritoryOwner } from "@/types";
 import { HEX_EDGES, hexDistance, tileKey } from "@/utils/hexMath";
 import {
   ENTITY_META,
-  TERRAIN_INCOME,
-  CITY_BONUS,
   getContiguousTerritory,
   getTerritoryId,
   getValidMoves,
   getMoveCost,
   TerritoryCache,
 } from "@/utils/hexGrid";
-import { calcTerritoryUpkeep, mergeResult } from "@/logic/gameLogic";
+import { calcTerritoryIncome, calcTerritoryUpkeep, mergeResult } from "@/logic/gameLogic";
 
 export interface AiContext {
   tileMap: Map<string, HexTile>;
@@ -95,10 +93,7 @@ export function dtCaptureNegatesIncome(
   const anyRemaining = Array.from(simMap.values()).find((t) => t.owner === enemyOwner);
   if (!anyRemaining) return true;
   const remTerr = getContiguousTerritory(simMap, anyRemaining.key, enemyOwner, simEntities);
-  const remIncome = remTerr.reduce((s, t) => {
-    if (simEntities.get(t.key) === "rebel") return s;
-    return s + (TERRAIN_INCOME[t.terrain] ?? 0) + (ctx.cities.has(t.key) ? CITY_BONUS : 0);
-  }, 0);
+  const remIncome = calcTerritoryIncome(remTerr, simEntities, ctx.cities, simMap);
   const remUpkeep = calcTerritoryUpkeep(remTerr, simEntities);
   return enemyBal + (remIncome - remUpkeep) < 0;
 }
