@@ -522,7 +522,35 @@ describe("calcTerritoryIncome", () => {
     const entities = new Map<string, EntityType>([["1,0", "rebel"]]); // forest suppressed
     const cities = new Set<string>(["3,0"]);
     // grass 2 + (forest rebel 0) + field 3 + grass 2 + city 2 = 9
-    expect(calcTerritoryIncome(tiles, entities, cities, map)).toBe(9);
+    // + city-adjacency bonus: field at 2,0 is adjacent to same-owner city at 3,0 -> +1 = 10
+    expect(calcTerritoryIncome(tiles, entities, cities, map)).toBe(10);
+  });
+});
+
+describe("calcTerritoryIncome city-adjacency bonus", () => {
+  it("grants +1 per developed same-owner tile adjacent to a city, stacking", () => {
+    // City at 0,0; two developed neighbours (field + sawmill) -> +2 bonus,
+    // plus their own income (3 + 3) and the city tile (grass 2 + city 2).
+    const tiles = [
+      makeTile(0, 0, "player", "grass"),    // city: 2 + CITY_BONUS 2
+      makeTile(1, 0, "player", "field"),    // 3, adjacent to city -> +1
+      makeTile(0, 1, "player", "sawmill"),  // 3, adjacent to city -> +1
+    ];
+    const tileMap2 = new Map(tiles.map((t) => [t.key, t]));
+    const cities = new Set(["0,0"]);
+    // 2 + 2 (city) + 3 + 3 + 1 + 1 = 12
+    expect(calcTerritoryIncome(tiles, new Map(), cities, tileMap2)).toBe(12);
+  });
+  it("does not grant the bonus for an enemy-owned adjacent city", () => {
+    const tiles = [makeTile(1, 0, "player", "field")];
+    const enemyCity = makeTile(0, 0, "ai1", "grass");
+    const tileMap2 = new Map([
+      ["1,0", tiles[0]],
+      ["0,0", enemyCity],
+    ]);
+    const cities = new Set(["0,0"]);
+    // Only the field's own income, no bonus (city owned by ai1).
+    expect(calcTerritoryIncome(tiles, new Map(), cities, tileMap2)).toBe(3);
   });
 });
 

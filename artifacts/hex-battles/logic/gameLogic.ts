@@ -11,6 +11,9 @@ import {
   unitMaxAttacks,
   isCavalry,
   calcAdminBurden,
+  DEVELOPED_TERRAINS,
+  HEX_EDGES,
+  tileKey,
 } from "@/utils/hexGrid";
 import { STRENGTH_TO_UNIT, STRENGTH_TO_CAVALRY } from "@/constants/gameConstants";
 
@@ -296,11 +299,18 @@ export function calcTerritoryIncome(
   cities: Set<string>,
   tileMap: Map<string, HexTile>,
 ): number {
-  void tileMap; // consumed by the city-adjacency bonus added in the next task
   let income = 0;
   for (const t of territory) {
     if (entities.get(t.key) === "rebel") continue;
     income += (TERRAIN_INCOME[t.terrain] ?? 0) + (cities.has(t.key) ? CITY_BONUS : 0);
+    if (DEVELOPED_TERRAINS.has(t.terrain)) {
+      const [q, r] = t.key.split(",").map(Number);
+      for (const { dir: [dq, dr] } of HEX_EDGES) {
+        const nk = tileKey(q + dq, r + dr);
+        if (!cities.has(nk)) continue;
+        if (tileMap.get(nk)?.owner === t.owner) income += 1;
+      }
+    }
   }
   return income;
 }
