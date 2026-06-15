@@ -44,6 +44,7 @@ const WATER_IMG = require("../assets/images/water.webp");
 import type {
   EntityType,
   HexTile,
+  TerrainType,
   TerritoryOwner,
   BorderEdge,
   AiStepSnapshot,
@@ -59,6 +60,7 @@ import {
 } from "@/utils/hexMath";
 import {
   ENTITY_META,
+  DEVELOP_COST,
   generateHexGrid,
   getContiguousTerritory,
   getTerritoryId,
@@ -1022,6 +1024,46 @@ export default function GameScreen() {
     pushHistory,
   ]);
 
+  const handleDevelopTile = useCallback(
+    (targetTerrain: TerrainType) => {
+      if (isAiTurn || gameResult !== null || !selectedEntityKey) return;
+      const tile = activeTileMap.get(selectedEntityKey);
+      if (!tile) return;
+      const territory = getContiguousTerritory(
+        activeTileMap,
+        selectedEntityKey,
+        "player",
+        entities,
+      );
+      const tid = getTerritoryId(territory);
+      if (!tid) return;
+      const bal = territoryBalances.get(tid) ?? 0;
+      if (bal < DEVELOP_COST) return;
+      pushHistory();
+      setMutableTileMap((prev) => {
+        const next = new Map(prev);
+        const tt = next.get(selectedEntityKey);
+        if (tt) next.set(selectedEntityKey, { ...tt, terrain: targetTerrain });
+        return next;
+      });
+      setTerritoryBalances((prev) => {
+        const next = new Map(prev);
+        next.set(tid, bal - DEVELOP_COST);
+        return next;
+      });
+      setSpentUnits((prev) => new Set(prev).add(selectedEntityKey));
+    },
+    [
+      isAiTurn,
+      gameResult,
+      selectedEntityKey,
+      activeTileMap,
+      entities,
+      territoryBalances,
+      pushHistory,
+    ],
+  );
+
   const handleTileTap = useCallback(
     (key: string) => {
       // Ignore taps while a unit is animating — moves are serialized so the
@@ -1508,6 +1550,7 @@ export default function GameScreen() {
               ? handleDemolishBridge
               : undefined
           }
+          onDevelop={handleDevelopTile}
         />
       )}
 
