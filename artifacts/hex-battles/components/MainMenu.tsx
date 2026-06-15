@@ -70,6 +70,20 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
               <Text style={[styles.ruleBody, { marginTop: 8 }]}>
                 At the end of every turn each territory collects income from its tiles (grass/forest 2, desert 1, +2 per city, mountain/lake 0) and pays upkeep for its units and buildings. If a territory cannot cover its bill, it goes bankrupt: its treasury drains to zero, all of its units are disbanded, and — if upkeep still exceeds income — its buildings are demolished too.
               </Text>
+              <Text style={[styles.ruleBody, { marginTop: 8 }]}>
+                Large realms also pay an administrative burden. Once a single territory exceeds 20 tiles, it owes extra upkeep of half a gold for every tile above that threshold, so spreading too wide eats into your profits.
+              </Text>
+            </View>
+
+            <View style={styles.ruleSection}>
+              <Text style={styles.ruleSectionTitle}>Improvements</Text>
+              <View style={styles.ruleDivider} />
+              <Text style={styles.ruleBody}>
+                A Peasant can improve the tile it stands on for 3 gold, turning grass into a Field and forest into a Sawmill. Improving uses up the peasant's action for that turn.
+              </Text>
+              <Text style={[styles.ruleBody, { marginTop: 8 }]}>
+                An improved tile earns +1 gold per turn, plus another +1 while it borders one of your cities. Founding a city, tower or castle on an improved tile destroys the improvement.
+              </Text>
             </View>
 
             <View style={styles.ruleSection}>

@@ -503,11 +503,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 5,
   },
-  econPer: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-    color: "#786A54",
-  },
   econRowValue: {
     fontSize: 13,
     fontFamily: "Inter_700Bold",

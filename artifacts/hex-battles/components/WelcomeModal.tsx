@@ -124,12 +124,24 @@ export function WelcomeModal() {
               <Text style={[styles.body, { marginTop: 8 }]}>
                 If a territory can't cover its upkeep, it goes bankrupt: its treasury empties, <Text style={styles.highlight}>all of its units are disbanded</Text>, and if upkeep still outweighs income its buildings are demolished too. Keep each front expanding so its income can fund its army.
               </Text>
+              <Text style={[styles.body, { marginTop: 8 }]}>
+                Big realms get harder to run. Once a single territory grows beyond <Text style={styles.highlight}>20 tiles</Text> it pays an <Text style={styles.highlight}>administrative burden</Text> — extra upkeep of half a gold for every tile above 20. Sprawling empires bleed gold, so don't grow wider than you can govern.
+              </Text>
               <View style={styles.incomeBox}>
                 <Text style={styles.incomeRow}>Grass / Forest  →  <Text style={styles.gold}>2 gold</Text> per turn</Text>
                 <Text style={styles.incomeRow}>Desert  →  <Text style={styles.gold}>1 gold</Text> per turn</Text>
                 <Text style={styles.incomeRow}>City  →  <Text style={styles.gold}>+2 gold bonus</Text> on top of terrain</Text>
                 <Text style={styles.incomeRow}>Mountain / Lake  →  <Text style={styles.dimGold}>0 gold</Text></Text>
               </View>
+            </Section>
+
+            <Section title="Improvements">
+              <Text style={styles.body}>
+                A <Text style={styles.highlight}>Peasant</Text> can improve the tile it stands on for <Text style={styles.gold}>3 gold</Text>, turning grass into a <Text style={styles.highlight}>Field</Text> and forest into a <Text style={styles.highlight}>Sawmill</Text>. Improving uses up the peasant's action for that turn.
+              </Text>
+              <Text style={[styles.body, { marginTop: 8 }]}>
+                An improved tile earns <Text style={styles.highlight}>+1 gold</Text> every turn, and an extra <Text style={styles.highlight}>+1</Text> while it sits next to one of your cities. Founding a city, tower or castle on an improved tile destroys the improvement, so build elsewhere if you want to keep it.
+              </Text>
             </Section>
 
             <Section title="Units & Buildings">

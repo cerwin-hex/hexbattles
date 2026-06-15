@@ -127,8 +127,7 @@ export default function GameModals({
               {econBreakdown && econBreakdown.grassCount > 0 && (
                 <View style={styles.econRow}>
                   <Text style={styles.econRowLabel}>
-                    Grass ×{econBreakdown.grassCount}{" "}
-                    <Text style={styles.econPer}>(+2 each)</Text>
+                    Grass ×{econBreakdown.grassCount}
                   </Text>
                   <Text style={styles.econRowValue}>
                     +{econBreakdown.grassIncome}
@@ -138,8 +137,7 @@ export default function GameModals({
               {econBreakdown && econBreakdown.fieldCount > 0 && (
                 <View style={styles.econRow}>
                   <Text style={[styles.econRowLabel, styles.econIndentLabel]}>
-                    ↳ Field ×{econBreakdown.fieldCount}{" "}
-                    <Text style={styles.econPer}>(+1 each)</Text>
+                    ↳ Field ×{econBreakdown.fieldCount}
                   </Text>
                   <Text style={styles.econRowValue}>
                     +{econBreakdown.fieldBonus}
@@ -149,8 +147,7 @@ export default function GameModals({
               {econBreakdown && econBreakdown.forestCount > 0 && (
                 <View style={[styles.econRow, styles.econGroupGap]}>
                   <Text style={styles.econRowLabel}>
-                    Forest ×{econBreakdown.forestCount}{" "}
-                    <Text style={styles.econPer}>(+2 each)</Text>
+                    Forest ×{econBreakdown.forestCount}
                   </Text>
                   <Text style={styles.econRowValue}>
                     +{econBreakdown.forestIncome}
@@ -160,8 +157,7 @@ export default function GameModals({
               {econBreakdown && econBreakdown.sawmillCount > 0 && (
                 <View style={styles.econRow}>
                   <Text style={[styles.econRowLabel, styles.econIndentLabel]}>
-                    ↳ Sawmill ×{econBreakdown.sawmillCount}{" "}
-                    <Text style={styles.econPer}>(+1 each)</Text>
+                    ↳ Sawmill ×{econBreakdown.sawmillCount}
                   </Text>
                   <Text style={styles.econRowValue}>
                     +{econBreakdown.sawmillBonus}
@@ -171,8 +167,7 @@ export default function GameModals({
               {econBreakdown && econBreakdown.desertCount > 0 && (
                 <View style={[styles.econRow, styles.econGroupGap]}>
                   <Text style={styles.econRowLabel}>
-                    Desert ×{econBreakdown.desertCount}{" "}
-                    <Text style={styles.econPer}>(+1 each)</Text>
+                    Desert ×{econBreakdown.desertCount}
                   </Text>
                   <Text style={styles.econRowValue}>
                     +{econBreakdown.desertIncome}
@@ -184,8 +179,7 @@ export default function GameModals({
                   <View style={styles.econLabelRow}>
                     <UnitIcon entityId="city" size={16} />
                     <Text style={styles.econRowLabel}>
-                      City ×{econBreakdown.cityCount}{" "}
-                      <Text style={styles.econPer}>(+{CITY_BONUS} each)</Text>
+                      City ×{econBreakdown.cityCount}
                     </Text>
                   </View>
                   <Text style={styles.econRowValue}>
@@ -196,8 +190,7 @@ export default function GameModals({
               {econBreakdown && econBreakdown.cityImproveBonus > 0 && (
                 <View style={styles.econRow}>
                   <Text style={[styles.econRowLabel, styles.econIndentLabel]}>
-                    ↳ Improvements{" "}
-                    <Text style={styles.econPer}>(+1 per adj. improv.)</Text>
+                    ↳ Improvements
                   </Text>
                   <Text style={styles.econRowValue}>
                     +{econBreakdown.cityImproveBonus}
@@ -233,12 +226,7 @@ export default function GameModals({
                       <View style={styles.econLabelRow}>
                         <UnitIcon entityId={g.id} size={16} />
                         <Text style={styles.econRowLabel}>
-                          {g.name} ×{g.count}{" "}
-                          {g.upkeepPerUnit !== null && (
-                            <Text style={styles.econPer}>
-                              (−{g.upkeepPerUnit} each)
-                            </Text>
-                          )}
+                          {g.name} ×{g.count}
                         </Text>
                       </View>
                       <Text style={[styles.econRowValue, { color: "#E07060" }]}>
@@ -275,8 +263,7 @@ export default function GameModals({
                       ]}
                     >
                       <Text style={styles.econRowLabel}>
-                        Administrative burden{" "}
-                        <Text style={styles.econPer}>(size &gt; 20)</Text>
+                        Administrative burden
                       </Text>
                       <Text style={[styles.econRowValue, { color: "#E07060" }]}>
                         −{econBreakdown.adminBurden}
