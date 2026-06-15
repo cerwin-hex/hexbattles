@@ -11,6 +11,7 @@ import {
   advanceAttacksUsed,
   advanceCombatSpent,
   calcTerritoryIncome,
+  canDevelopTile,
 } from "@/logic/gameLogic";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -568,5 +569,28 @@ describe("calcTerritoryUpkeep admin burden", () => {
       makeTile(i, 0, "player", "grass"),
     );
     expect(calcTerritoryUpkeep(tiles, new Map())).toBe(0);
+  });
+});
+
+// ─── canDevelopTile ───────────────────────────────────────────────────────────
+
+describe("canDevelopTile", () => {
+  const base = { entityId: "peasant" as const, terrain: "grass" as const, isSpent: false, balance: 5 };
+  it("allows a non-spent peasant on grass/forest with >=5 gold", () => {
+    expect(canDevelopTile(base)).toBe(true);
+    expect(canDevelopTile({ ...base, terrain: "forest" })).toBe(true);
+  });
+  it("rejects non-peasants", () => {
+    expect(canDevelopTile({ ...base, entityId: "warrior" })).toBe(false);
+  });
+  it("rejects spent peasants", () => {
+    expect(canDevelopTile({ ...base, isSpent: true })).toBe(false);
+  });
+  it("rejects insufficient gold", () => {
+    expect(canDevelopTile({ ...base, balance: 4 })).toBe(false);
+  });
+  it("rejects non-developable terrain", () => {
+    expect(canDevelopTile({ ...base, terrain: "desert" })).toBe(false);
+    expect(canDevelopTile({ ...base, terrain: "field" })).toBe(false);
   });
 });

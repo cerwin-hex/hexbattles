@@ -1,5 +1,6 @@
 import {
   EntityType,
+  TerrainType,
   HexTile,
   TerritoryOwner,
   ENTITY_META,
@@ -14,6 +15,8 @@ import {
   DEVELOPED_TERRAINS,
   HEX_EDGES,
   tileKey,
+  DEVELOP_COST,
+  developTargetFor,
 } from "@/utils/hexGrid";
 import { STRENGTH_TO_UNIT, STRENGTH_TO_CAVALRY } from "@/constants/gameConstants";
 
@@ -285,6 +288,23 @@ export function resolveMovedUnitMoves(o: {
     spent: false,
     remaining: o.remainingAfterMove < o.maxRange ? o.remainingAfterMove : null,
   };
+}
+
+/**
+ * Whether a selected unit may develop the tile it stands on: a non-spent peasant
+ * on developable terrain (grass/forest) whose territory holds at least
+ * DEVELOP_COST gold. Shared by the player UI (EntityPanel) and the AI.
+ */
+export function canDevelopTile(o: {
+  entityId: EntityType | undefined;
+  terrain: TerrainType;
+  isSpent: boolean;
+  balance: number;
+}): boolean {
+  if (o.entityId !== "peasant") return false;
+  if (o.isSpent) return false;
+  if (developTargetFor(o.terrain) === null) return false;
+  return o.balance >= DEVELOP_COST;
 }
 
 /**
