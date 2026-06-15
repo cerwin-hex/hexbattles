@@ -525,3 +525,20 @@ describe("calcTerritoryIncome", () => {
     expect(calcTerritoryIncome(tiles, entities, cities, map)).toBe(9);
   });
 });
+
+describe("calcTerritoryUpkeep admin burden", () => {
+  it("adds ceil((tiles-20)/2) for clusters over 20 tiles", () => {
+    // 26 empty tiles, no entities: upkeep is purely burden = ceil(6/2) = 3
+    const tiles = Array.from({ length: 26 }, (_, i) =>
+      makeTile(i, 0, "player", "grass"),
+    );
+    const entities = new Map<string, EntityType>();
+    expect(calcTerritoryUpkeep(tiles, entities)).toBe(3);
+  });
+  it("charges no burden at 20 tiles", () => {
+    const tiles = Array.from({ length: 20 }, (_, i) =>
+      makeTile(i, 0, "player", "grass"),
+    );
+    expect(calcTerritoryUpkeep(tiles, new Map())).toBe(0);
+  });
+});

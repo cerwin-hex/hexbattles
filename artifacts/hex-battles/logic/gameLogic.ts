@@ -10,6 +10,7 @@ import {
   CITY_BONUS,
   unitMaxAttacks,
   isCavalry,
+  calcAdminBurden,
 } from "@/utils/hexGrid";
 import { STRENGTH_TO_UNIT, STRENGTH_TO_CAVALRY } from "@/constants/gameConstants";
 
@@ -30,7 +31,13 @@ export function calcTerritoryUpkeep(
       if (t.terrain === "lake") bridges++;
     }
   }
-  return unitUpkeep + calcDefenseUpkeep("tower", towers) + calcDefenseUpkeep("castle", castles) + bridges * ENTITY_META["bridge"].upkeep;
+  return (
+    unitUpkeep +
+    calcDefenseUpkeep("tower", towers) +
+    calcDefenseUpkeep("castle", castles) +
+    bridges * ENTITY_META["bridge"].upkeep +
+    calcAdminBurden(territory.length)
+  );
 }
 
 export function applySingleHexPenalty(
