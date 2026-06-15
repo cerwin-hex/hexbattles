@@ -1,6 +1,8 @@
-import type { EntityType, HexTile, TerritoryOwner } from "@/types";
+import type { EntityType, HexTile, TerrainType, TerritoryOwner } from "@/types";
 import { HEX_EDGES, hexDistance, tileKey } from "@/utils/hexMath";
 import {
+  DEVELOP_COST,
+  developTargetFor,
   ENTITY_META,
   getContiguousTerritory,
   getTerritoryId,
@@ -210,4 +212,42 @@ export function dtFindMergeMove(
     }
   }
   return null;
+}
+
+/**
+ * Finds the best in-place tile development for the AI: a non-spent peasant
+ * standing on developable terrain (grass→field, forest→sawmill). Prefers a
+ * peasant adjacent to one of the AI's own cities (the income bonus stacks
+ * there). v1 scope: develops ONLY peasants already on a developable tile — it
+ * does not reposition peasants.
+ */
+export function dtFindDevelopMove(
+  territory: HexTile[],
+  ctx: AiContext,
+  spentUnits: Set<string>,
+  balance: number,
+): { key: string; terrain: TerrainType } | null {
+  if (balance < DEVELOP_COST) return null;
+  let best: { key: string; terrain: TerrainType } | null = null;
+  let bestPrio = -1;
+  for (const t of territory) {
+    const target = developTargetFor(t.terrain);
+    if (!target) continue;
+    if (ctx.entities.get(t.key) !== "peasant") continue;
+    if (spentUnits.has(t.key)) continue;
+    let prio = 1;
+    const [q, r] = t.key.split(",").map(Number);
+    for (const { dir: [dq, dr] } of HEX_EDGES) {
+      const nk = tileKey(q + dq, r + dr);
+      if (ctx.cities.has(nk) && ctx.tileMap.get(nk)?.owner === ctx.aiOwner) {
+        prio = 2;
+        break;
+      }
+    }
+    if (prio > bestPrio) {
+      bestPrio = prio;
+      best = { key: t.key, terrain: target };
+    }
+  }
+  return best;
 }
