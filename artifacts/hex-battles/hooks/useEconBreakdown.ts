@@ -4,6 +4,7 @@ import {
   CITY_BONUS,
   ENTITY_META,
   TERRAIN_INCOME,
+  calcAdminBurden,
   calcDefenseUpkeep,
   nextDefenseUpkeep,
 } from "@/utils/hexGrid";
@@ -29,6 +30,7 @@ export interface EconBreakdownResult {
   }>;
   totalIncome: number;
   totalUpkeep: number;
+  adminBurden: number;
   rebelCount: number;
   rebelTotalLoss: number;
   net: number;
@@ -53,8 +55,8 @@ export function useEconBreakdown({
     let cityCount = 0;
     const upkeepGroupMap = new Map<EntityType, number>();
     for (const t of selectedTerritory) {
-      if (t.terrain === "grass") grassCount++;
-      else if (t.terrain === "forest") forestCount++;
+      if (t.terrain === "grass" || t.terrain === "field") grassCount++;
+      else if (t.terrain === "forest" || t.terrain === "sawmill") forestCount++;
       else if (t.terrain === "desert") desertCount++;
       const entityId = entities.get(t.key);
       if (cities.has(t.key)) cityCount++;
@@ -96,12 +98,22 @@ export function useEconBreakdown({
         total,
       };
     });
-    const grassIncome = grassCount * 2;
-    const forestIncome = forestCount * 2;
-    const desertIncome = desertCount * 1;
+    let grassIncome = 0;
+    let forestIncome = 0;
+    let desertIncome = 0;
+    // Rebel-occupied tiles are intentionally NOT skipped here: their income is
+    // counted into the per-terrain lines and then offset by rebelTotalLoss in
+    // `net` below (so a rebel tile nets to zero, matching the real end-turn
+    // math). Skipping here as well would double-count the loss.
+    for (const t of selectedTerritory) {
+      if (t.terrain === "grass" || t.terrain === "field") grassIncome += TERRAIN_INCOME[t.terrain];
+      else if (t.terrain === "forest" || t.terrain === "sawmill") forestIncome += TERRAIN_INCOME[t.terrain];
+      else if (t.terrain === "desert") desertIncome += TERRAIN_INCOME[t.terrain];
+    }
     const cityIncome = cityCount * CITY_BONUS;
     const totalIncome = grassIncome + forestIncome + desertIncome + cityIncome;
     const totalUpkeep = upkeepGroups.reduce((s, g) => s + g.total, 0);
+    const adminBurden = calcAdminBurden(selectedTerritory.length);
     let rebelCount = 0;
     let rebelTotalLoss = 0;
     for (const t of selectedTerritory) {
@@ -109,7 +121,7 @@ export function useEconBreakdown({
       rebelCount++;
       rebelTotalLoss += TERRAIN_INCOME[t.terrain];
     }
-    const net = totalIncome - totalUpkeep - rebelTotalLoss;
+    const net = totalIncome - totalUpkeep - adminBurden - rebelTotalLoss;
     return {
       grassCount,
       forestCount,
@@ -122,6 +134,7 @@ export function useEconBreakdown({
       upkeepGroups,
       totalIncome,
       totalUpkeep,
+      adminBurden,
       rebelCount,
       rebelTotalLoss,
       net,
