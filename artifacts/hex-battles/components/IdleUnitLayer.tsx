@@ -111,8 +111,13 @@ export function IdleUnitLayer({
         if (!pos) return null;
         const r = HEX_SIZE * 0.55;
         return (
+          // Key by entity type too: a tile's unit can change type in place (e.g.
+          // a merge turns two scouts into a knight). A tile-only key would reuse
+          // the SvgAst instance and swap its `ast` prop in place, which
+          // react-native-svg renders as a black/broken icon; including entityId
+          // forces a clean remount. (Same rationale as EntityLayer.)
           <Animated.View
-            key={`bounce-${key}`}
+            key={`bounce-${key}-${entityId}`}
             style={[
               { position: "absolute", left: pos.cx - r, top: pos.cy - r },
               idleBounceStyle,

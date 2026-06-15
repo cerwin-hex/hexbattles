@@ -17,7 +17,7 @@ import {
   isCavalry,
   cavalryMoveKind,
 } from "@/utils/hexGrid";
-import { advanceAttacksUsed, advanceCombatSpent, calcTerritoryUpkeep, isChargeAttack, mergeResult, resolveMovedUnitMoves } from "@/logic/gameLogic";
+import { advanceAttacksUsed, advanceCombatSpent, calcTerritoryUpkeep, effectiveRemaining, isChargeAttack, mergeResult, resolveMovedUnitMoves } from "@/logic/gameLogic";
 import {
   dtSplitScore,
   dtCaptureNegatesIncome,
@@ -26,6 +26,7 @@ import {
   dtFindMergeMove,
 } from "@/logic/aiHelpers";
 import type { AiContext } from "@/logic/aiHelpers";
+import { runExpertTerritoryDecisionLoop } from "@/logic/aiExpert";
 import type { AiState, Difficulty } from "@/types";
 
 // Unit purchase candidates for the AI, derived from ENTITY_META so new units are
@@ -560,6 +561,10 @@ export async function runAiTerritoryDecisionLoop(
             });
             if (connectsOtherAiTerritory) {
               actionTaken = await exec.build("bridge", nk, bridgeCost);
+              // Only ONE bridge per loop iteration: affordability was checked once
+              // for this iteration, so building more would over-spend. The while
+              // loop re-evaluates (and re-checks canAfford) for the next bridge.
+              if (actionTaken) break;
             }
           }
         }
@@ -954,6 +959,8 @@ export interface AiTurnCallbacks {
     setFreeTowerUsedTiles(v: Map<TerritoryOwner, Set<string>>): void;
     setAiStateMap(v: Map<string, AiState>): void;
     setIsAiTurn(v: boolean): void;
+    /** Advance the round counter; called once when the whole AI phase completes. */
+    advanceTurn(): void;
   };
   refs: {
     getAiStateMap(): Map<string, AiState>;
@@ -1003,6 +1010,8 @@ function snapFromWs(ws: AiWorkingState): AiStepSnapshot {
     territoryBalances: new Map(ws.balances),
     liveOwnerMap: new Map(ws.liveOwnerMap),
     graveyard: new Set(ws.graveyard),
+    ruins: new Set(ws.ruins),
+    cities: new Set(ws.cities),
     freeTowerUsedTiles: new Map(
       [...ws.freeTowerUsed.entries()].map(([k, v]) => [k, new Set(v)]),
     ),
@@ -1099,6 +1108,18 @@ export async function runAiTurn(
         await cbs.awaitStep(snapFromWs(ws));
       };
 
+      // Defense-in-depth: an AI can NEVER spend more than the paying territory
+      // holds. Every buy/build/upgrade is funded by the territory being
+      // processed (startTile's contiguous territory); if it can't cover `cost`,
+      // the action is refused outright. This guarantees the invariant even if a
+      // decision branch forgets to re-check affordability.
+      const canPay = (cost: number): boolean => {
+        const terr = getContiguousTerritory(ws.tileMap, startTile.key, aiOwner, ws.entities);
+        const id = getTerritoryId(terr);
+        const bal = id ? (ws.balances.get(id) ?? 0) : 0;
+        return bal >= cost;
+      };
+
       const dtPublishState = (anchorKey: string): void => {
         const updTerr = getContiguousTerritory(ws.tileMap, anchorKey, aiOwner, ws.entities);
         const updId = getTerritoryId(updTerr);
@@ -1186,7 +1207,7 @@ export async function runAiTurn(
           const stepsUsed = getMoveCost(fromKey, toKey, prevTileMapSnapshot, prevEntitiesSnapshot);
           const prevRemaining = ws.partialMoves.get(fromKey) ?? maxRange;
           const remainingAfterMove = Math.max(0, prevRemaining - stepsUsed);
-          const destRemaining = ws.partialMoves.get(toKey) ?? maxRange;
+          const destRemaining = effectiveRemaining(toKey, ws.partialMoves, ws.spentUnits, maxRange);
           ws.partialMoves.delete(fromKey);
           // For a merge, the source tile empties out; mark it spent so it is not
           // re-evaluated. The merged unit lives at toKey.
@@ -1241,6 +1262,9 @@ export async function runAiTurn(
         ws.liveOwnerMap.set(toKey, aiOwner);
         ws.graveyard = new Set(ws.graveyard);
         ws.graveyard.delete(toKey);
+        // A unit stepping onto a grave/ruin tile clears the marker for good.
+        ws.ruins = new Set(ws.ruins);
+        ws.ruins.delete(toKey);
         cbs.applySingleHexPenalty(
           prevTileMapSnapshot, ws.tileMap, ws.balances, ws.entities,
           ws.graveyard, ws.ruins,
@@ -1276,6 +1300,7 @@ export async function runAiTurn(
         unitType: EntityType, target: string, cost: number, outside: boolean,
       ): Promise<boolean> => {
         if (!cbs.refs.isTurnActive()) return false;
+        if (!canPay(cost)) return false;
         ws.entities = new Map(ws.entities);
         ws.balances = new Map(ws.balances);
 
@@ -1349,6 +1374,21 @@ export async function runAiTurn(
           cbs.state.setLiveOwnerMap(new Map(ws.liveOwnerMap));
         }
 
+        // Buying an active unit onto a grave/ruin tile clears the marker for
+        // good (same rule as walking onto it). Cities/buildings don't, so guard
+        // on isUnit.
+        if (
+          ENTITY_META[unitType].isUnit &&
+          (ws.graveyard.has(target) || ws.ruins.has(target))
+        ) {
+          ws.graveyard = new Set(ws.graveyard);
+          ws.graveyard.delete(target);
+          ws.ruins = new Set(ws.ruins);
+          ws.ruins.delete(target);
+          cbs.state.setGraveyard(new Set(ws.graveyard));
+          cbs.state.setRuins(new Set(ws.ruins));
+        }
+
         cbs.state.setEntities(new Map(ws.entities));
         cbs.state.setCities(new Set(ws.cities));
         cbs.state.setTerritoryBalances(new Map(ws.balances));
@@ -1359,6 +1399,7 @@ export async function runAiTurn(
 
       const dtExecUpgrade = async (targetKey: string, to: EntityType, cost: number): Promise<boolean> => {
         if (!cbs.refs.isTurnActive()) return false;
+        if (!canPay(cost)) return false;
         ws.entities = new Map(ws.entities);
         ws.entities.set(targetKey, to);
         cache.clear();
@@ -1374,6 +1415,7 @@ export async function runAiTurn(
 
       const dtExecBuild = async (buildingType: EntityType, targetKey: string, cost: number): Promise<boolean> => {
         if (!cbs.refs.isTurnActive()) return false;
+        if (!canPay(cost)) return false;
 
         // Bridge: lake tile needs ownership change + entity + territory recalculation
         if (buildingType === "bridge") {
@@ -1458,21 +1500,31 @@ export async function runAiTurn(
         cbs.state.setAiStateMap(new Map(next));
       };
 
-      await runAiTerritoryDecisionLoop(
-        startTile.key,
-        aiCtx,
-        {
-          move: dtExecMove,
-          buy: dtExecBuy,
-          upgrade: dtExecUpgrade,
-          build: dtExecBuild,
-          remove: dtExecRemove,
-          markSpent,
-          setTerritoryState,
-        },
-        () => cbs.refs.isTurnActive(),
-        difficulty,
-      );
+      const exec: AiDecisionExec = {
+        move: dtExecMove,
+        buy: dtExecBuy,
+        upgrade: dtExecUpgrade,
+        build: dtExecBuild,
+        remove: dtExecRemove,
+        markSpent,
+        setTerritoryState,
+      };
+      if (difficulty === "expert" || difficulty === "super_expert") {
+        await runExpertTerritoryDecisionLoop(
+          startTile.key,
+          aiCtx,
+          exec,
+          () => cbs.refs.isTurnActive(),
+        );
+      } else {
+        await runAiTerritoryDecisionLoop(
+          startTile.key,
+          aiCtx,
+          exec,
+          () => cbs.refs.isTurnActive(),
+          difficulty,
+        );
+      }
     }
   }
 
@@ -1556,5 +1608,9 @@ export async function runAiTurn(
   cbs.state.setFreeTowerUsedTiles(new Map(ws.freeTowerUsed));
   cbs.refs.setAiTurn(false);
   await cbs.awaitPostAiResume();
+  // The whole AI phase is done and control returns to the player — advance the
+  // round counter HERE (not at the player's End Turn), so the counter equals the
+  // round number: everyone acts in round R while it reads R.
+  cbs.state.advanceTurn();
   cbs.state.setIsAiTurn(false);
 }

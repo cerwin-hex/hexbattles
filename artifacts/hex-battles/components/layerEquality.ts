@@ -43,6 +43,7 @@ export const areHexTileLayerEqual = areHexTerritoryLayerEqual;
 export interface BorderEdgeLayerEqualProps {
   outerEdges: BorderEdge[];
   innerEdges: BorderEdge[];
+  showInnerEdges: boolean;
   hasSelection: boolean;
   selectionEdges: BorderEdge[];
 }
@@ -54,6 +55,7 @@ export function areBorderEdgeLayerEqual(
   return (
     prev.outerEdges === next.outerEdges &&
     prev.innerEdges === next.innerEdges &&
+    prev.showInnerEdges === next.showInnerEdges &&
     prev.hasSelection === next.hasSelection &&
     prev.selectionEdges === next.selectionEdges
   );

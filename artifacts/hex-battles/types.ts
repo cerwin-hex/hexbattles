@@ -33,7 +33,7 @@ export interface BoardBounds {
   height: number;
 }
 
-export type Difficulty = "easy" | "medium" | "hard" | "super_hard";
+export type Difficulty = "easy" | "medium" | "hard" | "super_hard" | "expert" | "super_expert";
 export type AiState = "attacking" | "defending";
 
 export interface BorderEdge {
@@ -56,6 +56,8 @@ export type MoveHistorySnapshot = {
   partialMoves: Map<string, number>;
   attacksUsed: Map<string, number>;
   freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
+  graveyard: Set<string>;
+  ruins: Set<string>;
   selectedTileKey: string | null;
 };
 
@@ -67,5 +69,7 @@ export type AiStepSnapshot = {
   territoryBalances: Map<string, number>;
   liveOwnerMap: Map<string, TerritoryOwner>;
   graveyard: Set<string>;
+  ruins: Set<string>;
+  cities: Set<string>;
   freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
 };

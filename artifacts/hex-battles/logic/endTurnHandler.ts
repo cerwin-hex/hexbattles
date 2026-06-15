@@ -37,7 +37,6 @@ export interface EndTurnParams {
   setEntities: (m: Map<string, EntityType>) => void;
   setGraveyard: (s: Set<string>) => void;
   setRuins: (s: Set<string>) => void;
-  setTurn: Dispatch<SetStateAction<number>>;
   setSelectedTileKey: (k: string | null) => void;
   setArmedEntityId: (id: EntityType | null) => void;
   setSelectedEntityKey: (k: string | null) => void;
@@ -80,7 +79,6 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
     setEntities,
     setGraveyard,
     setRuins,
-    setTurn,
     setSelectedTileKey,
     setArmedEntityId,
     setSelectedEntityKey,
@@ -202,7 +200,13 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
           );
         }, 0);
         const landTileCount = territory.filter(t => t.terrain !== "lake").length;
-        const incomeModifier = aiDifficulty === "super_hard" ? landTileCount : 0;
+        // Income bonus tiers: super_hard = "hard + bonus income"; super_expert =
+        // "smart brain + bonus income" (the very top). Plain expert is the smart
+        // brain with NO bonus (pure skill). Only the two "super" tiers get it.
+        const incomeModifier =
+          aiDifficulty === "super_hard" || aiDifficulty === "super_expert"
+            ? landTileCount
+            : 0;
         const upkeep = calcTerritoryUpkeep(territory, nextEntities);
         const current = nextBalances.get(territoryId) ?? 0;
         const delta = income + incomeModifier - upkeep;
@@ -318,7 +322,10 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
   setEntities(nextEntities);
   setGraveyard(nextGraveyard);
   setRuins(nextRuins);
-  setTurn((t) => t + 1);
+  // The round counter is NOT advanced here. It advances when the AI phase
+  // completes (aiStrategy.runAiTurn → cbs.state.advanceTurn), so the counter
+  // equals the round number: everyone acts in round R while it reads R. The
+  // income gates above ran with `turn` === R (the player's round), unchanged.
   setSelectedTileKey(null);
   setArmedEntityId(null);
   setSelectedEntityKey(null);

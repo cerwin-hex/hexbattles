@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { HexTile, EntityType, TerritoryOwner } from "@/types";
 import { handleEndTurnLogic, type EndTurnParams } from "@/logic/endTurnHandler";
+import { getContiguousTerritory, getTerritoryId } from "@/utils/hexGrid";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -44,7 +45,6 @@ function makeParams(overrides: Partial<EndTurnParams> = {}): EndTurnParams {
     setEntities: vi.fn(),
     setGraveyard: vi.fn(),
     setRuins: vi.fn(),
-    setTurn: vi.fn(),
     setSelectedTileKey: vi.fn(),
     setArmedEntityId: vi.fn(),
     setSelectedEntityKey: vi.fn(),
@@ -66,21 +66,68 @@ describe("handleEndTurnLogic guard conditions", () => {
   it("does nothing when isAiTurn is true", () => {
     const params = makeParams({ isAiTurn: true });
     handleEndTurnLogic(params);
-    expect(params.setTurn).not.toHaveBeenCalled();
+    expect(params.setMoveHistory).not.toHaveBeenCalled();
   });
 
   it("does nothing when gameResult is not null", () => {
     const params = makeParams({ gameResult: "victory" });
     handleEndTurnLogic(params);
-    expect(params.setTurn).not.toHaveBeenCalled();
+    expect(params.setMoveHistory).not.toHaveBeenCalled();
   });
 
-  it("increments the turn counter", () => {
-    const params = makeParams({ turn: 3 });
-    handleEndTurnLogic(params);
-    const setter = params.setTurn as ReturnType<typeof vi.fn>;
-    const updater = setter.mock.calls[0][0];
-    expect(updater(3)).toBe(4);
+  // Note: the round counter is no longer advanced here — it advances when the AI
+  // phase completes (see aiStrategy.runAiTurn → cbs.state.advanceTurn). That
+  // behaviour is covered in logic/aiStrategy.test.ts.
+});
+
+// ─── Income cadence (characterization) ────────────────────────────────────────
+// Locks the economy timing so the turn-counter relocation cannot silently move
+// it: the player is credited from round 2 (`turn !== 1`), the AI from round 3
+// (`turn > 2`) — the one-round delay that keeps both sides at 10 + (R-2) credits.
+
+describe("income cadence (characterization — must survive the turn-counter refactor)", () => {
+  // Two-tile territories per owner so neither is hit by the single-hex penalty.
+  const board = [
+    makeTile(0, 0, "player"),
+    makeTile(1, 0, "player"),
+    makeTile(5, 5, "ai1"),
+    makeTile(6, 5, "ai1"),
+  ];
+  const map = tileMap(board);
+  const playerTid = getTerritoryId(getContiguousTerritory(map, "0,0", "player", new Map()))!;
+  const aiTid = getTerritoryId(getContiguousTerritory(map, "5,5", "ai1", new Map()))!;
+
+  it("round 2: player credited, AI not yet", () => {
+    const setBalances = vi.fn();
+    handleEndTurnLogic(
+      makeParams({
+        turn: 2,
+        activeTileMap: map,
+        mutableTileMap: new Map(map),
+        aiOwners: ["ai1"],
+        territoryBalances: new Map(),
+        setTerritoryBalances: setBalances,
+      }),
+    );
+    const next: Map<string, number> = setBalances.mock.calls[0][0];
+    expect(next.get(playerTid)).toBeGreaterThan(0); // grass income applied
+    expect(next.get(aiTid) ?? 0).toBe(0); // AI not yet credited (turn > 2 is false)
+  });
+
+  it("round 3: AI now credited too", () => {
+    const setBalances = vi.fn();
+    handleEndTurnLogic(
+      makeParams({
+        turn: 3,
+        activeTileMap: map,
+        mutableTileMap: new Map(map),
+        aiOwners: ["ai1"],
+        territoryBalances: new Map(),
+        setTerritoryBalances: setBalances,
+      }),
+    );
+    const next: Map<string, number> = setBalances.mock.calls[0][0];
+    expect(next.get(aiTid) ?? 0).toBeGreaterThan(0); // AI credited from round 3
   });
 });
 

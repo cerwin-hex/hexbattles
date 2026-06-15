@@ -234,6 +234,27 @@ export function advanceCombatSpent(o: {
   return next;
 }
 
+/**
+ * The remaining movement budget of the unit at `key`. A unit with a recorded
+ * partial-move count uses that; a spent unit (tracked in `spentUnits` with no
+ * partial entry) has 0 remaining; an untouched unit is at full `maxRange`.
+ *
+ * Used when merging onto an existing unit: the merged unit keeps the LOWER of
+ * the two budgets, so merging a fresh unit into a spent one (e.g. one bought
+ * into an attack) must not resurrect a movement budget. Shared by the player
+ * tap handler and the AI so the two paths cannot drift apart.
+ */
+export function effectiveRemaining(
+  key: string,
+  partialMoves: Map<string, number>,
+  spentUnits: Set<string>,
+  maxRange: number,
+): number {
+  const pm = partialMoves.get(key);
+  if (pm !== undefined) return pm;
+  return spentUnits.has(key) ? 0 : maxRange;
+}
+
 export function resolveMovedUnitMoves(o: {
   isMerge: boolean;
   isCombat: boolean;

@@ -20,6 +20,7 @@ import {
   isChargeAttack,
   mergeResult,
   resolveMovedUnitMoves,
+  effectiveRemaining,
 } from "@/logic/gameLogic";
 
 /**
@@ -209,8 +210,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
     const newSpentUnits = new Set(spentUnits);
     const newPartialMoves = new Map(partialMoves);
     newPartialMoves.delete(selectedEntityKey);
-    const destRemaining =
-      newPartialMoves.get(key) ?? (newSpentUnits.has(key) ? 0 : maxRange);
+    const destRemaining = effectiveRemaining(key, newPartialMoves, newSpentUnits, maxRange);
     const moved = resolveMovedUnitMoves({
       isMerge,
       // A charge attack with attacks/movement to spare behaves like a normal move
@@ -270,7 +270,10 @@ export function handleTileTapLogic(params: TileTapParams): void {
 
       const newGraveyard = new Set(graveyard);
       const newRuins = new Set(ruins);
+      // A unit stepping onto a grave/ruin tile clears the marker for good — it
+      // must not reappear once the unit moves on again.
       newGraveyard.delete(key);
+      newRuins.delete(key);
       applySingleHexPenalty(
         activeTileMap,
         newTileMap,
@@ -444,8 +447,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
         if (canMerge) {
           newEntities.set(key, mergeBuyInto!);
           const placedRange = unitMovement(armedEntityId);
-          const existingRemaining =
-            newPartialMoves.get(key) ?? (newSpentUnits.has(key) ? 0 : placedRange);
+          const existingRemaining = effectiveRemaining(key, newPartialMoves, newSpentUnits, placedRange);
           // A freshly placed/bought unit is at full range; the merged unit
           // keeps the lower of the two remaining-move budgets.
           const moved = resolveMovedUnitMoves({
@@ -587,6 +589,13 @@ export function handleTileTapLogic(params: TileTapParams): void {
           );
         const newGraveyard2 = new Set(graveyard);
         const newRuins2 = new Set(ruins);
+        // Capturing a grave/ruin tile by buying a unit onto it clears the marker
+        // for good, same as walking onto it. Buildings don't (the rule is about
+        // active units), so guard on meta.isUnit.
+        if (meta.isUnit) {
+          newGraveyard2.delete(key);
+          newRuins2.delete(key);
+        }
         applySingleHexPenalty(
           activeTileMap,
           newTileMap,

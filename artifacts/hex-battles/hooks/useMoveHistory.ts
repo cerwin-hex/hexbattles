@@ -19,6 +19,8 @@ interface UseMoveHistoryParams {
   partialMoves: Map<string, number>;
   attacksUsed: Map<string, number>;
   freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
+  graveyard: Set<string>;
+  ruins: Set<string>;
   selectedTileKey: string | null;
   isAiTurn: boolean;
   gameResult: GameResult;
@@ -34,6 +36,8 @@ interface UseMoveHistoryParams {
   setPartialMoves: (m: Map<string, number>) => void;
   setAttacksUsed: (m: Map<string, number>) => void;
   setFreeTowerUsedTiles: (m: Map<TerritoryOwner, Set<string>>) => void;
+  setGraveyard: (s: Set<string>) => void;
+  setRuins: (s: Set<string>) => void;
   setSelectedTileKey: (k: string | null) => void;
   setSelectedEntityKey: (k: string | null) => void;
   setArmedEntityId: (id: EntityType | null) => void;
@@ -50,6 +54,8 @@ export function useMoveHistory({
   partialMoves,
   attacksUsed,
   freeTowerUsedTiles,
+  graveyard,
+  ruins,
   selectedTileKey,
   isAiTurn,
   gameResult,
@@ -65,6 +71,8 @@ export function useMoveHistory({
   setPartialMoves,
   setAttacksUsed,
   setFreeTowerUsedTiles,
+  setGraveyard,
+  setRuins,
   setSelectedTileKey,
   setSelectedEntityKey,
   setArmedEntityId,
@@ -87,6 +95,8 @@ export function useMoveHistory({
         freeTowerUsedTiles: new Map(
           [...freeTowerUsedTiles.entries()].map(([k, v]) => [k, new Set(v)]),
         ),
+        graveyard: new Set(graveyard),
+        ruins: new Set(ruins),
         selectedTileKey,
       },
     ]);
@@ -101,6 +111,8 @@ export function useMoveHistory({
     partialMoves,
     attacksUsed,
     freeTowerUsedTiles,
+    graveyard,
+    ruins,
     selectedTileKey,
   ]);
 
@@ -119,6 +131,8 @@ export function useMoveHistory({
       setPartialMoves(snapshot.partialMoves);
       setAttacksUsed(snapshot.attacksUsed ?? new Map());
       setFreeTowerUsedTiles(snapshot.freeTowerUsedTiles);
+      setGraveyard(snapshot.graveyard ?? new Set());
+      setRuins(snapshot.ruins ?? new Set());
       setSelectedTileKey(snapshot.selectedTileKey);
       setSelectedEntityKey(null);
       setArmedEntityId(null);
@@ -140,6 +154,8 @@ export function useMoveHistory({
     setPartialMoves,
     setAttacksUsed,
     setFreeTowerUsedTiles,
+    setGraveyard,
+    setRuins,
     setSelectedTileKey,
     setSelectedEntityKey,
     setArmedEntityId,

@@ -363,6 +363,9 @@ export default function GameScreen() {
     new Map(),
   );
   const [isDeveloperModeActive, setIsDeveloperModeActive] = useState(false);
+  // Dev: AI economy labels (balance+income) default ON during the AI turn and
+  // OFF during the player's turn, but can be toggled manually within a turn.
+  const [showAiDevLabels, setShowAiDevLabels] = useState(false);
   const [isAiPaused, setIsAiPaused] = useState(false);
   const [isAiTurnDone, setIsAiTurnDone] = useState(false);
   const resumeAiRef = useRef<(() => void) | null>(null);
@@ -483,6 +486,12 @@ export default function GameScreen() {
   const [aiHistoryIndex, setAiHistoryIndex] = useState(-1);
   const [aiHistoryLen, setAiHistoryLen] = useState(0);
 
+  // AI economy labels follow the turn by default: on during the AI turn, off on
+  // the player's turn. Manual toggles persist until the next turn flip.
+  useEffect(() => {
+    setShowAiDevLabels(isAiTurn);
+  }, [isAiTurn]);
+
   useEffect(() => {
     isDeveloperModeRef.current = isDeveloperModeActive;
     if (!isDeveloperModeActive && isAiPaused) {
@@ -495,12 +504,27 @@ export default function GameScreen() {
     }
   }, [isDeveloperModeActive, isAiPaused, isAiTurnDone]);
 
+  // Dev builds: auto-enable developer mode once the first full round (the player
+  // plus every AI) has completed. The round counter advances when the AI phase
+  // ends, so `turn` becomes 2 exactly as `isAiTurn` flips back to false — this
+  // fires once at that boundary. A later manual toggle sticks.
+  const devAutoActivatedRef = useRef(false);
+  useEffect(() => {
+    if (!__DEV__ || devAutoActivatedRef.current) return;
+    if (turn >= 2 && !isAiTurn) {
+      devAutoActivatedRef.current = true;
+      setIsDeveloperModeActive(true);
+    }
+  }, [turn, isAiTurn]);
+
   const restoreAiSnapshot = useCallback((snap: AiStepSnapshot) => {
     setEntities(snap.entities);
     setMutableTileMap(snap.mutableTileMap);
     setTerritoryBalances(snap.territoryBalances);
     setLiveOwnerMap(snap.liveOwnerMap);
     setGraveyard(snap.graveyard);
+    setRuins(snap.ruins);
+    setCities(snap.cities);
     setFreeTowerUsedTiles(snap.freeTowerUsedTiles);
   }, []);
 
@@ -671,6 +695,7 @@ export default function GameScreen() {
         setFreeTowerUsedTiles,
         setAiStateMap,
         setIsAiTurn,
+        advanceTurn: () => setTurn((t) => t + 1),
         setIsAiPaused,
         setIsAiTurnDone,
         setAiHistoryIndex,
@@ -839,6 +864,29 @@ export default function GameScreen() {
     aiStateMap,
   });
 
+  // Dev: owned land-tile count per player (You + each AI), shown only in dev
+  // mode. Excludes lakes/bridges and mountains — only land territory counts.
+  const devTileCounts = useMemo(() => {
+    if (!isDeveloperModeActive) return [];
+    const counts = new Map<TerritoryOwner, number>();
+    // Denominator matches the 70% dominance trigger in winLossChecker: all
+    // playable tiles (non-mountain, non-lake) including neutral ones.
+    let playableTotal = 0;
+    for (const t of activeTileMap.values()) {
+      if (t.terrain === "lake" || t.terrain === "mountain") continue;
+      playableTotal += 1;
+      if (t.owner === "neutral") continue;
+      counts.set(t.owner, (counts.get(t.owner) ?? 0) + 1);
+    }
+    const order: TerritoryOwner[] = ["player", ...aiOwners];
+    return order.map((owner) => {
+      const count = counts.get(owner) ?? 0;
+      const percent =
+        playableTotal > 0 ? Math.round((count / playableTotal) * 100) : 0;
+      return { owner, count, percent };
+    });
+  }, [isDeveloperModeActive, activeTileMap, aiOwners]);
+
   const { moveHistory, setMoveHistory, pushHistory, handleUndo } = useMoveHistory({
     entities,
     cities,
@@ -850,6 +898,8 @@ export default function GameScreen() {
     partialMoves,
     attacksUsed,
     freeTowerUsedTiles,
+    graveyard,
+    ruins,
     selectedTileKey,
     isAiTurn,
     gameResult,
@@ -865,6 +915,8 @@ export default function GameScreen() {
     setPartialMoves,
     setAttacksUsed,
     setFreeTowerUsedTiles,
+    setGraveyard,
+    setRuins,
     setSelectedTileKey,
     setSelectedEntityKey,
     setArmedEntityId,
@@ -1082,7 +1134,6 @@ export default function GameScreen() {
       setEntities,
       setGraveyard,
       setRuins,
-      setTurn,
       setSelectedTileKey,
       setArmedEntityId,
       setSelectedEntityKey,
@@ -1140,6 +1191,13 @@ export default function GameScreen() {
 
   const hasSelection = selectedTerritory.length > 0;
   const showGold = hasSelection;
+  // Show the terrain layer (instead of owner colours) whenever the player has a
+  // selection, and — in dev mode — during the AI's turn so terrain stays
+  // readable while the AI plays. In both cases the player-colour fill is hidden
+  // entirely; ownership still reads via the territory border lines drawn by
+  // BorderEdgeLayer over the terrain.
+  const devTerrainView = isDeveloperModeActive && isAiTurn;
+  const showTerrainView = hasSelection || devTerrainView;
   const goldDisplayValue = selectedTerritoryBalance;
 
   return (
@@ -1174,17 +1232,25 @@ export default function GameScreen() {
                * G wrapper's opacity prop is updated, which is a cheap native
                * operation and makes the terrain/territory switch instant.
                */}
-              <G opacity={hasSelection ? 0 : 1}>
+              {/*
+               * Terrain on the bottom, territory (player colours) on top — both
+               * permanently mounted, switched only via G opacity (cheap, native):
+               *   - default play:  territory fully opaque, covers the terrain
+               *   - tile selected: territory hidden so terrain reads; ownership via borders
+               *   - dev + AI turn: same as a selection — terrain reads, ownership
+               *                    via the border lines (no player-colour overlay)
+               */}
+              <G opacity={showTerrainView ? 1 : 0}>
+                <HexTileTerrainLayer
+                  tileData={tileData}
+                  HEX_SIZE={HEX_SIZE}
+                />
+              </G>
+              <G opacity={showTerrainView ? 0 : 1}>
                 <HexTileTerritoryLayer
                   tileData={tileData}
                   activeTileMap={activeTileMap}
                   cities={cities}
-                  HEX_SIZE={HEX_SIZE}
-                />
-              </G>
-              <G opacity={hasSelection ? 1 : 0}>
-                <HexTileTerrainLayer
-                  tileData={tileData}
                   HEX_SIZE={HEX_SIZE}
                 />
               </G>
@@ -1196,6 +1262,7 @@ export default function GameScreen() {
               <BorderEdgeLayer
                 outerEdges={outerTerritoryEdges}
                 innerEdges={borderEdges}
+                showInnerEdges={showTerrainView}
                 hasSelection={hasSelection}
                 selectionEdges={selectionBorderEdges}
               />
@@ -1305,7 +1372,7 @@ export default function GameScreen() {
             <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
               <Svg width={boardW} height={boardH}>
                 <DevEconomicSvgOverlays
-                  isDeveloperModeActive={isDeveloperModeActive}
+                  isDeveloperModeActive={isDeveloperModeActive && showAiDevLabels}
                   devEconomicOverlays={devEconomicOverlays}
                   hexSize={HEX_SIZE}
                 />
@@ -1343,12 +1410,82 @@ export default function GameScreen() {
         <Text style={styles.menuBtnText}>Menu</Text>
       </TouchableOpacity>
 
+      {__DEV__ && isDeveloperModeActive && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: topInset + 4,
+            left: 0,
+            right: 0,
+            alignItems: "center",
+            zIndex: 19,
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              gap: 8,
+              backgroundColor: "rgba(0,0,0,0.6)",
+              borderRadius: 4,
+              paddingHorizontal: 6,
+              paddingVertical: 2,
+            }}
+          >
+            {devTileCounts.map(({ owner, count, percent }) => (
+              <View key={owner} style={{ alignItems: "center" }}>
+                <Text
+                  style={{
+                    color: ownerColorMaps.fills[owner] ?? "#FFFFFF",
+                    fontSize: 11,
+                    fontWeight: "bold",
+                  }}
+                >
+                  {owner === "player" ? "You" : owner.replace("ai", "AI")}:{count}
+                </Text>
+                <Text
+                  style={{
+                    color: ownerColorMaps.fills[owner] ?? "#FFFFFF",
+                    fontSize: 9,
+                    fontWeight: "bold",
+                    opacity: 0.85,
+                  }}
+                >
+                  {percent}%
+                </Text>
+              </View>
+            ))}
+          </View>
+          <View
+            style={{
+              marginTop: 2,
+              backgroundColor: "rgba(0,0,0,0.6)",
+              borderRadius: 4,
+              paddingHorizontal: 6,
+              paddingVertical: 1,
+            }}
+          >
+            <Text
+              style={{
+                color: "#FFFFFF",
+                fontSize: 10,
+                fontWeight: "bold",
+              }}
+            >
+              Turn {turn}
+            </Text>
+          </View>
+        </View>
+      )}
+
       {__DEV__ && (
         <DevModeOverlay
           isDeveloperModeActive={isDeveloperModeActive}
           setIsDeveloperModeActive={setIsDeveloperModeActive}
           topInset={topInset}
           aiDifficulty={aiDifficulty}
+          showAiDevLabels={showAiDevLabels}
+          setShowAiDevLabels={setShowAiDevLabels}
         />
       )}
 
