@@ -773,13 +773,15 @@ export function generateCandidateActions(
     if (!canAfford(cost, upk)) continue;
     if (bType === "castle" && !hasStrongUnit) continue;
     for (const t of innerPlacements) {
+      // Building on an improved tile would destroy the improvement; don't.
+      if (IMPROVED_TERRAINS.has(t.terrain)) continue;
       out.push({ kind: "build", buildingType: bType, target: t.key, cost });
     }
   }
   const cityCost = ENTITY_META.city.cost;
   const hasCity = territory.some((t) => ctx.cities.has(t.key));
   if (!hasCity && territory.length >= 6 && canAfford(cityCost)) {
-    // A city cannot be founded on an improved tile (field/sawmill).
+    // Building on an improved tile would destroy the improvement; don't.
     for (const t of innerPlacements) {
       if (IMPROVED_TERRAINS.has(t.terrain)) continue;
       out.push({ kind: "build", buildingType: "city", target: t.key, cost: cityCost });

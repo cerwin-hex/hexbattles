@@ -952,8 +952,8 @@ describe("expert improve (last-resort)", () => {
   it("improves an idle peasant's grass tile when no better action exists", async () => {
     // A fully interior, all-grass territory surrounded by void: no enemies, no
     // border tiles, nothing to capture. One idle peasant sits on grass. The
-    // balance (5) is exactly IMPROVE_COST — too little for any unit/building buy
-    // (cheapest unit is 10), so the candidate generator emits no score-improving
+    // balance (5) covers IMPROVE_COST (3) but is too little for any unit/building
+    // buy (cheapest unit is 10), so the candidate generator emits no score-improving
     // action and the expert loop's `best` is null. With nothing better to do, the
     // expert should fall back to improving the peasant's tile (grass→field).
     const tileMap = makeTileMap([
@@ -989,7 +989,7 @@ describe("expert improve (last-resort)", () => {
     await runExpertTerritoryDecisionLoop("0,0", ctx, exec, () => true);
 
     expect(calls.length).toBe(1);
-    expect(calls[0]).toEqual({ target: "0,0", terrain: "field", cost: 5 });
+    expect(calls[0]).toEqual({ target: "0,0", terrain: "field", cost: 3 });
   });
 
   it("prefers a capture over improving (improve is strictly last-resort)", async () => {

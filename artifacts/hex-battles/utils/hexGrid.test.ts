@@ -16,6 +16,7 @@ import {
   generateHexGrid,
   IMPROVE_COST,
   improveTargetFor,
+  baseTerrainFor,
   IMPROVED_TERRAINS,
   calcAdminBurden,
   ADMIN_BURDEN_THRESHOLD,
@@ -521,8 +522,16 @@ describe("improvement constants", () => {
     expect(IMPROVED_TERRAINS.has("sawmill")).toBe(true);
     expect(IMPROVED_TERRAINS.has("grass")).toBe(false);
   });
-  it("costs 5 to improve", () => {
-    expect(IMPROVE_COST).toBe(5);
+  it("costs 3 to improve", () => {
+    expect(IMPROVE_COST).toBe(3);
+  });
+  it("reverts improved terrain to its base", () => {
+    expect(baseTerrainFor("field")).toBe("grass");
+    expect(baseTerrainFor("sawmill")).toBe("forest");
+  });
+  it("leaves non-improved terrain unchanged", () => {
+    expect(baseTerrainFor("grass")).toBe("grass");
+    expect(baseTerrainFor("desert")).toBe("desert");
   });
 });
 

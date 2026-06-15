@@ -103,7 +103,7 @@ export const TERRAIN_MOVE_COST: Record<TerrainType, number> = {
 export const CITY_BONUS = 2;
 
 /** Gold cost for a peasant to improve the tile it stands on. */
-export const IMPROVE_COST = 5;
+export const IMPROVE_COST = 3;
 
 /** Tile-count above which a single territory pays administrative burden. */
 export const ADMIN_BURDEN_THRESHOLD = 20;
@@ -122,6 +122,20 @@ const IMPROVE_TARGET: Partial<Record<TerrainType, TerrainType>> = {
 /** The terrain a peasant would produce by improving `terrain`, or null. */
 export function improveTargetFor(terrain: TerrainType): TerrainType | null {
   return IMPROVE_TARGET[terrain] ?? null;
+}
+
+const IMPROVEMENT_BASE: Partial<Record<TerrainType, TerrainType>> = {
+  field: "grass",
+  sawmill: "forest",
+};
+
+/**
+ * The base terrain an improved tile reverts to (field→grass, sawmill→forest).
+ * Returns `terrain` unchanged for non-improved terrain. Used when a building is
+ * founded on an improved tile, which destroys the improvement.
+ */
+export function baseTerrainFor(terrain: TerrainType): TerrainType {
+  return IMPROVEMENT_BASE[terrain] ?? terrain;
 }
 
 /**

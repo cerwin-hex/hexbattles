@@ -471,6 +471,8 @@ export async function runAiTerritoryDecisionLoop(
       if (undefBorder.length > 0) {
         const innerCands = currTerr.filter((t) => {
           if (t.terrain === "mountain" || t.terrain === "lake") return false;
+          // Don't destroy our own improvement by building a defence on it.
+          if (IMPROVED_TERRAINS.has(t.terrain)) return false;
           if (aiCtx.entities.has(t.key) || aiCtx.cities.has(t.key)) return false;
           if (currBorderTiles.some((bt) => bt.key === t.key)) return false;
           const [tq, tr] = t.key.split(",").map(Number);
@@ -481,6 +483,7 @@ export async function runAiTerritoryDecisionLoop(
         });
         const borderCands = undefBorder.filter((t) => {
           if (t.terrain === "mountain" || t.terrain === "lake") return false;
+          if (IMPROVED_TERRAINS.has(t.terrain)) return false;
           return !aiCtx.entities.has(t.key) && !aiCtx.cities.has(t.key);
         });
         const rawPlacementsC = innerCands.length > 0 ? innerCands : borderCands;

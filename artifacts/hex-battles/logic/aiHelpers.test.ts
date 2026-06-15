@@ -355,10 +355,10 @@ describe("dtFindImproveMove", () => {
     expect(dtFindImproveMove(tiles, ctx, new Set(), 10)).toBeNull();
   });
 
-  it("returns null when balance < IMPROVE_COST (5)", () => {
+  it("returns null when balance < IMPROVE_COST (3)", () => {
     const tiles = [makeTile(0, 0, "ai1", "grass")];
     const ctx = makeCtx(tiles, [["0,0", "peasant"]], [], "ai1");
-    expect(dtFindImproveMove(tiles, ctx, new Set(), 4)).toBeNull();
+    expect(dtFindImproveMove(tiles, ctx, new Set(), 2)).toBeNull();
   });
 
   it("improves a peasant's grass tile into a field", () => {

@@ -5,6 +5,7 @@ import type { EntityType, HexTile, TerritoryOwner } from "@/types";
 import {
   ENTITY_META,
   IMPROVED_TERRAINS,
+  baseTerrainFor,
   getContiguousTerritory,
   getTerritoryId,
   getMoveCost,
@@ -423,16 +424,6 @@ export function handleTileTapLogic(params: TileTapParams): void {
       triggerErrorFlash(key);
       return;
     }
-    // A city cannot be founded on an improved tile (field/sawmill) — the
-    // improvement and the city are mutually exclusive land uses.
-    if (
-      armedEntityId === "city" &&
-      tileData &&
-      IMPROVED_TERRAINS.has(tileData.terrain)
-    ) {
-      triggerErrorFlash(key);
-      return;
-    }
     if (!alreadyOccupied && selectedTerritoryId) {
       const meta = ENTITY_META[armedEntityId];
       const balance = territoryBalances.get(selectedTerritoryId) ?? 0;
@@ -476,7 +467,19 @@ export function handleTileTapLogic(params: TileTapParams): void {
             if (moved.remaining !== null) newPartialMoves.set(key, moved.remaining);
           }
         }
+        // Founding a building (city/tower/castle) on an improved tile destroys
+        // the improvement: revert the terrain to its base before placing.
+        const destroysImprovement =
+          !armedIsUnit && !!tileData && IMPROVED_TERRAINS.has(tileData.terrain);
         unstable_batchedUpdates(() => {
+          if (destroysImprovement) {
+            const nextTiles = new Map(activeTileMap);
+            nextTiles.set(key, {
+              ...tileData!,
+              terrain: baseTerrainFor(tileData!.terrain),
+            });
+            setMutableTileMap(nextTiles);
+          }
           if (armedEntityId === "city" && !canMerge) {
             setCities((prev) => new Set([...prev, key]));
           } else {

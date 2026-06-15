@@ -575,8 +575,8 @@ describe("calcTerritoryUpkeep admin burden", () => {
 // ─── canImproveTile ───────────────────────────────────────────────────────────
 
 describe("canImproveTile", () => {
-  const base = { entityId: "peasant" as const, terrain: "grass" as const, isSpent: false, balance: 5, isCity: false };
-  it("allows a non-spent peasant on grass/forest with >=5 gold", () => {
+  const base = { entityId: "peasant" as const, terrain: "grass" as const, isSpent: false, balance: 3, isCity: false };
+  it("allows a non-spent peasant on grass/forest with >=3 gold", () => {
     expect(canImproveTile(base)).toBe(true);
     expect(canImproveTile({ ...base, terrain: "forest" })).toBe(true);
   });
@@ -590,7 +590,7 @@ describe("canImproveTile", () => {
     expect(canImproveTile({ ...base, isSpent: true })).toBe(false);
   });
   it("rejects insufficient gold", () => {
-    expect(canImproveTile({ ...base, balance: 4 })).toBe(false);
+    expect(canImproveTile({ ...base, balance: 2 })).toBe(false);
   });
   it("rejects non-improvable terrain", () => {
     expect(canImproveTile({ ...base, terrain: "desert" })).toBe(false);
