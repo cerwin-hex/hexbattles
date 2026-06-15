@@ -71,6 +71,7 @@ async function firstExpertAction(
       stop({ kind: "build", buildingType, target, cost }),
     upgrade: async (target, to, cost) => stop({ kind: "upgrade", target, to, cost }),
     remove: async (target) => stop({ kind: "remove", target }),
+    develop: async () => false,
     markSpent: () => {},
     setTerritoryState: () => {},
   };
@@ -618,6 +619,7 @@ describe("runExpertTerritoryDecisionLoop", () => {
         calls.push({ kind: "remove", target });
         return false;
       },
+      develop: async () => false,
       markSpent: () => {},
       setTerritoryState: () => {},
     };

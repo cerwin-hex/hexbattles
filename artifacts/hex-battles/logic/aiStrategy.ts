@@ -1,4 +1,4 @@
-import type { HexTile, TerritoryOwner, EntityType, AiStepSnapshot } from "@/types";
+import type { HexTile, TerritoryOwner, EntityType, AiStepSnapshot, TerrainType } from "@/types";
 import { hexDistance, tileKey, HEX_EDGES } from "@/utils/hexMath";
 import {
   getContiguousTerritory,
@@ -52,6 +52,7 @@ export interface AiDecisionExec {
   upgrade(target: string, to: EntityType, cost: number): Promise<boolean>;
   build(type: EntityType, target: string, cost: number): Promise<boolean>;
   remove(target: string): Promise<boolean>;
+  develop(target: string, terrain: TerrainType, cost: number): Promise<boolean>;
   markSpent(key: string): void;
   setTerritoryState(tid: string, state: AiState): void;
 }
@@ -1485,6 +1486,30 @@ export async function runAiTurn(
         return true;
       };
 
+      const dtExecDevelop = async (
+        target: string,
+        terrain: TerrainType,
+        cost: number,
+      ): Promise<boolean> => {
+        if (!cbs.refs.isTurnActive()) return false;
+        if (!canPay(cost)) return false;
+        const tt = ws.tileMap.get(target);
+        if (!tt) return false;
+        ws.tileMap = new Map(ws.tileMap);
+        ws.tileMap.set(target, { ...tt, terrain });
+        cache.clear();
+        const terr = getContiguousTerritory(ws.tileMap, startTile.key, aiOwner, ws.entities);
+        const tid = getTerritoryId(terr);
+        ws.balances = new Map(ws.balances);
+        if (tid) ws.balances.set(tid, (ws.balances.get(tid) ?? 0) - cost);
+        ws.spentUnits = new Set(ws.spentUnits);
+        ws.spentUnits.add(target);
+        cbs.state.setMutableTileMap(new Map(ws.tileMap));
+        cbs.state.setTerritoryBalances(new Map(ws.balances));
+        await dtAwait();
+        return true;
+      };
+
       const markSpent = (key: string): void => {
         ws.spentUnits = new Set(ws.spentUnits);
         ws.spentUnits.add(key);
@@ -1503,6 +1528,7 @@ export async function runAiTurn(
         upgrade: dtExecUpgrade,
         build: dtExecBuild,
         remove: dtExecRemove,
+        develop: dtExecDevelop,
         markSpent,
         setTerritoryState,
       };

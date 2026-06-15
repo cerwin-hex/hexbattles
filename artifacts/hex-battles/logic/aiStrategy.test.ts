@@ -477,6 +477,7 @@ function makeExec(overrides: Partial<AiDecisionExec> = {}): AiDecisionExec {
     upgrade: vi.fn(async () => false),
     build: vi.fn(async () => false),
     remove: vi.fn(async () => false),
+    develop: vi.fn(async () => false),
     markSpent: vi.fn(),
     setTerritoryState: vi.fn(),
     ...overrides,
