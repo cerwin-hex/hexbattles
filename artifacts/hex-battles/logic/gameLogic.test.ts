@@ -10,6 +10,8 @@ import {
   isChargeAttack,
   advanceAttacksUsed,
   advanceCombatSpent,
+  calcTerritoryIncome,
+  canImproveTile,
 } from "@/logic/gameLogic";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -504,5 +506,94 @@ describe("advanceCombatSpent", () => {
     });
     expect(r.has("0,0")).toBe(false);
     expect(r.has("1,0")).toBe(false);
+  });
+});
+
+// ─── calcTerritoryIncome ──────────────────────────────────────────────────────
+
+describe("calcTerritoryIncome", () => {
+  it("sums terrain income and city bonus, skipping rebel tiles", () => {
+    const tiles = [
+      makeTile(0, 0, "player", "grass"),   // 2
+      makeTile(1, 0, "player", "forest"),  // 2 (but rebel — skipped)
+      makeTile(2, 0, "player", "field"),   // 3
+      makeTile(3, 0, "player", "grass"),   // city +2, terrain 2
+    ];
+    const map = new Map(tiles.map((t) => [t.key, t]));
+    const entities = new Map<string, EntityType>([["1,0", "rebel"]]); // forest suppressed
+    const cities = new Set<string>(["3,0"]);
+    // grass 2 + (forest rebel 0) + field 3 + grass 2 + city 2 = 9
+    // + city-adjacency bonus: field at 2,0 is adjacent to same-owner city at 3,0 -> +1 = 10
+    expect(calcTerritoryIncome(tiles, entities, cities, map)).toBe(10);
+  });
+});
+
+describe("calcTerritoryIncome city-adjacency bonus", () => {
+  it("grants +1 per improved same-owner tile adjacent to a city, stacking", () => {
+    // City at 0,0; two improved neighbours (field + sawmill) -> +2 bonus,
+    // plus their own income (3 + 3) and the city tile (grass 2 + city 2).
+    const tiles = [
+      makeTile(0, 0, "player", "grass"),    // city: 2 + CITY_BONUS 2
+      makeTile(1, 0, "player", "field"),    // 3, adjacent to city -> +1
+      makeTile(0, 1, "player", "sawmill"),  // 3, adjacent to city -> +1
+    ];
+    const tileMap2 = new Map(tiles.map((t) => [t.key, t]));
+    const cities = new Set(["0,0"]);
+    // 2 + 2 (city) + 3 + 3 + 1 + 1 = 12
+    expect(calcTerritoryIncome(tiles, new Map(), cities, tileMap2)).toBe(12);
+  });
+  it("does not grant the bonus for an enemy-owned adjacent city", () => {
+    const tiles = [makeTile(1, 0, "player", "field")];
+    const enemyCity = makeTile(0, 0, "ai1", "grass");
+    const tileMap2 = new Map([
+      ["1,0", tiles[0]],
+      ["0,0", enemyCity],
+    ]);
+    const cities = new Set(["0,0"]);
+    // Only the field's own income, no bonus (city owned by ai1).
+    expect(calcTerritoryIncome(tiles, new Map(), cities, tileMap2)).toBe(3);
+  });
+});
+
+describe("calcTerritoryUpkeep admin burden", () => {
+  it("adds ceil((tiles-20)/2) for clusters over 20 tiles", () => {
+    // 26 empty tiles, no entities: upkeep is purely burden = ceil(6/2) = 3
+    const tiles = Array.from({ length: 26 }, (_, i) =>
+      makeTile(i, 0, "player", "grass"),
+    );
+    const entities = new Map<string, EntityType>();
+    expect(calcTerritoryUpkeep(tiles, entities)).toBe(3);
+  });
+  it("charges no burden at 20 tiles", () => {
+    const tiles = Array.from({ length: 20 }, (_, i) =>
+      makeTile(i, 0, "player", "grass"),
+    );
+    expect(calcTerritoryUpkeep(tiles, new Map())).toBe(0);
+  });
+});
+
+// ─── canImproveTile ───────────────────────────────────────────────────────────
+
+describe("canImproveTile", () => {
+  const base = { entityId: "peasant" as const, terrain: "grass" as const, isSpent: false, balance: 3, isCity: false };
+  it("allows a non-spent peasant on grass/forest with >=3 gold", () => {
+    expect(canImproveTile(base)).toBe(true);
+    expect(canImproveTile({ ...base, terrain: "forest" })).toBe(true);
+  });
+  it("rejects non-peasants", () => {
+    expect(canImproveTile({ ...base, entityId: "warrior" })).toBe(false);
+  });
+  it("rejects a peasant standing on a city tile", () => {
+    expect(canImproveTile({ ...base, isCity: true })).toBe(false);
+  });
+  it("rejects spent peasants", () => {
+    expect(canImproveTile({ ...base, isSpent: true })).toBe(false);
+  });
+  it("rejects insufficient gold", () => {
+    expect(canImproveTile({ ...base, balance: 2 })).toBe(false);
+  });
+  it("rejects non-improvable terrain", () => {
+    expect(canImproveTile({ ...base, terrain: "desert" })).toBe(false);
+    expect(canImproveTile({ ...base, terrain: "field" })).toBe(false);
   });
 });

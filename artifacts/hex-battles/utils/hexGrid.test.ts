@@ -14,6 +14,12 @@ import {
   getContiguousTerritory,
   getTerritoryId,
   generateHexGrid,
+  IMPROVE_COST,
+  improveTargetFor,
+  baseTerrainFor,
+  IMPROVED_TERRAINS,
+  calcAdminBurden,
+  ADMIN_BURDEN_THRESHOLD,
 } from "@/utils/hexGrid";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -494,5 +500,54 @@ describe("generateHexGrid map options", () => {
     // post-generation reachability fixup that converts some mountains to grass.
     expect(mountainShare).toBeGreaterThanOrEqual(0.1);
     expect(mountainShare).toBeLessThanOrEqual(0.35);
+  });
+});
+
+// ─── improvement constants ────────────────────────────────────────────────────
+
+describe("improvement constants", () => {
+  it("maps improvable terrain to its upgrade", () => {
+    expect(improveTargetFor("grass")).toBe("field");
+    expect(improveTargetFor("forest")).toBe("sawmill");
+  });
+  it("returns null for non-improvable terrain", () => {
+    expect(improveTargetFor("desert")).toBeNull();
+    expect(improveTargetFor("field")).toBeNull();
+    expect(improveTargetFor("sawmill")).toBeNull();
+    expect(improveTargetFor("lake")).toBeNull();
+    expect(improveTargetFor("mountain")).toBeNull();
+  });
+  it("recognises improved terrains", () => {
+    expect(IMPROVED_TERRAINS.has("field")).toBe(true);
+    expect(IMPROVED_TERRAINS.has("sawmill")).toBe(true);
+    expect(IMPROVED_TERRAINS.has("grass")).toBe(false);
+  });
+  it("costs 3 to improve", () => {
+    expect(IMPROVE_COST).toBe(3);
+  });
+  it("reverts improved terrain to its base", () => {
+    expect(baseTerrainFor("field")).toBe("grass");
+    expect(baseTerrainFor("sawmill")).toBe("forest");
+  });
+  it("leaves non-improved terrain unchanged", () => {
+    expect(baseTerrainFor("grass")).toBe("grass");
+    expect(baseTerrainFor("desert")).toBe("desert");
+  });
+});
+
+// ─── calcAdminBurden ─────────────────────────────────────────────────────────
+
+describe("calcAdminBurden", () => {
+  it("is zero at or below the threshold", () => {
+    expect(ADMIN_BURDEN_THRESHOLD).toBe(20);
+    expect(calcAdminBurden(0)).toBe(0);
+    expect(calcAdminBurden(20)).toBe(0);
+  });
+  it("charges ceil((n-20)/2) for the excess only", () => {
+    expect(calcAdminBurden(21)).toBe(1);
+    expect(calcAdminBurden(22)).toBe(1);
+    expect(calcAdminBurden(26)).toBe(3);
+    expect(calcAdminBurden(30)).toBe(5);
+    expect(calcAdminBurden(40)).toBe(10);
   });
 });

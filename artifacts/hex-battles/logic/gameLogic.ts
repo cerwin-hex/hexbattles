@@ -1,5 +1,6 @@
 import {
   EntityType,
+  TerrainType,
   HexTile,
   TerritoryOwner,
   ENTITY_META,
@@ -7,8 +8,15 @@ import {
   getContiguousTerritory,
   getTerritoryId,
   TERRAIN_INCOME,
+  CITY_BONUS,
   unitMaxAttacks,
   isCavalry,
+  calcAdminBurden,
+  IMPROVED_TERRAINS,
+  HEX_EDGES,
+  tileKey,
+  IMPROVE_COST,
+  improveTargetFor,
 } from "@/utils/hexGrid";
 import { STRENGTH_TO_UNIT, STRENGTH_TO_CAVALRY } from "@/constants/gameConstants";
 
@@ -29,7 +37,13 @@ export function calcTerritoryUpkeep(
       if (t.terrain === "lake") bridges++;
     }
   }
-  return unitUpkeep + calcDefenseUpkeep("tower", towers) + calcDefenseUpkeep("castle", castles) + bridges * ENTITY_META["bridge"].upkeep;
+  return (
+    unitUpkeep +
+    calcDefenseUpkeep("tower", towers) +
+    calcDefenseUpkeep("castle", castles) +
+    bridges * ENTITY_META["bridge"].upkeep +
+    calcAdminBurden(territory.length)
+  );
 }
 
 export function applySingleHexPenalty(
@@ -274,4 +288,51 @@ export function resolveMovedUnitMoves(o: {
     spent: false,
     remaining: o.remainingAfterMove < o.maxRange ? o.remainingAfterMove : null,
   };
+}
+
+/**
+ * Whether a selected unit may improve the tile it stands on: a non-spent peasant
+ * on improvable terrain (grass/forest) whose territory holds at least
+ * IMPROVE_COST gold. Shared by the player UI (EntityPanel) and the AI.
+ */
+export function canImproveTile(o: {
+  entityId: EntityType | undefined;
+  terrain: TerrainType;
+  isSpent: boolean;
+  balance: number;
+  isCity: boolean;
+}): boolean {
+  if (o.entityId !== "peasant") return false;
+  if (o.isCity) return false;
+  if (o.isSpent) return false;
+  if (improveTargetFor(o.terrain) === null) return false;
+  return o.balance >= IMPROVE_COST;
+}
+
+/**
+ * Single source of truth for a territory's per-turn income. Sums each non-rebel
+ * tile's terrain income plus CITY_BONUS for city tiles, plus the city-adjacency
+ * improvement bonus (added in a later task). Centralizing this avoids the income
+ * formula drifting across the ~8 sites that previously inlined it.
+ */
+export function calcTerritoryIncome(
+  territory: HexTile[],
+  entities: Map<string, EntityType>,
+  cities: Set<string>,
+  tileMap: Map<string, HexTile>,
+): number {
+  let income = 0;
+  for (const t of territory) {
+    if (entities.get(t.key) === "rebel") continue;
+    income += (TERRAIN_INCOME[t.terrain] ?? 0) + (cities.has(t.key) ? CITY_BONUS : 0);
+    if (IMPROVED_TERRAINS.has(t.terrain)) {
+      const [q, r] = t.key.split(",").map(Number);
+      for (const { dir: [dq, dr] } of HEX_EDGES) {
+        const nk = tileKey(q + dq, r + dr);
+        if (!cities.has(nk)) continue;
+        if (tileMap.get(nk)?.owner === t.owner) income += 1;
+      }
+    }
+  }
+  return income;
 }

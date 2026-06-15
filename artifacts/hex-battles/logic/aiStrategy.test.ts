@@ -477,6 +477,7 @@ function makeExec(overrides: Partial<AiDecisionExec> = {}): AiDecisionExec {
     upgrade: vi.fn(async () => false),
     build: vi.fn(async () => false),
     remove: vi.fn(async () => false),
+    improve: vi.fn(async () => false),
     markSpent: vi.fn(),
     setTerritoryState: vi.fn(),
     ...overrides,
@@ -920,5 +921,37 @@ describe("runAiTerritoryDecisionLoop", () => {
 
       expect(exec.move).not.toHaveBeenCalled();
     });
+  });
+
+  it("improves an idle peasant's tile when no combat is available", async () => {
+    // Pure AI-only map (no enemy/neutral tiles anywhere) so no attack, expansion,
+    // or "move closer to enemy" action can fire. With nothing better to do and
+    // spare gold (balance >= IMPROVE_COST=3), the loop falls through to its
+    // last-resort improve attempt: the idle peasant on a grass tile is improved
+    // in place (grass -> "field").
+    const tiles = [
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai1"),
+    ];
+    const entities = new Map<string, EntityType>([["0,0", "peasant"]]);
+    // Territory ID = lexicographically smallest key = "0,0".
+    const balances = new Map([["0,0", 10]]);
+    const aiCtx = makeAiCtx(tiles, "ai1", entities, balances);
+
+    // Recording improve mock. isTurnActive flips to false after the first
+    // improve so the loop exits next iteration (mirrors the existing harness's
+    // `() => !moved` pattern) — guarantees finite progress / no infinite loop.
+    let improved = false;
+    const exec = makeExec({
+      improve: vi.fn(async () => { improved = true; return true; }),
+    });
+
+    await runAiTerritoryDecisionLoop("0,0", aiCtx, exec, () => !improved, "hard");
+
+    expect(exec.improve).toHaveBeenCalledTimes(1);
+    const [target, terrain, cost] = (exec.improve as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(target).toBe("0,0");
+    expect(terrain).toBe("field");
+    expect(cost).toBe(3);
   });
 });

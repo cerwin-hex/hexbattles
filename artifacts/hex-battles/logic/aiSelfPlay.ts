@@ -11,10 +11,8 @@ import {
   getContiguousTerritory,
   getTerritoryId,
   ENTITY_META,
-  TERRAIN_INCOME,
-  CITY_BONUS,
 } from "@/utils/hexGrid";
-import { applySingleHexPenalty, calcTerritoryUpkeep } from "@/logic/gameLogic";
+import { applySingleHexPenalty, calcTerritoryIncome, calcTerritoryUpkeep } from "@/logic/gameLogic";
 import { runAiTurn } from "@/logic/aiStrategy";
 import type { AiWorkingState, AiTurnCallbacks } from "@/logic/aiStrategy";
 import { __setExpertWeightsOverride, __setExpertSearchConfig, type EvalWeights } from "@/logic/aiExpert";
@@ -101,10 +99,7 @@ function creditIncome(
       const tid = getTerritoryId(territory);
       if (!tid) continue;
       if (!ws.balances.has(tid)) ws.balances.set(tid, 0);
-      const income = territory.reduce((s, t) => {
-        if (ws.entities.get(t.key) === "rebel") return s;
-        return s + TERRAIN_INCOME[t.terrain] + (ws.cities.has(t.key) ? CITY_BONUS : 0);
-      }, 0);
+      const income = calcTerritoryIncome(territory, ws.entities, ws.cities, ws.tileMap);
       const landTileCount = territory.filter((t) => t.terrain !== "lake").length;
       const incomeModifier = ownerGetsIncomeBonus(owner, diffByOwner)
         ? landTileCount

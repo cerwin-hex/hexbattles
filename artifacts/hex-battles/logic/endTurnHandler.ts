@@ -10,12 +10,10 @@ import type {
 import { HEX_EDGES, tileKey } from "@/utils/hexMath";
 import {
   ENTITY_META,
-  TERRAIN_INCOME,
-  CITY_BONUS,
   getContiguousTerritory,
   getTerritoryId,
 } from "@/utils/hexGrid";
-import { applySingleHexPenalty, calcTerritoryUpkeep } from "@/logic/gameLogic";
+import { applySingleHexPenalty, calcTerritoryIncome, calcTerritoryUpkeep } from "@/logic/gameLogic";
 
 export interface EndTurnParams {
   isAiTurn: boolean;
@@ -115,14 +113,7 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
       for (const t of territory) visited.add(t.key);
       const territoryId = getTerritoryId(territory);
       if (!territoryId) continue;
-      const income = territory.reduce((s, t) => {
-        if (nextEntities.get(t.key) === "rebel") return s;
-        return (
-          s +
-          TERRAIN_INCOME[t.terrain] +
-          (cities.has(t.key) ? CITY_BONUS : 0)
-        );
-      }, 0);
+      const income = calcTerritoryIncome(territory, nextEntities, cities, activeTileMap);
       const upkeep = calcTerritoryUpkeep(territory, nextEntities);
       const current = nextBalances.get(territoryId) ?? 0;
       const delta = income - upkeep;
@@ -191,14 +182,7 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
         const territoryId = getTerritoryId(territory);
         if (!territoryId) continue;
         if (!nextBalances.has(territoryId)) nextBalances.set(territoryId, 0);
-        const income = territory.reduce((s, t) => {
-          if (nextEntities.get(t.key) === "rebel") return s;
-          return (
-            s +
-            TERRAIN_INCOME[t.terrain] +
-            (cities.has(t.key) ? CITY_BONUS : 0)
-          );
-        }, 0);
+        const income = calcTerritoryIncome(territory, nextEntities, cities, activeTileMap);
         const landTileCount = territory.filter(t => t.terrain !== "lake").length;
         // Income bonus tiers: super_hard = "hard + bonus income"; super_expert =
         // "smart brain + bonus income" (the very top). Plain expert is the smart

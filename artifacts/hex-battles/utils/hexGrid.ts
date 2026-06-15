@@ -86,6 +86,8 @@ export const TERRAIN_INCOME: Record<TerrainType, number> = {
   mountain: 0,
   lake:     0,
   forest:   2,
+  field:    3,
+  sawmill:  3,
 };
 
 export const TERRAIN_MOVE_COST: Record<TerrainType, number> = {
@@ -94,9 +96,58 @@ export const TERRAIN_MOVE_COST: Record<TerrainType, number> = {
   mountain: Infinity,
   lake:     1,
   forest:   2,
+  field:    1,
+  sawmill:  2,
 };
 
 export const CITY_BONUS = 2;
+
+/** Gold cost for a peasant to improve the tile it stands on. */
+export const IMPROVE_COST = 3;
+
+/** Tile-count above which a single territory pays administrative burden. */
+export const ADMIN_BURDEN_THRESHOLD = 20;
+
+/** Terrain types produced by improvement (cannot be improved further). */
+export const IMPROVED_TERRAINS: ReadonlySet<TerrainType> = new Set<TerrainType>([
+  "field",
+  "sawmill",
+]);
+
+const IMPROVE_TARGET: Partial<Record<TerrainType, TerrainType>> = {
+  grass: "field",
+  forest: "sawmill",
+};
+
+/** The terrain a peasant would produce by improving `terrain`, or null. */
+export function improveTargetFor(terrain: TerrainType): TerrainType | null {
+  return IMPROVE_TARGET[terrain] ?? null;
+}
+
+const IMPROVEMENT_BASE: Partial<Record<TerrainType, TerrainType>> = {
+  field: "grass",
+  sawmill: "forest",
+};
+
+/**
+ * The base terrain an improved tile reverts to (field→grass, sawmill→forest).
+ * Returns `terrain` unchanged for non-improved terrain. Used when a building is
+ * founded on an improved tile, which destroys the improvement.
+ */
+export function baseTerrainFor(terrain: TerrainType): TerrainType {
+  return IMPROVEMENT_BASE[terrain] ?? terrain;
+}
+
+/**
+ * Administrative burden (extra upkeep) for a territory of `tileCount` tiles:
+ * ceil(max(0, tileCount - ADMIN_BURDEN_THRESHOLD) / 2). Only the tiles ABOVE
+ * the threshold are charged, at half a gold each (rounded up).
+ */
+export function calcAdminBurden(tileCount: number): number {
+  const excess = tileCount - ADMIN_BURDEN_THRESHOLD;
+  if (excess <= 0) return 0;
+  return Math.ceil(excess / 2);
+}
 
 export const UNIT_UPGRADE: Partial<Record<EntityType, EntityType>> = {
   peasant: 'warrior',

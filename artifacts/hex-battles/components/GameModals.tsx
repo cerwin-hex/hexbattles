@@ -12,13 +12,18 @@ import { CoinIcon, SkullIcon, UnitIcon } from "@/components/UnitIcon";
 
 export interface EconBreakdown {
   grassCount: number;
+  fieldCount: number;
   forestCount: number;
+  sawmillCount: number;
   desertCount: number;
   cityCount: number;
   grassIncome: number;
+  fieldBonus: number;
   forestIncome: number;
+  sawmillBonus: number;
   desertIncome: number;
   cityIncome: number;
+  cityImproveBonus: number;
   upkeepGroups: {
     id: EntityType;
     name: string;
@@ -28,6 +33,9 @@ export interface EconBreakdown {
     mostExpensiveCost: number | null;
     total: number;
   }[];
+  totalIncome: number;
+  totalUpkeep: number;
+  adminBurden: number;
   rebelCount: number;
   rebelTotalLoss: number;
   net: number;
@@ -127,8 +135,19 @@ export default function GameModals({
                   </Text>
                 </View>
               )}
-              {econBreakdown && econBreakdown.forestCount > 0 && (
+              {econBreakdown && econBreakdown.fieldCount > 0 && (
                 <View style={styles.econRow}>
+                  <Text style={[styles.econRowLabel, styles.econIndentLabel]}>
+                    ↳ Field ×{econBreakdown.fieldCount}{" "}
+                    <Text style={styles.econPer}>(+1 each)</Text>
+                  </Text>
+                  <Text style={styles.econRowValue}>
+                    +{econBreakdown.fieldBonus}
+                  </Text>
+                </View>
+              )}
+              {econBreakdown && econBreakdown.forestCount > 0 && (
+                <View style={[styles.econRow, styles.econGroupGap]}>
                   <Text style={styles.econRowLabel}>
                     Forest ×{econBreakdown.forestCount}{" "}
                     <Text style={styles.econPer}>(+2 each)</Text>
@@ -138,8 +157,19 @@ export default function GameModals({
                   </Text>
                 </View>
               )}
-              {econBreakdown && econBreakdown.desertCount > 0 && (
+              {econBreakdown && econBreakdown.sawmillCount > 0 && (
                 <View style={styles.econRow}>
+                  <Text style={[styles.econRowLabel, styles.econIndentLabel]}>
+                    ↳ Sawmill ×{econBreakdown.sawmillCount}{" "}
+                    <Text style={styles.econPer}>(+1 each)</Text>
+                  </Text>
+                  <Text style={styles.econRowValue}>
+                    +{econBreakdown.sawmillBonus}
+                  </Text>
+                </View>
+              )}
+              {econBreakdown && econBreakdown.desertCount > 0 && (
+                <View style={[styles.econRow, styles.econGroupGap]}>
                   <Text style={styles.econRowLabel}>
                     Desert ×{econBreakdown.desertCount}{" "}
                     <Text style={styles.econPer}>(+1 each)</Text>
@@ -150,7 +180,7 @@ export default function GameModals({
                 </View>
               )}
               {econBreakdown && econBreakdown.cityCount > 0 && (
-                <View style={styles.econRow}>
+                <View style={[styles.econRow, styles.econGroupGap]}>
                   <View style={styles.econLabelRow}>
                     <UnitIcon entityId="city" size={16} />
                     <Text style={styles.econRowLabel}>
@@ -163,10 +193,30 @@ export default function GameModals({
                   </Text>
                 </View>
               )}
+              {econBreakdown && econBreakdown.cityImproveBonus > 0 && (
+                <View style={styles.econRow}>
+                  <Text style={[styles.econRowLabel, styles.econIndentLabel]}>
+                    ↳ Improvements{" "}
+                    <Text style={styles.econPer}>(+1 per adj. improv.)</Text>
+                  </Text>
+                  <Text style={styles.econRowValue}>
+                    +{econBreakdown.cityImproveBonus}
+                  </Text>
+                </View>
+              )}
+              {econBreakdown && (
+                <View style={[styles.econRow, styles.econTotalRow]}>
+                  <Text style={styles.econTotalLabel}>Total income</Text>
+                  <Text style={styles.econRowValue}>
+                    +{econBreakdown.totalIncome}
+                  </Text>
+                </View>
+              )}
             </View>
             {econBreakdown &&
               (econBreakdown.upkeepGroups.length > 0 ||
-                econBreakdown.rebelTotalLoss > 0) && (
+                econBreakdown.rebelTotalLoss > 0 ||
+                econBreakdown.adminBurden > 0) && (
                 <View style={styles.econSection}>
                   <Text style={styles.econSectionLabel}>UPKEEP / TURN</Text>
                   {econBreakdown.upkeepGroups.map((g, i) => (
@@ -215,6 +265,33 @@ export default function GameModals({
                       </Text>
                     </View>
                   )}
+                  {econBreakdown.adminBurden > 0 && (
+                    <View
+                      style={[
+                        styles.econRow,
+                        (econBreakdown.upkeepGroups.length > 0 ||
+                          econBreakdown.rebelTotalLoss > 0) &&
+                          styles.econUpkeepCategoryGap,
+                      ]}
+                    >
+                      <Text style={styles.econRowLabel}>
+                        Administrative burden{" "}
+                        <Text style={styles.econPer}>(size &gt; 20)</Text>
+                      </Text>
+                      <Text style={[styles.econRowValue, { color: "#E07060" }]}>
+                        −{econBreakdown.adminBurden}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={[styles.econRow, styles.econTotalRow]}>
+                    <Text style={styles.econTotalLabel}>Total upkeep</Text>
+                    <Text style={[styles.econRowValue, { color: "#E07060" }]}>
+                      −
+                      {econBreakdown.totalUpkeep +
+                        econBreakdown.rebelTotalLoss +
+                        econBreakdown.adminBurden}
+                    </Text>
+                  </View>
                 </View>
               )}
             <View style={styles.econDivider} />

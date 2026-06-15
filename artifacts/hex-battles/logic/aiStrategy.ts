@@ -1,4 +1,4 @@
-import type { HexTile, TerritoryOwner, EntityType, AiStepSnapshot } from "@/types";
+import type { HexTile, TerritoryOwner, EntityType, AiStepSnapshot, TerrainType } from "@/types";
 import { hexDistance, tileKey, HEX_EDGES } from "@/utils/hexMath";
 import {
   getContiguousTerritory,
@@ -16,14 +16,17 @@ import {
   unitMaxAttacks,
   isCavalry,
   cavalryMoveKind,
+  IMPROVE_COST,
+  IMPROVED_TERRAINS,
 } from "@/utils/hexGrid";
-import { advanceAttacksUsed, advanceCombatSpent, calcTerritoryUpkeep, effectiveRemaining, isChargeAttack, mergeResult, resolveMovedUnitMoves } from "@/logic/gameLogic";
+import { advanceAttacksUsed, advanceCombatSpent, calcTerritoryIncome, calcTerritoryUpkeep, effectiveRemaining, isChargeAttack, mergeResult, resolveMovedUnitMoves } from "@/logic/gameLogic";
 import {
   dtSplitScore,
   dtCaptureNegatesIncome,
   dtCaptureCreatesOneHex,
   dtSpacedPlacements,
   dtFindMergeMove,
+  dtFindImproveMove,
 } from "@/logic/aiHelpers";
 import type { AiContext } from "@/logic/aiHelpers";
 import { runExpertTerritoryDecisionLoop } from "@/logic/aiExpert";
@@ -52,6 +55,7 @@ export interface AiDecisionExec {
   upgrade(target: string, to: EntityType, cost: number): Promise<boolean>;
   build(type: EntityType, target: string, cost: number): Promise<boolean>;
   remove(target: string): Promise<boolean>;
+  improve(target: string, terrain: TerrainType, cost: number): Promise<boolean>;
   markSpent(key: string): void;
   setTerritoryState(tid: string, state: AiState): void;
 }
@@ -81,10 +85,7 @@ export async function runAiTerritoryDecisionLoop(
     if (!currTid) break;
     const currBal = aiCtx.balances.get(currTid) ?? 0;
 
-    const currIncome = currTerr.reduce((s, t) => {
-      if (aiCtx.entities.get(t.key) === "rebel") return s;
-      return s + (TERRAIN_INCOME[t.terrain] ?? 0) + (aiCtx.cities.has(t.key) ? CITY_BONUS : 0);
-    }, 0);
+    const currIncome = calcTerritoryIncome(currTerr, aiCtx.entities, aiCtx.cities, aiCtx.tileMap);
     const currUpkeep = calcTerritoryUpkeep(currTerr, aiCtx.entities);
 
     const canAfford = (cost: number, extraUpkeep: number = 0): boolean =>
@@ -470,6 +471,8 @@ export async function runAiTerritoryDecisionLoop(
       if (undefBorder.length > 0) {
         const innerCands = currTerr.filter((t) => {
           if (t.terrain === "mountain" || t.terrain === "lake") return false;
+          // Don't destroy our own improvement by building a defence on it.
+          if (IMPROVED_TERRAINS.has(t.terrain)) return false;
           if (aiCtx.entities.has(t.key) || aiCtx.cities.has(t.key)) return false;
           if (currBorderTiles.some((bt) => bt.key === t.key)) return false;
           const [tq, tr] = t.key.split(",").map(Number);
@@ -480,6 +483,7 @@ export async function runAiTerritoryDecisionLoop(
         });
         const borderCands = undefBorder.filter((t) => {
           if (t.terrain === "mountain" || t.terrain === "lake") return false;
+          if (IMPROVED_TERRAINS.has(t.terrain)) return false;
           return !aiCtx.entities.has(t.key) && !aiCtx.cities.has(t.key);
         });
         const rawPlacementsC = innerCands.length > 0 ? innerCands : borderCands;
@@ -524,6 +528,7 @@ export async function runAiTerritoryDecisionLoop(
         const [lEq, lEr] = largestEnemyKey ? largestEnemyKey.split(",").map(Number) : [0, 0];
         const cityCands = currTerr.filter((t) => {
           if (t.terrain === "mountain" || t.terrain === "lake" || aiCtx.cities.has(t.key)) return false;
+          if (IMPROVED_TERRAINS.has(t.terrain)) return false;
           if (aiCtx.entities.has(t.key)) return false;
           return bldgZoC.has(t.key);
         }).sort((a, b) => {
@@ -761,7 +766,7 @@ export async function runAiTerritoryDecisionLoop(
       }
 
       if (!actionTaken) {
-        const neutralPrio = (t: HexTile): number => aiCtx.cities.has(t.key) ? 3 : (t.terrain === "grass" || t.terrain === "forest") ? 2 : 1;
+        const neutralPrio = (t: HexTile): number => aiCtx.cities.has(t.key) ? 3 : (t.terrain === "grass" || t.terrain === "forest" || t.terrain === "field" || t.terrain === "sawmill") ? 2 : 1;
         const neutralMoves: { fk: string; tk: string; prio: number }[] = [];
         for (const [uk, ue] of availUnits) {
           const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!), aiCtx.combatSpentUnits);
@@ -922,6 +927,16 @@ export async function runAiTerritoryDecisionLoop(
         }
         if (ownedNeighbors >= 5) actionTaken = await exec.remove(t.key);
       }
+    }
+
+    // ══ PRIORITY J (LAST RESORT): Improve an idle peasant's tile with spare gold ══
+    // Only when nothing better happened this iteration, so the AI never skips
+    // combat or expansion to farm. dtFindImproveMove prefers city-adjacent
+    // peasants and skips already-spent units (aiCtx.spentUnits is the live set
+    // the loop filters availUnits against and that exec.improve mutates).
+    if (!actionTaken) {
+      const dev = dtFindImproveMove(currTerr, aiCtx, aiCtx.spentUnits, currBal);
+      if (dev) actionTaken = await exec.improve(dev.key, dev.terrain, IMPROVE_COST);
     }
 
     if (!actionTaken) break;
@@ -1488,6 +1503,30 @@ export async function runAiTurn(
         return true;
       };
 
+      const dtExecImprove = async (
+        target: string,
+        terrain: TerrainType,
+        cost: number,
+      ): Promise<boolean> => {
+        if (!cbs.refs.isTurnActive()) return false;
+        if (!canPay(cost)) return false;
+        const tt = ws.tileMap.get(target);
+        if (!tt) return false;
+        ws.tileMap = new Map(ws.tileMap);
+        ws.tileMap.set(target, { ...tt, terrain });
+        cache.clear();
+        const terr = getContiguousTerritory(ws.tileMap, startTile.key, aiOwner, ws.entities);
+        const tid = getTerritoryId(terr);
+        ws.balances = new Map(ws.balances);
+        if (tid) ws.balances.set(tid, (ws.balances.get(tid) ?? 0) - cost);
+        ws.spentUnits = new Set(ws.spentUnits);
+        ws.spentUnits.add(target);
+        cbs.state.setMutableTileMap(new Map(ws.tileMap));
+        cbs.state.setTerritoryBalances(new Map(ws.balances));
+        await dtAwait();
+        return true;
+      };
+
       const markSpent = (key: string): void => {
         ws.spentUnits = new Set(ws.spentUnits);
         ws.spentUnits.add(key);
@@ -1506,6 +1545,7 @@ export async function runAiTurn(
         upgrade: dtExecUpgrade,
         build: dtExecBuild,
         remove: dtExecRemove,
+        improve: dtExecImprove,
         markSpent,
         setTerritoryState,
       };
@@ -1542,14 +1582,7 @@ export async function runAiTurn(
       for (const t of territory) playerVisited.add(t.key);
       const territoryId = getTerritoryId(territory);
       if (!territoryId) continue;
-      const income = territory.reduce((s, t) => {
-        if (ws.entities.get(t.key) === "rebel") return s;
-        return (
-          s +
-          TERRAIN_INCOME[t.terrain] +
-          (ws.cities.has(t.key) ? CITY_BONUS : 0)
-        );
-      }, 0);
+      const income = calcTerritoryIncome(territory, ws.entities, ws.cities, ws.tileMap);
       const upkeep = calcTerritoryUpkeep(territory, ws.entities);
       const current = ws.balances.get(territoryId) ?? 0;
       const delta = income - upkeep;

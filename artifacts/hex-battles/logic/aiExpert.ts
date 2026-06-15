@@ -16,9 +16,11 @@ import {
   isCavalry,
   cavalryMoveKind,
   DEFAULT_MOVEMENT,
+  IMPROVE_COST,
+  IMPROVED_TERRAINS,
 } from "@/utils/hexGrid";
-import { calcTerritoryUpkeep, mergeResult } from "@/logic/gameLogic";
-import { dtCountClusters } from "@/logic/aiHelpers";
+import { calcTerritoryIncome, calcTerritoryUpkeep, mergeResult } from "@/logic/gameLogic";
+import { dtCountClusters, dtFindImproveMove } from "@/logic/aiHelpers";
 import type { AiContext } from "@/logic/aiHelpers";
 import type { AiDecisionExec } from "@/logic/aiStrategy";
 
@@ -200,10 +202,7 @@ export function evaluatePosition(
     const bal = tid ? balances.get(tid) ?? 0 : 0;
     reserves += Math.max(-w.reservesCap, Math.min(bal, w.reservesCap));
     bufferShortfall += Math.max(0, w.bufferThreshold - bal);
-    const terrIncome = terr.reduce((s, x) => {
-      if (entities.get(x.key) === "rebel") return s;
-      return s + (TERRAIN_INCOME[x.terrain] ?? 0) + (cities.has(x.key) ? CITY_BONUS : 0);
-    }, 0);
+    const terrIncome = calcTerritoryIncome(terr, entities, cities, tileMap);
     income += terrIncome;
     const net = terrIncome - calcTerritoryUpkeep(terr, entities);
     // Asymmetric: only deficits are penalised; a profitable army is free.
@@ -613,10 +612,7 @@ export function generateCandidateActions(
   const owner = ctx.aiOwner;
   const terrKeys = new Set(territory.map((t) => t.key));
 
-  const income = territory.reduce((s, t) => {
-    if (ctx.entities.get(t.key) === "rebel") return s;
-    return s + (TERRAIN_INCOME[t.terrain] ?? 0) + (ctx.cities.has(t.key) ? CITY_BONUS : 0);
-  }, 0);
+  const income = calcTerritoryIncome(territory, ctx.entities, ctx.cities, ctx.tileMap);
   const upkeep = calcTerritoryUpkeep(territory, ctx.entities);
   const canAfford = (cost: number, extraUpkeep = 0): boolean =>
     balanceForTid >= cost && balanceForTid + (income - (upkeep + extraUpkeep)) >= 0;
@@ -777,13 +773,17 @@ export function generateCandidateActions(
     if (!canAfford(cost, upk)) continue;
     if (bType === "castle" && !hasStrongUnit) continue;
     for (const t of innerPlacements) {
+      // Building on an improved tile would destroy the improvement; don't.
+      if (IMPROVED_TERRAINS.has(t.terrain)) continue;
       out.push({ kind: "build", buildingType: bType, target: t.key, cost });
     }
   }
   const cityCost = ENTITY_META.city.cost;
   const hasCity = territory.some((t) => ctx.cities.has(t.key));
   if (!hasCity && territory.length >= 6 && canAfford(cityCost)) {
+    // Building on an improved tile would destroy the improvement; don't.
     for (const t of innerPlacements) {
+      if (IMPROVED_TERRAINS.has(t.terrain)) continue;
       out.push({ kind: "build", buildingType: "city", target: t.key, cost: cityCost });
     }
   }
@@ -969,7 +969,19 @@ export async function runExpertTerritoryDecisionLoop(
       territoryThreatened(ctx.tileMap, ctx.entities, territory, owner) ? "defending" : "attacking",
     );
 
-    if (!best) break;
+    if (!best) {
+      // LAST RESORT: no action strictly improves the evaluated position. Before
+      // ending the territory's turn, improve an idle peasant's tile if there is
+      // one and the reserve can pay for it. This mirrors the heuristic loop's
+      // final improve priority (aiStrategy.ts) and is intentionally placed AFTER
+      // the eval-driven selection so it never preempts a real combat / expansion
+      // / economy action — it only ever spends a peasant that had nothing better
+      // to do. `ctx.spentUnits` is the live set `exec.improve` mutates, so a
+      // improved peasant is not re-picked on the next iteration.
+      const dev = dtFindImproveMove(territory, ctx, ctx.spentUnits, bal);
+      if (dev && (await exec.improve(dev.key, dev.terrain, IMPROVE_COST))) continue;
+      break;
+    }
     let ok = false;
     switch (best.kind) {
       case "move":

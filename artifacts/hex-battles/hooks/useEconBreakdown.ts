@@ -4,20 +4,33 @@ import {
   CITY_BONUS,
   ENTITY_META,
   TERRAIN_INCOME,
+  IMPROVED_TERRAINS,
+  calcAdminBurden,
   calcDefenseUpkeep,
   nextDefenseUpkeep,
 } from "@/utils/hexGrid";
+import { HEX_EDGES, tileKey } from "@/utils/hexMath";
 import { ENTITY_UPKEEP_ORDER } from "@/constants/gameConstants";
 
 export interface EconBreakdownResult {
+  // grass/forest counts are the whole terrain family (base + improved); the
+  // improved tiles also appear in fieldCount/sawmillCount. grassIncome /
+  // forestIncome are the BASE income of the whole family (counted at the base
+  // rate); fieldBonus / sawmillBonus are only the +1 improvement delta per
+  // improved tile, mirroring how the city-adjacency bonus is shown.
   grassCount: number;
+  fieldCount: number;
   forestCount: number;
+  sawmillCount: number;
   desertCount: number;
   cityCount: number;
   grassIncome: number;
+  fieldBonus: number;
   forestIncome: number;
+  sawmillBonus: number;
   desertIncome: number;
   cityIncome: number;
+  cityImproveBonus: number;
   upkeepGroups: Array<{
     id: EntityType;
     name: string;
@@ -29,6 +42,7 @@ export interface EconBreakdownResult {
   }>;
   totalIncome: number;
   totalUpkeep: number;
+  adminBurden: number;
   rebelCount: number;
   rebelTotalLoss: number;
   net: number;
@@ -48,14 +62,19 @@ export function useEconBreakdown({
   return useMemo(() => {
     if (selectedTerritory.length === 0) return null;
     let grassCount = 0;
+    let fieldCount = 0;
     let forestCount = 0;
+    let sawmillCount = 0;
     let desertCount = 0;
     let cityCount = 0;
     const upkeepGroupMap = new Map<EntityType, number>();
     for (const t of selectedTerritory) {
-      if (t.terrain === "grass") grassCount++;
-      else if (t.terrain === "forest") forestCount++;
-      else if (t.terrain === "desert") desertCount++;
+      // Improved tiles count toward their base family AND their own line.
+      if (t.terrain === "grass" || t.terrain === "field") grassCount++;
+      if (t.terrain === "field") fieldCount++;
+      if (t.terrain === "forest" || t.terrain === "sawmill") forestCount++;
+      if (t.terrain === "sawmill") sawmillCount++;
+      if (t.terrain === "desert") desertCount++;
       const entityId = entities.get(t.key);
       if (cities.has(t.key)) cityCount++;
       if (entityId && entityId !== "rebel") {
@@ -96,12 +115,43 @@ export function useEconBreakdown({
         total,
       };
     });
-    const grassIncome = grassCount * 2;
-    const forestIncome = forestCount * 2;
-    const desertIncome = desertCount * 1;
+    // Income is derived from the family counts. grass/forest are charged the
+    // base rate across the whole family (including improved tiles); the
+    // improvement delta (+1 per improved tile) is broken out as a bonus line.
+    // Rebel-occupied tiles are intentionally still counted here: their income
+    // is offset by rebelTotalLoss in `net` below (so a rebel tile nets to zero,
+    // matching the real end-turn math). Skipping would double-count the loss.
+    const grassIncome = grassCount * TERRAIN_INCOME.grass;
+    const fieldBonus = fieldCount * (TERRAIN_INCOME.field - TERRAIN_INCOME.grass);
+    const forestIncome = forestCount * TERRAIN_INCOME.forest;
+    const sawmillBonus =
+      sawmillCount * (TERRAIN_INCOME.sawmill - TERRAIN_INCOME.forest);
+    const desertIncome = desertCount * TERRAIN_INCOME.desert;
     const cityIncome = cityCount * CITY_BONUS;
-    const totalIncome = grassIncome + forestIncome + desertIncome + cityIncome;
+    // City-adjacency improvement bonus: +1 per improved tile neighbouring a
+    // same-owner city. Mirrors calcTerritoryIncome — a city in the same
+    // territory is, by construction, the same owner, so membership in the
+    // territory key set is the equivalent same-owner check.
+    const territoryKeys = new Set(selectedTerritory.map((t) => t.key));
+    let cityImproveBonus = 0;
+    for (const t of selectedTerritory) {
+      if (!IMPROVED_TERRAINS.has(t.terrain)) continue;
+      const [q, r] = t.key.split(",").map(Number);
+      for (const { dir: [dq, dr] } of HEX_EDGES) {
+        const nk = tileKey(q + dq, r + dr);
+        if (cities.has(nk) && territoryKeys.has(nk)) cityImproveBonus += 1;
+      }
+    }
+    const totalIncome =
+      grassIncome +
+      fieldBonus +
+      forestIncome +
+      sawmillBonus +
+      desertIncome +
+      cityIncome +
+      cityImproveBonus;
     const totalUpkeep = upkeepGroups.reduce((s, g) => s + g.total, 0);
+    const adminBurden = calcAdminBurden(selectedTerritory.length);
     let rebelCount = 0;
     let rebelTotalLoss = 0;
     for (const t of selectedTerritory) {
@@ -109,19 +159,25 @@ export function useEconBreakdown({
       rebelCount++;
       rebelTotalLoss += TERRAIN_INCOME[t.terrain];
     }
-    const net = totalIncome - totalUpkeep - rebelTotalLoss;
+    const net = totalIncome - totalUpkeep - adminBurden - rebelTotalLoss;
     return {
       grassCount,
+      fieldCount,
       forestCount,
+      sawmillCount,
       desertCount,
       cityCount,
       grassIncome,
+      fieldBonus,
       forestIncome,
+      sawmillBonus,
       desertIncome,
       cityIncome,
+      cityImproveBonus,
       upkeepGroups,
       totalIncome,
       totalUpkeep,
+      adminBurden,
       rebelCount,
       rebelTotalLoss,
       net,

@@ -10,6 +10,7 @@ import {
   dtDefenseMinDist,
   dtSpacedPlacements,
   dtFindMergeMove,
+  dtFindImproveMove,
 } from "@/logic/aiHelpers";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -342,5 +343,75 @@ describe("dtFindMergeMove", () => {
     };
     const result = dtFindMergeMove(3, new Set(["2,0"]), [["0,0", "warrior"], ["1,0", "warrior"]], ctx);
     expect(result).toBeNull();
+  });
+});
+
+// ─── dtFindImproveMove ─────────────────────────────────────────────────────────
+
+describe("dtFindImproveMove", () => {
+  it("returns null when no own peasant stands on improvable terrain", () => {
+    const tiles = [makeTile(0, 0, "ai1", "grass")];
+    const ctx = makeCtx(tiles, [], [], "ai1");
+    expect(dtFindImproveMove(tiles, ctx, new Set(), 10)).toBeNull();
+  });
+
+  it("returns null when balance < IMPROVE_COST (3)", () => {
+    const tiles = [makeTile(0, 0, "ai1", "grass")];
+    const ctx = makeCtx(tiles, [["0,0", "peasant"]], [], "ai1");
+    expect(dtFindImproveMove(tiles, ctx, new Set(), 2)).toBeNull();
+  });
+
+  it("improves a peasant's grass tile into a field", () => {
+    const tiles = [makeTile(0, 0, "ai1", "grass")];
+    const ctx = makeCtx(tiles, [["0,0", "peasant"]], [], "ai1");
+    expect(dtFindImproveMove(tiles, ctx, new Set(), 10)).toEqual({
+      key: "0,0",
+      terrain: "field",
+    });
+  });
+
+  it("prefers a peasant adjacent to an own city", () => {
+    // city at 0,0 (own); peasant on forest at 1,0 (adjacent to city);
+    // peasant on grass at 5,5 (far from any city).
+    const cityTile = makeTile(0, 0, "ai1", "grass");
+    const forestTile = makeTile(1, 0, "ai1", "forest");
+    const farGrass = makeTile(5, 5, "ai1", "grass");
+    const territory = [forestTile, farGrass];
+    const ctx: AiContext = {
+      tileMap: tileMap([cityTile, forestTile, farGrass]),
+      entities: ents([["1,0", "peasant"], ["5,5", "peasant"]]),
+      balances: new Map(),
+      cities: new Set(["0,0"]),
+      spentUnits: new Set(),
+      partialMoves: new Map(),
+      combatSpentUnits: new Set(),
+      aiOwner: "ai1",
+    };
+    expect(dtFindImproveMove(territory, ctx, new Set(), 10)).toEqual({
+      key: "1,0",
+      terrain: "sawmill",
+    });
+  });
+
+  it("skips spent peasants", () => {
+    const tiles = [makeTile(0, 0, "ai1", "grass")];
+    const ctx = makeCtx(tiles, [["0,0", "peasant"]], [], "ai1");
+    expect(dtFindImproveMove(tiles, ctx, new Set(["0,0"]), 10)).toBeNull();
+  });
+
+  it("skips a peasant standing on an own city tile", () => {
+    // Single grass tile at 0,0 that is a CITY, with a peasant on it.
+    const tiles = [makeTile(0, 0, "ai1", "grass")];
+    const ctx: AiContext = {
+      tileMap: tileMap(tiles),
+      entities: ents([["0,0", "peasant"]]),
+      balances: new Map(),
+      cities: new Set(["0,0"]),
+      spentUnits: new Set(),
+      partialMoves: new Map(),
+      combatSpentUnits: new Set(),
+      aiOwner: "ai1",
+    };
+    expect(dtFindImproveMove(tiles, ctx, new Set(), 10)).toBeNull();
   });
 });

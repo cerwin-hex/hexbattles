@@ -1,16 +1,16 @@
-import type { EntityType, HexTile, TerritoryOwner } from "@/types";
+import type { EntityType, HexTile, TerrainType, TerritoryOwner } from "@/types";
 import { HEX_EDGES, hexDistance, tileKey } from "@/utils/hexMath";
 import {
+  IMPROVE_COST,
+  improveTargetFor,
   ENTITY_META,
-  TERRAIN_INCOME,
-  CITY_BONUS,
   getContiguousTerritory,
   getTerritoryId,
   getValidMoves,
   getMoveCost,
   TerritoryCache,
 } from "@/utils/hexGrid";
-import { calcTerritoryUpkeep, mergeResult } from "@/logic/gameLogic";
+import { calcTerritoryIncome, calcTerritoryUpkeep, mergeResult } from "@/logic/gameLogic";
 
 export interface AiContext {
   tileMap: Map<string, HexTile>;
@@ -95,10 +95,7 @@ export function dtCaptureNegatesIncome(
   const anyRemaining = Array.from(simMap.values()).find((t) => t.owner === enemyOwner);
   if (!anyRemaining) return true;
   const remTerr = getContiguousTerritory(simMap, anyRemaining.key, enemyOwner, simEntities);
-  const remIncome = remTerr.reduce((s, t) => {
-    if (simEntities.get(t.key) === "rebel") return s;
-    return s + (TERRAIN_INCOME[t.terrain] ?? 0) + (ctx.cities.has(t.key) ? CITY_BONUS : 0);
-  }, 0);
+  const remIncome = calcTerritoryIncome(remTerr, simEntities, ctx.cities, simMap);
   const remUpkeep = calcTerritoryUpkeep(remTerr, simEntities);
   return enemyBal + (remIncome - remUpkeep) < 0;
 }
@@ -215,4 +212,43 @@ export function dtFindMergeMove(
     }
   }
   return null;
+}
+
+/**
+ * Finds the best in-place tile improvement for the AI: a non-spent peasant
+ * standing on improvable terrain (grass→field, forest→sawmill). Prefers a
+ * peasant adjacent to one of the AI's own cities (the income bonus stacks
+ * there). v1 scope: improves ONLY peasants already on a improvable tile — it
+ * does not reposition peasants.
+ */
+export function dtFindImproveMove(
+  territory: HexTile[],
+  ctx: AiContext,
+  spentUnits: Set<string>,
+  balance: number,
+): { key: string; terrain: TerrainType } | null {
+  if (balance < IMPROVE_COST) return null;
+  let best: { key: string; terrain: TerrainType } | null = null;
+  let bestPrio = -1;
+  for (const t of territory) {
+    const target = improveTargetFor(t.terrain);
+    if (!target) continue;
+    if (ctx.entities.get(t.key) !== "peasant") continue;
+    if (ctx.cities.has(t.key)) continue;
+    if (spentUnits.has(t.key)) continue;
+    let prio = 1;
+    const [q, r] = t.key.split(",").map(Number);
+    for (const { dir: [dq, dr] } of HEX_EDGES) {
+      const nk = tileKey(q + dq, r + dr);
+      if (ctx.cities.has(nk) && ctx.tileMap.get(nk)?.owner === ctx.aiOwner) {
+        prio = 2;
+        break;
+      }
+    }
+    if (prio > bestPrio) {
+      bestPrio = prio;
+      best = { key: t.key, terrain: target };
+    }
+  }
+  return best;
 }

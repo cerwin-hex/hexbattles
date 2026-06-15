@@ -479,6 +479,24 @@ const styles = StyleSheet.create({
     color: "#C8A870",
     flex: 1,
   },
+  econIndentLabel: {
+    paddingLeft: 16,
+  },
+  econTotalRow: {
+    borderTopWidth: 1,
+    borderTopColor: "#6A5020",
+    marginTop: 4,
+    paddingTop: 4,
+  },
+  econTotalLabel: {
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
+    color: "#D0B880",
+    flex: 1,
+  },
+  econGroupGap: {
+    marginTop: 8,
+  },
   econLabelRow: {
     flex: 1,
     flexDirection: "row",

@@ -44,6 +44,7 @@ const WATER_IMG = require("../assets/images/water.webp");
 import type {
   EntityType,
   HexTile,
+  TerrainType,
   TerritoryOwner,
   BorderEdge,
   AiStepSnapshot,
@@ -59,6 +60,7 @@ import {
 } from "@/utils/hexMath";
 import {
   ENTITY_META,
+  IMPROVE_COST,
   generateHexGrid,
   getContiguousTerritory,
   getTerritoryId,
@@ -91,6 +93,7 @@ import {
   HexTileTerrainLayer,
   HexTileTerritoryLayer,
 } from "@/components/HexTileLayer";
+import { ImprovementMarkerLayer } from "@/components/ImprovementMarkerLayer";
 import { EntityLayer } from "@/components/EntityLayer";
 import { BorderEdgeLayer } from "@/components/BorderEdgeLayer";
 import { MovementHighlightTapTargets } from "@/components/MovementHighlightTapTargets";
@@ -1022,6 +1025,48 @@ export default function GameScreen() {
     pushHistory,
   ]);
 
+  const handleImproveTile = useCallback(
+    (targetTerrain: TerrainType) => {
+      if (isAiTurn || gameResult !== null || !selectedEntityKey) return;
+      if (cities.has(selectedEntityKey)) return;
+      const tile = activeTileMap.get(selectedEntityKey);
+      if (!tile) return;
+      const territory = getContiguousTerritory(
+        activeTileMap,
+        selectedEntityKey,
+        "player",
+        entities,
+      );
+      const tid = getTerritoryId(territory);
+      if (!tid) return;
+      const bal = territoryBalances.get(tid) ?? 0;
+      if (bal < IMPROVE_COST) return;
+      pushHistory();
+      setMutableTileMap((prev) => {
+        const next = new Map(prev);
+        const tt = next.get(selectedEntityKey);
+        if (tt) next.set(selectedEntityKey, { ...tt, terrain: targetTerrain });
+        return next;
+      });
+      setTerritoryBalances((prev) => {
+        const next = new Map(prev);
+        next.set(tid, bal - IMPROVE_COST);
+        return next;
+      });
+      setSpentUnits((prev) => new Set(prev).add(selectedEntityKey));
+    },
+    [
+      isAiTurn,
+      gameResult,
+      selectedEntityKey,
+      activeTileMap,
+      entities,
+      territoryBalances,
+      cities,
+      pushHistory,
+    ],
+  );
+
   const handleTileTap = useCallback(
     (key: string) => {
       // Ignore taps while a unit is animating — moves are serialized so the
@@ -1243,6 +1288,11 @@ export default function GameScreen() {
               <G opacity={showTerrainView ? 1 : 0}>
                 <HexTileTerrainLayer
                   tileData={tileData}
+                  HEX_SIZE={HEX_SIZE}
+                />
+                <ImprovementMarkerLayer
+                  tileData={tileData}
+                  activeTileMap={activeTileMap}
                   HEX_SIZE={HEX_SIZE}
                 />
               </G>
@@ -1496,6 +1546,7 @@ export default function GameScreen() {
           activeTileMap={activeTileMap}
           spentUnits={spentUnits}
           territoryBalances={territoryBalances}
+          cities={cities}
           isAiTurn={isAiTurn}
           gameResult={gameResult}
           botInset={botInset}
@@ -1508,6 +1559,7 @@ export default function GameScreen() {
               ? handleDemolishBridge
               : undefined
           }
+          onImprove={handleImproveTile}
         />
       )}
 

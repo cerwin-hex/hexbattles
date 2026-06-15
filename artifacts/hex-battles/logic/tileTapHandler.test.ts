@@ -681,6 +681,76 @@ describe("armed entity placement on own territory", () => {
     handleTileTapLogic(params);
     expect(params.triggerErrorFlash).toHaveBeenCalledWith("1,0");
   });
+
+  it("founds a city on an improved (field) tile and removes the improvement", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player", "field")];
+    const territory = [
+      makeTile(0, 0, "player"),
+      makeTile(1, 0, "player", "field"),
+    ];
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: tileMap(tiles),
+      armedEntityId: "city",
+      selectedTileKeys: new Set(["0,0", "1,0"]),
+      selectedTerritoryId: "0,0",
+      selectedTerritory: territory,
+      entities: new Map(),
+      territoryBalances: new Map([["0,0", 100]]),
+    });
+    handleTileTapLogic(params);
+    expect(params.triggerErrorFlash).not.toHaveBeenCalled();
+    expect(params.setCities).toHaveBeenCalled();
+    // The field reverts to grass when the city is founded on it.
+    expect(params.setMutableTileMap).toHaveBeenCalled();
+    const reverted = (params.setMutableTileMap as ReturnType<typeof vi.fn>).mock
+      .calls.at(-1)![0] as Map<string, HexTile>;
+    expect(reverted.get("1,0")?.terrain).toBe("grass");
+  });
+
+  it("founds a tower on an improved (sawmill) tile and removes the improvement", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player", "sawmill")];
+    const territory = [
+      makeTile(0, 0, "player"),
+      makeTile(1, 0, "player", "sawmill"),
+    ];
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: tileMap(tiles),
+      armedEntityId: "tower",
+      selectedTileKeys: new Set(["0,0", "1,0"]),
+      selectedTerritoryId: "0,0",
+      selectedTerritory: territory,
+      entities: new Map(),
+      territoryBalances: new Map([["0,0", 100]]),
+      turn: 5,
+    });
+    handleTileTapLogic(params);
+    expect(params.triggerErrorFlash).not.toHaveBeenCalled();
+    expect(params.setEntities).toHaveBeenCalled();
+    expect(params.setMutableTileMap).toHaveBeenCalled();
+    const reverted = (params.setMutableTileMap as ReturnType<typeof vi.fn>).mock
+      .calls.at(-1)![0] as Map<string, HexTile>;
+    expect(reverted.get("1,0")?.terrain).toBe("forest");
+  });
+
+  it("can found a city on a plain grass tile", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
+    const territory = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: tileMap(tiles),
+      armedEntityId: "city",
+      selectedTileKeys: new Set(["0,0", "1,0"]),
+      selectedTerritoryId: "0,0",
+      selectedTerritory: territory,
+      entities: new Map(),
+      territoryBalances: new Map([["0,0", 100]]),
+    });
+    handleTileTapLogic(params);
+    expect(params.triggerErrorFlash).not.toHaveBeenCalled();
+    expect(params.setCities).toHaveBeenCalled();
+  });
 });
 
 // ─── Armed entity attack (outside own territory) ──────────────────────────────
