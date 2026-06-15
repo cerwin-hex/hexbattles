@@ -922,4 +922,36 @@ describe("runAiTerritoryDecisionLoop", () => {
       expect(exec.move).not.toHaveBeenCalled();
     });
   });
+
+  it("develops an idle peasant's tile when no combat is available", async () => {
+    // Pure AI-only map (no enemy/neutral tiles anywhere) so no attack, expansion,
+    // or "move closer to enemy" action can fire. With nothing better to do and
+    // spare gold (balance >= DEVELOP_COST=5), the loop falls through to its
+    // last-resort develop attempt: the idle peasant on a grass tile is developed
+    // in place (grass -> "field").
+    const tiles = [
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai1"),
+    ];
+    const entities = new Map<string, EntityType>([["0,0", "peasant"]]);
+    // Territory ID = lexicographically smallest key = "0,0".
+    const balances = new Map([["0,0", 10]]);
+    const aiCtx = makeAiCtx(tiles, "ai1", entities, balances);
+
+    // Recording develop mock. isTurnActive flips to false after the first
+    // develop so the loop exits next iteration (mirrors the existing harness's
+    // `() => !moved` pattern) — guarantees finite progress / no infinite loop.
+    let developed = false;
+    const exec = makeExec({
+      develop: vi.fn(async () => { developed = true; return true; }),
+    });
+
+    await runAiTerritoryDecisionLoop("0,0", aiCtx, exec, () => !developed, "hard");
+
+    expect(exec.develop).toHaveBeenCalledTimes(1);
+    const [target, terrain, cost] = (exec.develop as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(target).toBe("0,0");
+    expect(terrain).toBe("field");
+    expect(cost).toBe(5);
+  });
 });

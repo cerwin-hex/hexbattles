@@ -16,6 +16,7 @@ import {
   unitMaxAttacks,
   isCavalry,
   cavalryMoveKind,
+  DEVELOP_COST,
 } from "@/utils/hexGrid";
 import { advanceAttacksUsed, advanceCombatSpent, calcTerritoryIncome, calcTerritoryUpkeep, effectiveRemaining, isChargeAttack, mergeResult, resolveMovedUnitMoves } from "@/logic/gameLogic";
 import {
@@ -24,6 +25,7 @@ import {
   dtCaptureCreatesOneHex,
   dtSpacedPlacements,
   dtFindMergeMove,
+  dtFindDevelopMove,
 } from "@/logic/aiHelpers";
 import type { AiContext } from "@/logic/aiHelpers";
 import { runExpertTerritoryDecisionLoop } from "@/logic/aiExpert";
@@ -920,6 +922,16 @@ export async function runAiTerritoryDecisionLoop(
         }
         if (ownedNeighbors >= 5) actionTaken = await exec.remove(t.key);
       }
+    }
+
+    // ══ PRIORITY J (LAST RESORT): Develop an idle peasant's tile with spare gold ══
+    // Only when nothing better happened this iteration, so the AI never skips
+    // combat or expansion to farm. dtFindDevelopMove prefers city-adjacent
+    // peasants and skips already-spent units (aiCtx.spentUnits is the live set
+    // the loop filters availUnits against and that exec.develop mutates).
+    if (!actionTaken) {
+      const dev = dtFindDevelopMove(currTerr, aiCtx, aiCtx.spentUnits, currBal);
+      if (dev) actionTaken = await exec.develop(dev.key, dev.terrain, DEVELOP_COST);
     }
 
     if (!actionTaken) break;
