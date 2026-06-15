@@ -255,6 +255,34 @@ describe("runAiTurn", () => {
       expect(ws.graveyard.size).toBe(0);
     });
 
+    it("resets a ruined bridge's lake tile to neutral on deep bankruptcy", async () => {
+      // land-bridge-land territory whose buildings outstrip its income, forcing
+      // a deep bankruptcy (buildings demolished) during the AI-phase player
+      // re-check. The demolished bridge must release its lake tile to neutral so
+      // it stops rendering as an owned bridge with a territory border around it.
+      const tiles = [
+        makeTile(0, 0, "player"),
+        makeTile(1, 0, "player"),
+        makeTile(2, 0, "player", "lake"),
+        makeTile(3, 0, "player"),
+      ];
+      const ws = makeEmptyWs(makeTileMap(tiles));
+      ws.balances.set("0,0", 0);
+      ws.entities.set("0,0", "castle" as EntityType);
+      ws.entities.set("1,0", "castle" as EntityType);
+      ws.entities.set("2,0", "bridge" as EntityType);
+      ws.entities.set("3,0", "castle" as EntityType);
+
+      const cbs = makeCbs();
+      await runAiTurn(ws, cbs, [], 2, "easy");
+
+      // Bridge demolished and turned to ruin like the other buildings…
+      expect(ws.entities.has("2,0")).toBe(false);
+      expect(ws.ruins.has("2,0")).toBe(true);
+      // …and its lake tile released so it no longer renders as an owned bridge.
+      expect(ws.tileMap.get("2,0")!.owner).toBe("neutral");
+    });
+
     it("does not run the bankruptcy check on round 1", async () => {
       // Would go bankrupt on round 2 but round 1 is exempt
       const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];

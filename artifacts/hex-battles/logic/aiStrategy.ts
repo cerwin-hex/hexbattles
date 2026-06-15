@@ -1581,6 +1581,16 @@ export async function runAiTurn(
             if (e && !ENTITY_META[e].isUnit && e !== "rebel" && e !== "city") {
               ws.entities.delete(t.key);
               ws.ruins.add(t.key);
+              // A demolished bridge must release its lake tile back to neutral,
+              // otherwise the owned lake keeps rendering as a bridge (with a
+              // territory border) even though the structure is gone.
+              if (e === "bridge") {
+                const lt = ws.tileMap.get(t.key);
+                if (lt?.terrain === "lake") {
+                  ws.tileMap = new Map(ws.tileMap);
+                  ws.tileMap.set(t.key, { ...lt, owner: "neutral" });
+                }
+              }
             }
           }
         }
