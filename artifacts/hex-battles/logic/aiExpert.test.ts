@@ -10,7 +10,8 @@ import {
   type SimState,
   type ExpertAction,
 } from "@/logic/aiExpert";
-import type { AiDecisionExec } from "@/logic/aiStrategy";
+import type { AiDecisionExec, AiWorkingState } from "@/logic/aiStrategy";
+import { runOneAiTurnHeadless } from "@/logic/aiSelfPlay";
 import type { AiContext } from "@/logic/aiHelpers";
 import type { HexTile, EntityType, TerritoryOwner } from "@/types";
 import { getContiguousTerritory, getTerritoryId, getValidMoves } from "@/utils/hexGrid";
@@ -504,6 +505,83 @@ describe("generateCandidateActions", () => {
 // ─── runExpertTerritoryDecisionLoop ─────────────────────────────────────────
 
 describe("runExpertTerritoryDecisionLoop", () => {
+  it("prefers capturing a free enemy tile over clearing a lone (non-city) rebel", async () => {
+    // peasant on (1,0) can clear a rebel on owned (2,0) OR capture an empty enemy
+    // tile. Clearing the rebel restores +2 income but pulls the unit off the
+    // front; capturing expands and keeps the unit forward. The expert should
+    // capture (move onto an ai2 tile), not retreat to clear the rebel.
+    const tileMap = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai1"),
+      makeTile(1, 1, "ai1"),
+      makeTile(2, 0, "ai1"),
+      makeTile(0, 1, "ai2"),
+      makeTile(-1, 1, "ai2"),
+    ]);
+    const entities = new Map<string, EntityType>([
+      ["0,0", "tower"],
+      ["1,0", "peasant"],
+      ["2,0", "rebel"],
+    ]);
+    const ctx = makeCtx(tileMap, entities, "ai1", new Map());
+
+    const first = await firstExpertAction("0,0", ctx);
+    expect(first?.kind).toBe("move");
+    if (first?.kind === "move") {
+      expect(first.from).toBe("1,0");
+      expect(tileMap.get(first.to)?.owner).toBe("ai2"); // a capture, not the rebel
+    }
+  });
+
+  it("does not merge this turn unless it also attacks this turn (no premature upkeep)", async () => {
+    // Peasant A (0,0) must travel its full movement (3) to merge with peasant B
+    // on (3,0); the resulting warrior is then spent and cannot attack the same
+    // turn. It would sit adjacent to a ZoC-1 enemy tile (4,0) — breakable only by
+    // a str-2 unit. No enemy threatens us. Merging now just pays a turn of warrior
+    // upkeep (6->9) for an attack that can only happen next turn; the expert
+    // should defer the merge. Discriminating check (full turn): a merge is only
+    // acceptable if a capture also happened this turn.
+    const tileMap = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai1"),
+      makeTile(2, 0, "ai1"),
+      makeTile(3, 0, "ai1"),
+      makeTile(0, 1, "ai1"),
+      makeTile(4, 0, "ai2"),
+      makeTile(5, 0, "ai2"),
+    ]);
+    const entities = new Map<string, EntityType>([
+      ["0,0", "peasant"],
+      ["3,0", "peasant"],
+      ["5,0", "peasant"],
+    ]);
+    const ws: AiWorkingState = {
+      tileMap,
+      entities,
+      balances: new Map(),
+      liveOwnerMap: new Map(),
+      graveyard: new Set(),
+      ruins: new Set(),
+      cities: new Set(),
+      spentUnits: new Set(),
+      partialMoves: new Map(),
+      attacksUsed: new Map(),
+      combatSpentUnits: new Set(),
+      freeTowerUsed: new Map(),
+    };
+    const tid = getTerritoryId(getContiguousTerritory(tileMap, "0,0", "ai1", entities))!;
+    ws.balances.set(tid, 0); // no buys — isolate the merge decision
+
+    const landBefore = [...ws.tileMap.values()].filter((t) => t.owner === "ai1").length;
+    await runOneAiTurnHeadless(ws, "ai1", 5, "expert");
+    const landAfter = [...ws.tileMap.values()].filter((t) => t.owner === "ai1").length;
+
+    const merged = [...ws.entities.values()].includes("warrior");
+    const captured = landAfter > landBefore;
+    // A merge that produced an attack is fine; a merge with no attack is the bug.
+    expect(merged && !captured).toBe(false);
+  });
+
   it("picks an available capture as its first action", async () => {
     // ai1 swordsman next to an undefended enemy peasant tile worth capturing.
     const tileMap = makeTileMap([

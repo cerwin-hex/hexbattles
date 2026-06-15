@@ -9,6 +9,7 @@ import {
   getTerritoryId,
   getValidMoves,
   getMaxEnemyZoC,
+  getMoveCost,
   recalculateTerritoriesForCapture,
   unitMovement,
   unitMaxAttacks,
@@ -660,6 +661,19 @@ export function generateCandidateActions(
     });
   };
 
+  // A merge is only worth its immediate upkeep jump if the concentrated unit can
+  // act THIS turn (retains movement after the merge) or the territory is under
+  // threat (a spent-but-strong defender is still good defence). Otherwise the
+  // merge is premature — better to wait until the turn the strength is needed —
+  // so we don't even offer it as a candidate. (`territoryThreatened` is a hoisted
+  // function declaration, safe to call here.)
+  const defending = territoryThreatened(ctx.tileMap, ctx.entities, territory, owner);
+  const mergeRetainsMove = (uk: string, ue: EntityType, mk: string, destE: EntityType): boolean => {
+    const remAfter = (ctx.partialMoves.get(uk) ?? unitMovement(ue)) - getMoveCost(uk, mk, ctx.tileMap);
+    const destRem = ctx.partialMoves.get(mk) ?? unitMovement(destE);
+    return Math.min(remAfter, destRem) > 0;
+  };
+
   // ── Moves: each available unit to each valid destination ──
   // Cap moves PER UNIT (not with a single shared counter), so a unit listed late
   // in availUnits — typically high-mobility cavalry whose whole value is a long
@@ -694,7 +708,9 @@ export function generateCandidateActions(
         // own-tile move worth considering as: a merge, clearing a rebel (an owned
         // tile a rebel sits on yields no income until cleared), or repositioning
         // to a border tile (interior shuffles never improve the position).
-        const isMerge = !!destE && destE !== "bridge" && !!mergeResult(ue, destE);
+        const isMerge =
+          !!destE && destE !== "bridge" && !!mergeResult(ue, destE) &&
+          (defending || mergeRetainsMove(uk, ue, mk, destE));
         const isRebelClear = destE === "rebel";
         const isBorderReposition = borderTiles.some((b) => b.key === mk) && !destE;
         // Forward reposition: an idle rear unit steps to an empty owned tile that
