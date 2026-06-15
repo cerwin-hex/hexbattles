@@ -86,6 +86,8 @@ export const TERRAIN_INCOME: Record<TerrainType, number> = {
   mountain: 0,
   lake:     0,
   forest:   2,
+  field:    3,
+  sawmill:  3,
 };
 
 export const TERRAIN_MOVE_COST: Record<TerrainType, number> = {
@@ -94,6 +96,8 @@ export const TERRAIN_MOVE_COST: Record<TerrainType, number> = {
   mountain: Infinity,
   lake:     1,
   forest:   2,
+  field:    1,
+  sawmill:  2,
 };
 
 export const CITY_BONUS = 2;
