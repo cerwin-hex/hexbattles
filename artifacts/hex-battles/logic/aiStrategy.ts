@@ -761,7 +761,7 @@ export async function runAiTerritoryDecisionLoop(
       }
 
       if (!actionTaken) {
-        const neutralPrio = (t: HexTile): number => aiCtx.cities.has(t.key) ? 3 : (t.terrain === "grass" || t.terrain === "forest") ? 2 : 1;
+        const neutralPrio = (t: HexTile): number => aiCtx.cities.has(t.key) ? 3 : (t.terrain === "grass" || t.terrain === "forest" || t.terrain === "field" || t.terrain === "sawmill") ? 2 : 1;
         const neutralMoves: { fk: string; tk: string; prio: number }[] = [];
         for (const [uk, ue] of availUnits) {
           const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!), aiCtx.combatSpentUnits);
