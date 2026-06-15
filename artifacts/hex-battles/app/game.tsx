@@ -93,6 +93,7 @@ import {
   HexTileTerrainLayer,
   HexTileTerritoryLayer,
 } from "@/components/HexTileLayer";
+import { DevelopmentMarkerLayer } from "@/components/DevelopmentMarkerLayer";
 import { EntityLayer } from "@/components/EntityLayer";
 import { BorderEdgeLayer } from "@/components/BorderEdgeLayer";
 import { MovementHighlightTapTargets } from "@/components/MovementHighlightTapTargets";
@@ -1287,6 +1288,11 @@ export default function GameScreen() {
               <G opacity={showTerrainView ? 1 : 0}>
                 <HexTileTerrainLayer
                   tileData={tileData}
+                  HEX_SIZE={HEX_SIZE}
+                />
+                <DevelopmentMarkerLayer
+                  tileData={tileData}
+                  activeTileMap={activeTileMap}
                   HEX_SIZE={HEX_SIZE}
                 />
               </G>

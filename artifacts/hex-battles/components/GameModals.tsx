@@ -12,13 +12,18 @@ import { CoinIcon, SkullIcon, UnitIcon } from "@/components/UnitIcon";
 
 export interface EconBreakdown {
   grassCount: number;
+  fieldCount: number;
   forestCount: number;
+  sawmillCount: number;
   desertCount: number;
   cityCount: number;
   grassIncome: number;
+  fieldIncome: number;
   forestIncome: number;
+  sawmillIncome: number;
   desertIncome: number;
   cityIncome: number;
+  cityDevBonus: number;
   upkeepGroups: {
     id: EntityType;
     name: string;
@@ -127,8 +132,29 @@ export default function GameModals({
                   </Text>
                 </View>
               )}
-              {econBreakdown && econBreakdown.forestCount > 0 && (
+              {econBreakdown && econBreakdown.fieldCount > 0 && (
                 <View style={styles.econRow}>
+                  <Text style={[styles.econRowLabel, styles.econIndentLabel]}>
+                    ↳ Field ×{econBreakdown.fieldCount}{" "}
+                    <Text style={styles.econPer}>(+3 each)</Text>
+                  </Text>
+                  <Text style={styles.econRowValue}>
+                    +{econBreakdown.fieldIncome}
+                  </Text>
+                </View>
+              )}
+              {econBreakdown &&
+                econBreakdown.grassCount > 0 &&
+                econBreakdown.fieldCount > 0 && (
+                  <View style={[styles.econRow, styles.econSubtotalRow]}>
+                    <Text style={styles.econSubtotalLabel}>Subtotal</Text>
+                    <Text style={styles.econRowValue}>
+                      +{econBreakdown.grassIncome + econBreakdown.fieldIncome}
+                    </Text>
+                  </View>
+                )}
+              {econBreakdown && econBreakdown.forestCount > 0 && (
+                <View style={[styles.econRow, styles.econGroupGap]}>
                   <Text style={styles.econRowLabel}>
                     Forest ×{econBreakdown.forestCount}{" "}
                     <Text style={styles.econPer}>(+2 each)</Text>
@@ -138,8 +164,29 @@ export default function GameModals({
                   </Text>
                 </View>
               )}
-              {econBreakdown && econBreakdown.desertCount > 0 && (
+              {econBreakdown && econBreakdown.sawmillCount > 0 && (
                 <View style={styles.econRow}>
+                  <Text style={[styles.econRowLabel, styles.econIndentLabel]}>
+                    ↳ Sawmill ×{econBreakdown.sawmillCount}{" "}
+                    <Text style={styles.econPer}>(+3 each)</Text>
+                  </Text>
+                  <Text style={styles.econRowValue}>
+                    +{econBreakdown.sawmillIncome}
+                  </Text>
+                </View>
+              )}
+              {econBreakdown &&
+                econBreakdown.forestCount > 0 &&
+                econBreakdown.sawmillCount > 0 && (
+                  <View style={[styles.econRow, styles.econSubtotalRow]}>
+                    <Text style={styles.econSubtotalLabel}>Subtotal</Text>
+                    <Text style={styles.econRowValue}>
+                      +{econBreakdown.forestIncome + econBreakdown.sawmillIncome}
+                    </Text>
+                  </View>
+                )}
+              {econBreakdown && econBreakdown.desertCount > 0 && (
+                <View style={[styles.econRow, styles.econGroupGap]}>
                   <Text style={styles.econRowLabel}>
                     Desert ×{econBreakdown.desertCount}{" "}
                     <Text style={styles.econPer}>(+1 each)</Text>
@@ -150,7 +197,7 @@ export default function GameModals({
                 </View>
               )}
               {econBreakdown && econBreakdown.cityCount > 0 && (
-                <View style={styles.econRow}>
+                <View style={[styles.econRow, styles.econGroupGap]}>
                   <View style={styles.econLabelRow}>
                     <UnitIcon entityId="city" size={16} />
                     <Text style={styles.econRowLabel}>
@@ -163,6 +210,27 @@ export default function GameModals({
                   </Text>
                 </View>
               )}
+              {econBreakdown && econBreakdown.cityDevBonus > 0 && (
+                <View style={styles.econRow}>
+                  <Text style={[styles.econRowLabel, styles.econIndentLabel]}>
+                    ↳ Improvements{" "}
+                    <Text style={styles.econPer}>(+1 per adj. dev.)</Text>
+                  </Text>
+                  <Text style={styles.econRowValue}>
+                    +{econBreakdown.cityDevBonus}
+                  </Text>
+                </View>
+              )}
+              {econBreakdown &&
+                econBreakdown.cityCount > 0 &&
+                econBreakdown.cityDevBonus > 0 && (
+                  <View style={[styles.econRow, styles.econSubtotalRow]}>
+                    <Text style={styles.econSubtotalLabel}>Subtotal</Text>
+                    <Text style={styles.econRowValue}>
+                      +{econBreakdown.cityIncome + econBreakdown.cityDevBonus}
+                    </Text>
+                  </View>
+                )}
             </View>
             {econBreakdown &&
               (econBreakdown.upkeepGroups.length > 0 ||
