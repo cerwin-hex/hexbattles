@@ -1530,6 +1530,9 @@ export async function runAiTurn(
 
   // ── Player bankruptcy check after all AI moves ─────────────────────────────
   if (currentTurn !== 1) {
+    // Board state before the demolitions below, so the single-hex sweep only
+    // penalizes remnants the bankruptcy itself isolates (not pre-existing ones).
+    const prevBankruptcySnapshot = new Map(ws.tileMap);
     const playerVisited = new Set<string>();
     let playerBankruptcyOccurred = false;
     for (const tile of Array.from(ws.tileMap.values())) {
@@ -1598,6 +1601,22 @@ export async function runAiTurn(
     }
 
     if (playerBankruptcyOccurred) {
+      // Demolished bridges/buildings can leave isolated single-hex remnants
+      // (especially dangling bridges). Mirror endTurnHandler and sweep them so
+      // they don't linger on the board with inherited reserves. Clone the
+      // working sets first since the sweep mutates them in place.
+      ws.tileMap = new Map(ws.tileMap);
+      ws.balances = new Map(ws.balances);
+      ws.graveyard = new Set(ws.graveyard);
+      ws.ruins = new Set(ws.ruins);
+      cbs.applySingleHexPenalty(
+        prevBankruptcySnapshot,
+        ws.tileMap,
+        ws.balances,
+        ws.entities,
+        ws.graveyard,
+        ws.ruins,
+      );
       cbs.state.setEntities(new Map(ws.entities));
       cbs.state.setTerritoryBalances(new Map(ws.balances));
       cbs.state.setGraveyard(new Set(ws.graveyard));

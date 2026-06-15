@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { runAiTurn, runAiTerritoryDecisionLoop } from "@/logic/aiStrategy";
+import { applySingleHexPenalty } from "@/logic/gameLogic";
 import type { AiWorkingState, AiTurnCallbacks, AiDecisionExec } from "@/logic/aiStrategy";
 import type { HexTile, EntityType, TerritoryOwner, AiStepSnapshot } from "@/types";
 import type { AiContext } from "@/logic/aiHelpers";
@@ -281,6 +282,55 @@ describe("runAiTurn", () => {
       expect(ws.ruins.has("2,0")).toBe(true);
       // …and its lake tile released so it no longer renders as an owned bridge.
       expect(ws.tileMap.get("2,0")!.owner).toBe("neutral");
+    });
+
+    it("runs the single-hex cleanup sweep after a player bankruptcy", async () => {
+      const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
+      const ws = makeEmptyWs(makeTileMap(tiles));
+      ws.balances.set("0,0", 0);
+      ws.entities.set("0,0", "peasant" as EntityType);
+      ws.entities.set("1,0", "peasant" as EntityType);
+
+      const cbs = makeCbs();
+      await runAiTurn(ws, cbs, [], 2, "easy");
+
+      expect(cbs.applySingleHexPenalty).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not run the cleanup sweep for a solvent player territory", async () => {
+      const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
+      const ws = makeEmptyWs(makeTileMap(tiles));
+      ws.balances.set("0,0", 10);
+      ws.entities.set("0,0", "peasant" as EntityType);
+
+      const cbs = makeCbs();
+      await runAiTurn(ws, cbs, [], 2, "easy");
+
+      expect(cbs.applySingleHexPenalty).not.toHaveBeenCalled();
+    });
+
+    it("feeds the post-bankruptcy board through the real single-hex sweep without disturbing solvent territory", async () => {
+      // Drives the genuine applySingleHexPenalty (not a mock) so the wiring —
+      // argument order and the pre-demolition snapshot — is exercised end to
+      // end. The bankrupt territory is liquidated; a separate, solvent two-hex
+      // territory must be left untouched by the sweep.
+      const tiles = [
+        makeTile(0, 0, "player"),
+        makeTile(1, 0, "player"),
+        makeTile(5, 5, "player"),
+        makeTile(6, 5, "player"),
+      ];
+      const ws = makeEmptyWs(makeTileMap(tiles));
+      ws.balances.set("0,0", 0); // bankrupt territory
+      ws.balances.set("5,5", 30); // solvent, untouched territory
+      ws.entities.set("0,0", "swordsman" as EntityType);
+      ws.entities.set("1,0", "swordsman" as EntityType);
+
+      const cbs = makeCbs({ applySingleHexPenalty });
+      await runAiTurn(ws, cbs, [], 2, "easy");
+
+      expect(ws.entities.has("0,0")).toBe(false); // bankrupt units liquidated
+      expect(ws.balances.get("5,5")).toBe(30); // solvent territory untouched
     });
 
     it("does not run the bankruptcy check on round 1", async () => {
