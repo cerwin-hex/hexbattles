@@ -3,8 +3,15 @@ import { tileKey, hexCornerPoint } from "@/utils/hexMath";
 import { ORDERED_EDGES } from "@/constants/gameConstants";
 import { CITY_BUFFER_BORDER } from "@/constants/colors";
 
+// The cache stores a COPIED owner snapshot (key → owner), never a reference to
+// the live mutableTileMap. endTurnHandler mutates the React-state tile map in
+// place when bankruptcy demolishes a bridge (owner → "neutral"); a live
+// reference would then read the post-mutation owner as "prev", the diff would
+// see no change, and the demolished tile's stale border edges would never be
+// recomputed. Snapshotting the owner values makes the diff immune to in-place
+// mutation of the source map.
 export type BorderEdgesCache = {
-  mutableTileMap: Map<string, HexTile>;
+  ownerSnapshot: Map<string, TerritoryOwner>;
   tileData: Array<{ tile: HexTile; cx: number; cy: number }>;
   INNER_SIZE: number;
   perTileEdges: Map<string, BorderEdge[]>;
@@ -12,7 +19,7 @@ export type BorderEdgesCache = {
 } | null;
 
 export type OuterEdgesCache = {
-  mutableTileMap: Map<string, HexTile>;
+  ownerSnapshot: Map<string, TerritoryOwner>;
   tileData: Array<{ tile: HexTile; cx: number; cy: number }>;
   HEX_SIZE: number;
   perTileEdges: Map<string, BorderEdge[]>;
@@ -48,7 +55,7 @@ export function computeBorderEdges(
     for (const { tile } of tileData) changedKeys.add(tile.key);
   } else {
     for (const [key, tile] of mutableTileMap) {
-      if (prev!.mutableTileMap.get(key)?.owner !== tile.owner) {
+      if (prev!.ownerSnapshot.get(key) !== tile.owner) {
         changedKeys.add(key);
         const [q, r] = key.split(",").map(Number);
         for (const { dir: [dq, dr] } of ORDERED_EDGES) {
@@ -56,7 +63,7 @@ export function computeBorderEdges(
         }
       }
     }
-    for (const [key] of prev!.mutableTileMap) {
+    for (const [key] of prev!.ownerSnapshot) {
       if (!mutableTileMap.has(key)) {
         changedKeys.add(key);
         const [q, r] = key.split(",").map(Number);
@@ -164,8 +171,10 @@ export function computeBorderEdges(
     if (tileEdges) for (const e of tileEdges) allEdges.push(e);
   }
 
+  const ownerSnapshot = new Map<string, TerritoryOwner>();
+  for (const [key, tile] of mutableTileMap) ownerSnapshot.set(key, tile.owner);
   cache.current = {
-    mutableTileMap,
+    ownerSnapshot,
     tileData,
     INNER_SIZE,
     perTileEdges,
@@ -198,7 +207,7 @@ export function computeOuterTerritoryEdges(
     for (const { tile } of tileData) changedKeys.add(tile.key);
   } else {
     for (const [key, tile] of mutableTileMap) {
-      if (prev!.mutableTileMap.get(key)?.owner !== tile.owner) {
+      if (prev!.ownerSnapshot.get(key) !== tile.owner) {
         changedKeys.add(key);
         const [q, r] = key.split(",").map(Number);
         for (const { dir: [dq, dr] } of ORDERED_EDGES) {
@@ -206,7 +215,7 @@ export function computeOuterTerritoryEdges(
         }
       }
     }
-    for (const [key] of prev!.mutableTileMap) {
+    for (const [key] of prev!.ownerSnapshot) {
       if (!mutableTileMap.has(key)) {
         changedKeys.add(key);
         const [q, r] = key.split(",").map(Number);
@@ -299,8 +308,10 @@ export function computeOuterTerritoryEdges(
     if (tileEdges) for (const e of tileEdges) allEdges.push(e);
   }
 
+  const ownerSnapshot = new Map<string, TerritoryOwner>();
+  for (const [key, tile] of mutableTileMap) ownerSnapshot.set(key, tile.owner);
   cache.current = {
-    mutableTileMap,
+    ownerSnapshot,
     tileData,
     HEX_SIZE,
     perTileEdges,
