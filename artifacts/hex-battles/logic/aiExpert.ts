@@ -41,6 +41,52 @@ const OPPONENT_OWNERS: TerritoryOwner[] = ["player", "ai1", "ai2", "ai3", "ai4",
 /** Hex range over which the `advance` gradient pulls idle units toward the enemy. */
 const ADVANCE_REACH = 6;
 
+// Candidate-pruning toggle (perf). "pruned" (default) skips candidates the eval
+// can never pick — defensive builds / inner reinforcements deep in the rear, and
+// all-but-the-best forward reposition per unit. "full" restores the exhaustive
+// pre-optimisation set. Lets the harness A/B pruned-vs-full to prove the prune is
+// decision-neutral. Mirrors __setExpert* hooks.
+export type CandidateMode = "pruned" | "full";
+let CANDIDATE_MODE: CandidateMode = "pruned";
+export function __setExpertCandidateMode(m: CandidateMode | null): void {
+  CANDIDATE_MODE = m ?? "pruned";
+}
+/** Build/reinforce only within this many hexes of substantial enemy land — a
+ *  fort or fresh unit deeper than this defends nothing and is never picked. */
+const FRONT_BUILD_REACH = 2;
+
+/**
+ * Enemy land tiles the `advance` gradient should pull idle units toward — the
+ * substantial enemy mass (the real front), NOT stray single-hex pockets. A lone
+ * 1-hex enemy tile is excluded because it would otherwise hijack the gradient:
+ * being the *nearest* enemy, it drags the main army off the contested front to
+ * chase a trivial tile (and, when the pocket is unreachable across own land,
+ * freezes the unit entirely — advancing toward the real front would *increase*
+ * the nearest-enemy distance). Falls back to all enemy land tiles when every
+ * enemy territory is a lone hex (late-game mop-up), so the gradient never blinds.
+ *
+ * "Single-hex" is detected cheaply as "no adjacent same-owner land tile" — an
+ * isolated enemy tile, exactly the pocket case — avoiding a full territory sweep
+ * inside the hot eval path.
+ */
+function enemyAdvanceTargets(
+  tileMap: Map<string, HexTile>,
+  owner: TerritoryOwner,
+): Array<[number, number]> {
+  const all: Array<[number, number]> = [];
+  const substantial: Array<[number, number]> = [];
+  for (const t of tileMap.values()) {
+    if (t.owner === owner || t.owner === "neutral" || t.terrain === "mountain") continue;
+    all.push([t.q, t.r]);
+    const connected = HEX_EDGES.some(({ dir: [dq, dr] }) => {
+      const nt = tileMap.get(tileKey(t.q + dq, t.r + dr));
+      return !!nt && nt.owner === t.owner && nt.terrain !== "mountain" && nt.terrain !== "lake";
+    });
+    if (connected) substantial.push([t.q, t.r]);
+  }
+  return substantial.length > 0 ? substantial : all;
+}
+
 export interface EvalWeights {
   /** Reward per point of gross territory income (drives expansion). */
   income: number;
@@ -161,6 +207,8 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   leader: 1.5,
 };
 
+// ── TEMP PROFILING (remove after #1/#2) ──────────────────────────────────────
+
 function tileValue(
   key: string,
   tileMap: Map<string, HexTile>,
@@ -251,13 +299,9 @@ export function evaluatePosition(
   let enemyMilitary = 0;
   let advance = 0;
   let mobility = 0;
-  // Enemy-owned land tiles (targets the advance gradient pulls units toward).
-  const enemyCoords: Array<[number, number]> = [];
-  for (const t of tileMap.values()) {
-    if (t.owner !== owner && t.owner !== "neutral" && t.terrain !== "mountain") {
-      enemyCoords.push([t.q, t.r]);
-    }
-  }
+  // Substantial enemy land tiles (targets the advance gradient pulls units
+  // toward) — stray single-hex pockets excluded so they never hijack the pull.
+  const enemyCoords = enemyAdvanceTargets(tileMap, owner);
   for (const [k, e] of entities) {
     const t = tileMap.get(k);
     if (!t) continue;
@@ -381,16 +425,22 @@ export function evaluatePosition(
   }
 
   // ── Leader pressure: suppress the strongest opponent (modest weight) ──
+  // One pass over the board accumulating each opponent's income, instead of a
+  // full scan per opponent (was O(owners × tiles); now O(tiles)). Tie-break is
+  // preserved by then scanning OPPONENT_OWNERS in order and keeping the first
+  // strict maximum (matches the old `inc > leaderIncome` first-wins behaviour).
+  const incByOwner = new Map<TerritoryOwner, number>();
+  for (const t of tileMap.values()) {
+    if (t.owner === owner || t.owner === "neutral") continue;
+    if (entities.get(t.key) === "rebel") continue;
+    const inc = (TERRAIN_INCOME[t.terrain] ?? 0) + (cities.has(t.key) ? CITY_BONUS : 0);
+    incByOwner.set(t.owner, (incByOwner.get(t.owner) ?? 0) + inc);
+  }
   let leaderIncome = 0;
   let leaderOwner: TerritoryOwner | null = null;
   for (const o of OPPONENT_OWNERS) {
     if (o === owner) continue;
-    let inc = 0;
-    for (const t of tileMap.values()) {
-      if (t.owner !== o) continue;
-      if (entities.get(t.key) === "rebel") continue;
-      inc += (TERRAIN_INCOME[t.terrain] ?? 0) + (cities.has(t.key) ? CITY_BONUS : 0);
-    }
+    const inc = incByOwner.get(o) ?? 0;
     if (inc > leaderIncome) {
       leaderIncome = inc;
       leaderOwner = o;
@@ -690,14 +740,11 @@ export function generateCandidateActions(
     });
   });
 
-  // Enemy land tiles + nearest-distance helper, for forward repositioning of
-  // idle rear units (the `advance` gradient's candidate side).
-  const enemyCoords: Array<[number, number]> = [];
-  for (const t of ctx.tileMap.values()) {
-    if (t.owner !== owner && t.owner !== "neutral" && t.terrain !== "mountain") {
-      enemyCoords.push([t.q, t.r]);
-    }
-  }
+  // Substantial enemy land tiles + nearest-distance helper, for forward
+  // repositioning of idle rear units (the `advance` gradient's candidate side).
+  // Must match the eval's target set (stray single-hex pockets excluded) so the
+  // generated forward move and the term that rewards it agree on the front.
+  const enemyCoords = enemyAdvanceTargets(ctx.tileMap, owner);
   const distToEnemy = (key: string): number => {
     const [q, r] = key.split(",").map(Number);
     let m = Infinity;
@@ -744,6 +791,14 @@ export function generateCandidateActions(
     // rear units (not enemy-adjacent) get advance candidates.
     const uAdvanceEligible = enemyCoords.length > 0 && !onFront(uk);
     const uDist = uAdvanceEligible ? distToEnemy(uk) : 0;
+    // Pruned: an idle unit only needs its single best forward step. All empty
+    // owned tiles score identically except the `advance` term (frontier/secured
+    // are per-tile, not per-unit), so the closest-to-front one strictly dominates
+    // — emitting every reachable forward tile is pure redundant work. Track the
+    // best here and push it once after the loop. (Captures/merges/rebel-clears
+    // and border repositions are still emitted in full — they are not equivalent.)
+    let bestAdvanceMk: string | null = null;
+    let bestAdvanceDist = uDist;
     for (const mk of vm) {
       if (perUnit >= capPerKind || totalMoveCount >= globalMoveCeiling) break;
       const mt = ctx.tileMap.get(mk);
@@ -767,16 +822,27 @@ export function generateCandidateActions(
           (defending || mergeRetainsMove(uk, ue, mk, destE));
         const isRebelClear = destE === "rebel";
         const isBorderReposition = borderTiles.some((b) => b.key === mk) && !destE;
-        // Forward reposition: an idle rear unit steps to an empty owned tile that
-        // is strictly closer to the nearest enemy (paired with the `advance`
-        // eval term, this marches stranded units toward the front).
-        const isAdvance = uAdvanceEligible && !destE && distToEnemy(mk) < uDist;
-        if (isMerge || isRebelClear || isBorderReposition || isAdvance) {
+        if (isMerge || isRebelClear || isBorderReposition) {
           out.push({ kind: "move", from: uk, to: mk });
           perUnit++;
           totalMoveCount++;
+        } else if (uAdvanceEligible && !destE && distToEnemy(mk) < uDist) {
+          // Forward reposition toward the nearest substantial enemy.
+          if (CANDIDATE_MODE === "pruned") {
+            const d = distToEnemy(mk);
+            if (d < bestAdvanceDist) { bestAdvanceDist = d; bestAdvanceMk = mk; }
+          } else {
+            out.push({ kind: "move", from: uk, to: mk });
+            perUnit++;
+            totalMoveCount++;
+          }
         }
       }
+    }
+    if (bestAdvanceMk && perUnit < capPerKind && totalMoveCount < globalMoveCeiling) {
+      out.push({ kind: "move", from: uk, to: bestAdvanceMk });
+      perUnit++;
+      totalMoveCount++;
     }
   }
 
@@ -789,13 +855,24 @@ export function generateCandidateActions(
       !ctx.entities.has(t.key) &&
       !ctx.cities.has(t.key),
   );
+  // Pruned: inner reinforcements / defensive builds only make sense near the
+  // substantial front — a unit or fort spawned deep in the rear scores no
+  // frontline/borderBonus (just upkeep), so the eval never picks it. Filtering
+  // it out is decision-neutral and cuts the candidate count hard late-game when
+  // a big territory has many empty interior tiles. Fallback: if nothing is near
+  // the front (or no substantial enemy), keep all so we never starve placement.
+  const frontProximal =
+    CANDIDATE_MODE === "pruned" && enemyCoords.length > 0
+      ? innerPlacements.filter((t) => distToEnemy(t.key) <= FRONT_BUILD_REACH)
+      : innerPlacements;
+  const placeInner = frontProximal.length > 0 ? frontProximal : innerPlacements;
   for (const uType of UNIT_TYPES) {
     if (buyCount >= capPerKind) break;
     const cost = ENTITY_META[uType].cost;
     const upk = ENTITY_META[uType].upkeep;
     if (!canAfford(cost, upk)) continue;
     // inside / border placement
-    for (const t of innerPlacements) {
+    for (const t of placeInner) {
       if (buyCount >= capPerKind) break;
       out.push({ kind: "buy", unitType: uType, target: t.key, cost, outside: false });
       buyCount++;
@@ -830,7 +907,9 @@ export function generateCandidateActions(
     const upk = ENTITY_META[bType].upkeep;
     if (!canAfford(cost, upk)) continue;
     if (bType === "castle" && !hasStrongUnit) continue;
-    for (const t of innerPlacements) {
+    // Forts belong toward the front (see placeInner rationale) — a tower deep in
+    // the interior never defends anything the eval rewards.
+    for (const t of placeInner) {
       // Building on an improved tile would destroy the improvement; don't.
       if (IMPROVED_TERRAINS.has(t.terrain)) continue;
       out.push({ kind: "build", buildingType: bType, target: t.key, cost });
@@ -974,6 +1053,18 @@ export function __setExpertSearchConfig(c: SearchConfig | null): void {
   SEARCH_OVERRIDE = c;
 }
 
+// Max actions a single territory may take per turn. Bounds worst-case turn time
+// (the user-felt latency on mobile): a pathological position can otherwise keep
+// finding marginal improvements for up to the old hard limit of 100 iterations.
+// Typical competitive turns settle in ~15-20, so a cap here only clips the long
+// tail — it is a latency safety-bound, not a normal-play change. Tunable for the
+// self-play A/B that proves the cap does not cost strength.
+const DEFAULT_MAX_ITERS = 16;
+let MAX_ITERS_OVERRIDE: number | null = null;
+export function __setExpertMaxIters(n: number | null): void {
+  MAX_ITERS_OVERRIDE = n;
+}
+
 export async function runExpertTerritoryDecisionLoop(
   startTileKey: string,
   ctx: AiContext,
@@ -985,8 +1076,9 @@ export async function runExpertTerritoryDecisionLoop(
   const search = SEARCH_OVERRIDE ?? DEFAULT_SEARCH;
   const score = (st: SimState): number =>
     evaluatePosition(owner, st.tileMap, st.entities, st.balances, st.cities, weights);
+  const maxIters = MAX_ITERS_OVERRIDE ?? DEFAULT_MAX_ITERS;
   let iter = 0;
-  while (iter++ < 100) {
+  while (iter++ < maxIters) {
     if (!isTurnActive()) return;
 
     const territory = getContiguousTerritory(ctx.tileMap, startTileKey, owner, ctx.entities);

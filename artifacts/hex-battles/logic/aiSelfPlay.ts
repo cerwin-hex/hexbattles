@@ -209,6 +209,9 @@ export interface MatchConfig {
   maxTurns: number;
   /** Override expert eval weights for this match (tuning). */
   weights?: EvalWeights;
+  /** Optional hook fired right before an owner's turn runs (e.g. to switch a
+   *  per-seat brain variant for new-vs-old Expert A/B comparisons). */
+  onBeforeOwnerTurn?: (owner: TerritoryOwner) => void;
   /** Optional per-turn diagnostic hook (after both seats have moved). */
   onTurn?: (turn: number, landA: number, landB: number) => void;
   /** Richer per-turn diagnostic hook with unit/fort/balance stats. */
@@ -284,6 +287,7 @@ export async function playMatch(cfg: MatchConfig): Promise<MatchResult> {
         ws.partialMoves = new Map();
         ws.attacksUsed = new Map();
         ws.combatSpentUnits = new Set();
+        cfg.onBeforeOwnerTurn?.(owner);
         await runAiTurn(ws, cbs, [owner], turn, diffByOwner[owner]);
         // Invariant: no territory may ever hold a negative balance (over-spend).
         for (const bal of ws.balances.values()) {

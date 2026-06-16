@@ -5,7 +5,7 @@ import {
   playFreeForAll,
   runOneAiTurnHeadless,
 } from "@/logic/aiSelfPlay";
-import { __setExpertSearchConfig } from "@/logic/aiExpert";
+import { __setExpertSearchConfig, __setExpertCandidateMode, __setExpertMaxIters } from "@/logic/aiExpert";
 import type { TerritoryOwner, Difficulty, HexTile, EntityType } from "@/types";
 import type { AiWorkingState } from "@/logic/aiStrategy";
 import {
@@ -184,14 +184,61 @@ describe("expert strength (self-play)", () => {
     "AI turn compute stays within budget on a large board",
     async () => {
       __setExpertSearchConfig({ twoPly: true, k: 4 });
+      // Track the single most expensive turn too — the average is dominated by
+      // cheap collapsed-endgame turns and hides the worst-case spike, which is the
+      // latency a player (especially on mobile) actually feels between moves.
+      let peakTurnMs = 0;
+      let lastT = Date.now();
       const r = await playMatch({
         seed: 8000, tiles: 80, difficultyA: "expert", difficultyB: "expert", maxTurns: 30,
+        onTurnStats: () => {
+          const now = Date.now();
+          peakTurnMs = Math.max(peakTurnMs, now - lastT);
+          lastT = now;
+        },
       });
       __setExpertSearchConfig(null);
       const msPerTurn = r.elapsedMs / Math.max(1, r.turns);
       // Ceiling calibrated from first observed value: observed ~144 ms/turn on 80-tile board.
       // Ceiling set to 300 ms/turn for comfortable headroom — guards gross regressions only.
       expect(msPerTurn).toBeLessThan(300);
+      // Peak single-turn ceiling: observed ~430 ms post-optimisation (was ~930 ms
+      // before candidate pruning + the per-territory iteration cap). 900 ms leaves
+      // ~2x headroom for slow CI while still catching a regression back to baseline.
+      expect(peakTurnMs).toBeLessThan(900);
+    },
+    600000,
+  );
+
+  fullIt(
+    "candidate pruning + iteration cap are strength-neutral (perf opts cost no wins)",
+    async () => {
+      // The performance work (front-relevant placement pruning, single-best
+      // advance, per-territory iteration cap) must only drop candidates/actions the
+      // eval would never choose. Head-to-head — the shipping brain (pruned + capped,
+      // via null overrides) vs the exhaustive pre-optimisation brain (full + iter
+      // 100) — on mirrored seats it should be a wash, NOT a regression. (vs-hard is
+      // saturated and cannot detect a small loss here; this A/B can.)
+      let optWins = 0, oldWins = 0;
+      const N = 24;
+      for (let i = 0; i < N; i++) {
+        const optOwner: TerritoryOwner = i % 2 === 0 ? "ai1" : "ai2";
+        const r = await playMatch({
+          seed: 9300 + i, tiles: 50, difficultyA: "expert", difficultyB: "expert", maxTurns: 45,
+          onBeforeOwnerTurn: (owner) => {
+            if (owner === optOwner) { __setExpertCandidateMode(null); __setExpertMaxIters(null); }
+            else { __setExpertCandidateMode("full"); __setExpertMaxIters(100); }
+          },
+        });
+        __setExpertCandidateMode(null);
+        __setExpertMaxIters(null);
+        if (r.winner === optOwner) optWins++;
+        else if (r.winner !== "draw") oldWins++;
+      }
+      // Neutral within noise over 24 games: require the optimised brain is not
+      // meaningfully worse (observed ~even). Guards against a prune that silently
+      // removes a winning line.
+      expect(optWins).toBeGreaterThanOrEqual(oldWins - 4);
     },
     600000,
   );

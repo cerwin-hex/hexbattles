@@ -7,6 +7,7 @@ import {
   opponentBestResponse,
   DEFAULT_WEIGHTS,
   __setExpertSearchConfig,
+  __setExpertCandidateMode,
   type SimState,
   type ExpertAction,
 } from "@/logic/aiExpert";
@@ -1227,5 +1228,83 @@ describe("expert improve (last-resort)", () => {
     await runExpertTerritoryDecisionLoop("0,0", ctx, exec, () => true);
 
     expect(firstKind).toBe("move");
+  });
+});
+
+// ── Candidate pruning (#1 perf): front-relevant placements + single advance ─────
+describe("generateCandidateActions pruning (CANDIDATE_MODE)", () => {
+  afterEach(() => __setExpertCandidateMode(null));
+
+  function buildTargets(cands: ExpertAction[]): Set<string> {
+    return new Set(
+      cands
+        .filter((c) => c.kind === "build" && (c.buildingType === "tower" || c.buildingType === "castle"))
+        .map((c) => (c as Extract<ExpertAction, { kind: "build" }>).target),
+    );
+  }
+
+  it("pruned: offers no fort build deep in the rear, only near the substantial front", () => {
+    // A 6-tile corridor; a substantial (2-hex) enemy sits past the east end. Tiles
+    // more than FRONT_BUILD_REACH (2) from it are deep rear — a fort there defends
+    // nothing, so pruned mode must not even offer it; full mode still does.
+    const tiles = [
+      ...[0, 1, 2, 3, 4, 5].map((q) => makeTile(q, 0, "ai1")),
+      makeTile(6, 0, "ai2"),
+      makeTile(6, 1, "ai2"),
+    ];
+    const tileMap = makeTileMap(tiles);
+    const entities = new Map<string, EntityType>();
+    const balances = new Map<string, number>();
+    const terr = getContiguousTerritory(tileMap, "0,0", "ai1", entities);
+    balances.set(getTerritoryId(terr)!, 30);
+    const ctx = makeCtx(tileMap, entities, "ai1", balances);
+
+    __setExpertCandidateMode("pruned");
+    const prunedT = buildTargets(generateCandidateActions(ctx, terr, 30));
+    __setExpertCandidateMode("full");
+    const fullT = buildTargets(generateCandidateActions(ctx, terr, 30));
+
+    // Deep-rear tiles (>2 from the enemy) are pruned; the front-proximal tile is kept.
+    expect(prunedT.has("0,0")).toBe(false);
+    expect(prunedT.has("1,0")).toBe(false);
+    expect(prunedT.has("4,0")).toBe(true);
+    // Full mode still offers the deep placement (proving the prune, not a board quirk).
+    expect(fullT.has("0,0")).toBe(true);
+  });
+
+  it("pruned: emits at most one forward (advance) reposition per idle unit", () => {
+    // Idle peasant in a corridor; a substantial enemy lies past a neutral gap (so no
+    // owned tile is a border tile — every forward step is a pure advance reposition).
+    // Pruned keeps only the single closest-to-front step; full emits every closer tile.
+    const tiles = [
+      ...[0, 1, 2, 3, 4, 5].map((q) => makeTile(q, 0, "ai1")),
+      makeTile(6, 0, "neutral"),
+      makeTile(7, 0, "neutral"),
+      makeTile(8, 0, "ai2"),
+      makeTile(8, 1, "ai2"),
+    ];
+    const tileMap = makeTileMap(tiles);
+    const entities = new Map<string, EntityType>([["1,0", "peasant"]]);
+    const balances = new Map<string, number>();
+    const terr = getContiguousTerritory(tileMap, "1,0", "ai1", entities);
+    balances.set(getTerritoryId(terr)!, 0); // no buys, isolate move candidates
+    const ctx = makeCtx(tileMap, entities, "ai1", balances);
+
+    const forward = (cands: ExpertAction[]): ExpertAction[] =>
+      cands.filter(
+        (c) =>
+          c.kind === "move" &&
+          c.from === "1,0" &&
+          tileMap.get((c as Extract<ExpertAction, { kind: "move" }>).to)?.owner === "ai1" &&
+          !entities.has((c as Extract<ExpertAction, { kind: "move" }>).to),
+      );
+
+    __setExpertCandidateMode("pruned");
+    const prunedFwd = forward(generateCandidateActions(ctx, terr, 30));
+    __setExpertCandidateMode("full");
+    const fullFwd = forward(generateCandidateActions(ctx, terr, 30));
+
+    expect(prunedFwd.length).toBeLessThanOrEqual(1);
+    expect(fullFwd.length).toBeGreaterThan(prunedFwd.length);
   });
 });
