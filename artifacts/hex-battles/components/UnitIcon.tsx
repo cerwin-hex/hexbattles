@@ -1,4 +1,11 @@
 import React from "react";
+import {
+  Text,
+  View,
+  type StyleProp,
+  type TextStyle,
+  type ViewStyle,
+} from "react-native";
 import { parse, SvgAst } from "react-native-svg";
 import type { EntityType } from "@/types";
 
@@ -224,6 +231,36 @@ export const UnitIcon = React.memo(function UnitIcon({
 /** Renders the coin/gold icon at the given pixel size. */
 export const CoinIcon = React.memo(function CoinIcon({ size }: { size: number }) {
   return <SvgAst ast={MONEY_ICON_AST} override={{ width: size, height: size }} />;
+});
+
+/**
+ * Renders a money amount with the coin icon sitting directly behind the number,
+ * e.g. `+5🪙` or `-3🪙/turn`. The coin art has built-in whitespace inside its
+ * 64×64 viewBox, so a small negative margin pulls it tight against the text on
+ * both sides (no visible gap before the coin, nor before an optional suffix).
+ */
+export const CoinValue = React.memo(function CoinValue({
+  value,
+  textStyle,
+  size = 14,
+  suffix,
+  style,
+}: {
+  value: string;
+  textStyle?: StyleProp<TextStyle>;
+  size?: number;
+  suffix?: string;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <View style={[{ flexDirection: "row", alignItems: "center" }, style]}>
+      <Text style={textStyle}>{value}</Text>
+      <View style={{ marginHorizontal: -size * 0.14 }}>
+        <CoinIcon size={size} />
+      </View>
+      {suffix != null && <Text style={textStyle}>{suffix}</Text>}
+    </View>
+  );
 });
 
 /** Renders the battlefield grave (skull) icon at the given pixel size. */

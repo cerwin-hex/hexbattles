@@ -8,7 +8,7 @@ import {
 import { CITY_BONUS } from "@/utils/hexGrid";
 import type { EntityType } from "@/types";
 import styles from "@/app/gameStyles";
-import { CoinIcon, SkullIcon, UnitIcon } from "@/components/UnitIcon";
+import { CoinValue, SkullIcon, UnitIcon } from "@/components/UnitIcon";
 
 export interface EconBreakdown {
   grassCount: number;
@@ -129,9 +129,11 @@ export default function GameModals({
                   <Text style={styles.econRowLabel}>
                     Grass ×{econBreakdown.grassCount}
                   </Text>
-                  <Text style={styles.econRowValue}>
-                    +{econBreakdown.grassIncome}
-                  </Text>
+                  <CoinValue
+                    value={`+${econBreakdown.grassIncome}`}
+                    textStyle={styles.econRowValue}
+                    size={13}
+                  />
                 </View>
               )}
               {econBreakdown && econBreakdown.fieldCount > 0 && (
@@ -139,9 +141,11 @@ export default function GameModals({
                   <Text style={[styles.econRowLabel, styles.econIndentLabel]}>
                     ↳ Field ×{econBreakdown.fieldCount}
                   </Text>
-                  <Text style={styles.econRowValue}>
-                    +{econBreakdown.fieldBonus}
-                  </Text>
+                  <CoinValue
+                    value={`+${econBreakdown.fieldBonus}`}
+                    textStyle={styles.econRowValue}
+                    size={13}
+                  />
                 </View>
               )}
               {econBreakdown && econBreakdown.forestCount > 0 && (
@@ -149,9 +153,11 @@ export default function GameModals({
                   <Text style={styles.econRowLabel}>
                     Forest ×{econBreakdown.forestCount}
                   </Text>
-                  <Text style={styles.econRowValue}>
-                    +{econBreakdown.forestIncome}
-                  </Text>
+                  <CoinValue
+                    value={`+${econBreakdown.forestIncome}`}
+                    textStyle={styles.econRowValue}
+                    size={13}
+                  />
                 </View>
               )}
               {econBreakdown && econBreakdown.sawmillCount > 0 && (
@@ -159,9 +165,11 @@ export default function GameModals({
                   <Text style={[styles.econRowLabel, styles.econIndentLabel]}>
                     ↳ Sawmill ×{econBreakdown.sawmillCount}
                   </Text>
-                  <Text style={styles.econRowValue}>
-                    +{econBreakdown.sawmillBonus}
-                  </Text>
+                  <CoinValue
+                    value={`+${econBreakdown.sawmillBonus}`}
+                    textStyle={styles.econRowValue}
+                    size={13}
+                  />
                 </View>
               )}
               {econBreakdown && econBreakdown.desertCount > 0 && (
@@ -169,9 +177,11 @@ export default function GameModals({
                   <Text style={styles.econRowLabel}>
                     Desert ×{econBreakdown.desertCount}
                   </Text>
-                  <Text style={styles.econRowValue}>
-                    +{econBreakdown.desertIncome}
-                  </Text>
+                  <CoinValue
+                    value={`+${econBreakdown.desertIncome}`}
+                    textStyle={styles.econRowValue}
+                    size={13}
+                  />
                 </View>
               )}
               {econBreakdown && econBreakdown.cityCount > 0 && (
@@ -182,9 +192,11 @@ export default function GameModals({
                       City ×{econBreakdown.cityCount}
                     </Text>
                   </View>
-                  <Text style={styles.econRowValue}>
-                    +{econBreakdown.cityIncome}
-                  </Text>
+                  <CoinValue
+                    value={`+${econBreakdown.cityIncome}`}
+                    textStyle={styles.econRowValue}
+                    size={13}
+                  />
                 </View>
               )}
               {econBreakdown && econBreakdown.cityImproveBonus > 0 && (
@@ -192,17 +204,21 @@ export default function GameModals({
                   <Text style={[styles.econRowLabel, styles.econIndentLabel]}>
                     ↳ Improvements
                   </Text>
-                  <Text style={styles.econRowValue}>
-                    +{econBreakdown.cityImproveBonus}
-                  </Text>
+                  <CoinValue
+                    value={`+${econBreakdown.cityImproveBonus}`}
+                    textStyle={styles.econRowValue}
+                    size={13}
+                  />
                 </View>
               )}
               {econBreakdown && (
                 <View style={[styles.econRow, styles.econTotalRow]}>
                   <Text style={styles.econTotalLabel}>Total income</Text>
-                  <Text style={styles.econRowValue}>
-                    +{econBreakdown.totalIncome}
-                  </Text>
+                  <CoinValue
+                    value={`+${econBreakdown.totalIncome}`}
+                    textStyle={styles.econRowValue}
+                    size={13}
+                  />
                 </View>
               )}
             </View>
@@ -229,9 +245,11 @@ export default function GameModals({
                           {g.name} ×{g.count}
                         </Text>
                       </View>
-                      <Text style={[styles.econRowValue, { color: "#E07060" }]}>
-                        −{g.total}
-                      </Text>
+                      <CoinValue
+                        value={`−${g.total}`}
+                        textStyle={[styles.econRowValue, { color: "#E07060" }]}
+                        size={13}
+                      />
                     </View>
                   ))}
                   {econBreakdown.rebelTotalLoss > 0 && (
@@ -248,9 +266,11 @@ export default function GameModals({
                           Rebels ×{econBreakdown.rebelCount}
                         </Text>
                       </View>
-                      <Text style={[styles.econRowValue, { color: "#E07060" }]}>
-                        −{econBreakdown.rebelTotalLoss}
-                      </Text>
+                      <CoinValue
+                        value={`−${econBreakdown.rebelTotalLoss}`}
+                        textStyle={[styles.econRowValue, { color: "#E07060" }]}
+                        size={13}
+                      />
                     </View>
                   )}
                   {econBreakdown.adminBurden > 0 && (
@@ -265,27 +285,36 @@ export default function GameModals({
                       <Text style={styles.econRowLabel}>
                         Administrative burden
                       </Text>
-                      <Text style={[styles.econRowValue, { color: "#E07060" }]}>
-                        −{econBreakdown.adminBurden}
-                      </Text>
+                      <CoinValue
+                        value={`−${econBreakdown.adminBurden}`}
+                        textStyle={[styles.econRowValue, { color: "#E07060" }]}
+                        size={13}
+                      />
                     </View>
                   )}
                   <View style={[styles.econRow, styles.econTotalRow]}>
                     <Text style={styles.econTotalLabel}>Total upkeep</Text>
-                    <Text style={[styles.econRowValue, { color: "#E07060" }]}>
-                      −
-                      {econBreakdown.totalUpkeep +
+                    <CoinValue
+                      value={`−${
+                        econBreakdown.totalUpkeep +
                         econBreakdown.rebelTotalLoss +
-                        econBreakdown.adminBurden}
-                    </Text>
+                        econBreakdown.adminBurden
+                      }`}
+                      textStyle={[styles.econRowValue, { color: "#E07060" }]}
+                      size={13}
+                    />
                   </View>
                 </View>
               )}
             <View style={styles.econDivider} />
             <View style={styles.econRow}>
               <Text style={styles.econNetLabel}>Net per turn</Text>
-              <Text
-                style={[
+              <CoinValue
+                value={`${
+                  econBreakdown && econBreakdown.net >= 0 ? "+" : ""
+                }${econBreakdown?.net ?? 0}`}
+                size={14}
+                textStyle={[
                   styles.econNetValue,
                   {
                     color:
@@ -294,17 +323,15 @@ export default function GameModals({
                         : "#E07060",
                   },
                 ]}
-              >
-                {econBreakdown && econBreakdown.net >= 0 ? "+" : ""}
-                {econBreakdown?.net ?? 0}
-              </Text>
+              />
             </View>
             <View style={styles.econRow}>
               <Text style={styles.econNetLabel}>Current balance</Text>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                <CoinIcon size={16} />
-                <Text style={styles.econNetValue}>{selectedTerritoryBalance}</Text>
-              </View>
+              <CoinValue
+                value={`${selectedTerritoryBalance}`}
+                textStyle={styles.econNetValue}
+                size={16}
+              />
             </View>
             <TouchableOpacity
               style={styles.econCloseBtn}

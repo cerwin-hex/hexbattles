@@ -4,7 +4,7 @@ import Animated from "react-native-reanimated";
 import type { EntityType } from "@/types";
 import styles from "@/app/gameStyles";
 import type { EconBreakdown } from "@/components/GameModals";
-import { CoinIcon } from "@/components/UnitIcon";
+import { CoinValue } from "@/components/UnitIcon";
 
 interface BottomActionMenuProps {
   botInset: number;
@@ -104,24 +104,27 @@ export default function BottomActionMenu({
             }}
             activeOpacity={hasSelection ? 0.75 : 1}
           >
-            <View style={styles.goldTopRow}>
-              <CoinIcon size={16} />
-              <Text style={styles.goldAmount}>{goldDisplayValue}</Text>
-            </View>
+            <CoinValue
+              value={`${goldDisplayValue}`}
+              textStyle={styles.goldAmount}
+              size={16}
+            />
             {hasSelection && econBreakdown !== null ? (
-              <Text
-                style={[
+              <CoinValue
+                value={
+                  econBreakdown.net >= 0
+                    ? `+${econBreakdown.net}`
+                    : `${econBreakdown.net}`
+                }
+                suffix="/turn"
+                size={12}
+                textStyle={[
                   styles.goldNet,
                   econBreakdown.net >= 0
                     ? styles.goldNetPos
                     : styles.goldNetNeg,
                 ]}
-              >
-                {econBreakdown.net >= 0
-                  ? `+${econBreakdown.net}`
-                  : `${econBreakdown.net}`}
-                /turn
-              </Text>
+              />
             ) : (
               <Text style={[styles.goldNet, { color: "transparent" }]}>
                 +0/turn

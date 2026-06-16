@@ -10,7 +10,7 @@ import {
   BOTTOM_BAR_H,
 } from "@/constants/gameConstants";
 import styles from "@/app/gameStyles";
-import { UnitIcon } from "@/components/UnitIcon";
+import { UnitIcon, CoinValue } from "@/components/UnitIcon";
 
 interface PurchaseRibbonProps {
   ribbonStyle: StyleProp<ViewStyle>;
@@ -97,21 +97,29 @@ export default function PurchaseRibbon({
                 : playerTowerFree
                   ? "FREE"
                   : `${item.cost}`;
+          // Only the bare numeric cost is a money value (gets a coin icon); the
+          // status labels ("Round 2+", "BUILT", "FREE", …) stay plain text.
+          const costIsMoney =
+            !round1Locked &&
+            !bridgeLocked &&
+            !cityAlreadyBuilt &&
+            !cityTooSmall &&
+            !playerTowerFree;
           const nextUpkeepLabel = (() => {
             if (isTower) {
               const cost = nextDefenseUpkeep("tower", selectedTerritoryDefenseCounts.tower);
-              return { text: `-${cost}/turn`, income: false };
+              return { value: `-${cost}`, income: false };
             }
             if (isCastle) {
               const cost = nextDefenseUpkeep("castle", selectedTerritoryDefenseCounts.castle);
-              return { text: `-${cost}/turn`, income: false };
+              return { value: `-${cost}`, income: false };
             }
             if (item.id === "city") {
-              return { text: `+${CITY_BONUS}/turn`, income: true };
+              return { value: `+${CITY_BONUS}`, income: true };
             }
             const upkeep = ENTITY_META[item.id as EntityType].upkeep;
             if (upkeep > 0) {
-              return { text: `-${upkeep}/turn`, income: false };
+              return { value: `-${upkeep}`, income: false };
             }
             return null;
           })();
@@ -139,29 +147,43 @@ export default function PurchaseRibbon({
               >
                 {item.name}
               </Text>
-              <Text
-                style={[
-                  styles.ribbonCost,
-                  !enabled && styles.ribbonDim,
-                  isArmed && styles.ribbonNameArmed,
-                  playerTowerFree && styles.ribbonCostFree,
-                  cityAlreadyBuilt && styles.ribbonCostBuilt,
-                ]}
-              >
-                {costLabel}
-              </Text>
-              {nextUpkeepLabel && (
+              {costIsMoney ? (
+                <CoinValue
+                  value={costLabel}
+                  size={13}
+                  textStyle={[
+                    styles.ribbonCost,
+                    !enabled && styles.ribbonDim,
+                    isArmed && styles.ribbonNameArmed,
+                  ]}
+                />
+              ) : (
                 <Text
                   style={[
                     styles.ribbonCost,
                     !enabled && styles.ribbonDim,
-                    { fontSize: 10, marginTop: 1 },
+                    isArmed && styles.ribbonNameArmed,
+                    playerTowerFree && styles.ribbonCostFree,
+                    cityAlreadyBuilt && styles.ribbonCostBuilt,
+                  ]}
+                >
+                  {costLabel}
+                </Text>
+              )}
+              {nextUpkeepLabel && (
+                <CoinValue
+                  value={nextUpkeepLabel.value}
+                  suffix="/turn"
+                  size={11}
+                  style={{ marginTop: 1 }}
+                  textStyle={[
+                    styles.ribbonCost,
+                    !enabled && styles.ribbonDim,
+                    { fontSize: 10 },
                     !nextUpkeepLabel.income && enabled && { color: "#E07060" },
                     nextUpkeepLabel.income && enabled && { color: "#70C870" },
                   ]}
-                >
-                  {nextUpkeepLabel.text}
-                </Text>
+                />
               )}
             </TouchableOpacity>
           );
