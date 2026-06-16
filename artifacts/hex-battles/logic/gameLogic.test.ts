@@ -11,6 +11,7 @@ import {
   advanceAttacksUsed,
   advanceCombatSpent,
   calcTerritoryIncome,
+  tileEconomicIncome,
   canImproveTile,
 } from "@/logic/gameLogic";
 
@@ -525,6 +526,31 @@ describe("calcTerritoryIncome", () => {
     // grass 2 + (forest rebel 0) + field 3 + grass 2 + city 2 = 9
     // + city-adjacency bonus: field at 2,0 is adjacent to same-owner city at 3,0 -> +1 = 10
     expect(calcTerritoryIncome(tiles, entities, cities, map)).toBe(10);
+  });
+});
+
+describe("tileEconomicIncome", () => {
+  const noCityNeighbor = () => false;
+  it("returns terrain income for a plain tile", () => {
+    expect(tileEconomicIncome(makeTile(0, 0, "player", "grass"), new Set(), noCityNeighbor)).toBe(2);
+    expect(tileEconomicIncome(makeTile(0, 0, "player", "desert"), new Set(), noCityNeighbor)).toBe(1);
+  });
+  it("adds CITY_BONUS when the tile itself is a city", () => {
+    // grass 2 + CITY_BONUS 2 = 4 — this is the value a rebel on a grass city denies.
+    expect(
+      tileEconomicIncome(makeTile(0, 0, "player", "grass"), new Set(["0,0"]), noCityNeighbor),
+    ).toBe(4);
+  });
+  it("adds +1 per adjacent owned city for an improved tile", () => {
+    // field 3 + one adjacent owned city = 4
+    expect(
+      tileEconomicIncome(makeTile(1, 0, "player", "field"), new Set(["0,0"]), (nk) => nk === "0,0"),
+    ).toBe(4);
+  });
+  it("does not add the adjacency bonus for an unimproved tile", () => {
+    expect(
+      tileEconomicIncome(makeTile(1, 0, "player", "grass"), new Set(["0,0"]), (nk) => nk === "0,0"),
+    ).toBe(2);
   });
 });
 

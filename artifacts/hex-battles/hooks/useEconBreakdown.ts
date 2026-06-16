@@ -10,6 +10,7 @@ import {
   nextDefenseUpkeep,
 } from "@/utils/hexGrid";
 import { HEX_EDGES, tileKey } from "@/utils/hexMath";
+import { tileEconomicIncome } from "@/logic/gameLogic";
 import { ENTITY_UPKEEP_ORDER } from "@/constants/gameConstants";
 
 export interface EconBreakdownResult {
@@ -157,7 +158,12 @@ export function useEconBreakdown({
     for (const t of selectedTerritory) {
       if (entities.get(t.key) !== "rebel") continue;
       rebelCount++;
-      rebelTotalLoss += TERRAIN_INCOME[t.terrain];
+      // A rebel denies the tile's ENTIRE income — terrain + CITY_BONUS +
+      // city-adjacency bonus — exactly as calcTerritoryIncome skips it in the
+      // real economy. totalIncome (grassIncome/cityIncome/cityImproveBonus)
+      // still counts the tile, so subtracting its full income nets it to zero.
+      // territoryKeys.has is the same-owner proxy used for cityImproveBonus above.
+      rebelTotalLoss += tileEconomicIncome(t, cities, (nk) => territoryKeys.has(nk));
     }
     const net = totalIncome - totalUpkeep - adminBurden - rebelTotalLoss;
     return {

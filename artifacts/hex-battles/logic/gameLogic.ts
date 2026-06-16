@@ -310,10 +310,35 @@ export function canImproveTile(o: {
 }
 
 /**
+ * Gross per-turn income of a single tile: terrain income, plus CITY_BONUS when
+ * the tile is a city, plus the city-adjacency improvement bonus (+1 per adjacent
+ * owned city for an improved tile). `isOwnedCityNeighbor` decides whether a
+ * neighbouring city counts as same-owner — callers supply the appropriate check
+ * (tileMap owner comparison in the real economy, a same-territory key set in the
+ * UI breakdown). Sharing this with calcTerritoryIncome keeps the rebel-loss
+ * offset and the actual income formula from drifting apart.
+ */
+export function tileEconomicIncome(
+  tile: HexTile,
+  cities: Set<string>,
+  isOwnedCityNeighbor: (neighborKey: string) => boolean,
+): number {
+  let income = (TERRAIN_INCOME[tile.terrain] ?? 0) + (cities.has(tile.key) ? CITY_BONUS : 0);
+  if (IMPROVED_TERRAINS.has(tile.terrain)) {
+    const [q, r] = tile.key.split(",").map(Number);
+    for (const { dir: [dq, dr] } of HEX_EDGES) {
+      const nk = tileKey(q + dq, r + dr);
+      if (cities.has(nk) && isOwnedCityNeighbor(nk)) income += 1;
+    }
+  }
+  return income;
+}
+
+/**
  * Single source of truth for a territory's per-turn income. Sums each non-rebel
- * tile's terrain income plus CITY_BONUS for city tiles, plus the city-adjacency
- * improvement bonus (added in a later task). Centralizing this avoids the income
- * formula drifting across the ~8 sites that previously inlined it.
+ * tile's gross income (see tileEconomicIncome) — a rebel on a tile denies that
+ * tile's ENTIRE income, terrain + city bonus + adjacency. Centralizing this
+ * avoids the income formula drifting across the ~8 sites that previously inlined it.
  */
 export function calcTerritoryIncome(
   territory: HexTile[],
@@ -324,15 +349,7 @@ export function calcTerritoryIncome(
   let income = 0;
   for (const t of territory) {
     if (entities.get(t.key) === "rebel") continue;
-    income += (TERRAIN_INCOME[t.terrain] ?? 0) + (cities.has(t.key) ? CITY_BONUS : 0);
-    if (IMPROVED_TERRAINS.has(t.terrain)) {
-      const [q, r] = t.key.split(",").map(Number);
-      for (const { dir: [dq, dr] } of HEX_EDGES) {
-        const nk = tileKey(q + dq, r + dr);
-        if (!cities.has(nk)) continue;
-        if (tileMap.get(nk)?.owner === t.owner) income += 1;
-      }
-    }
+    income += tileEconomicIncome(t, cities, (nk) => tileMap.get(nk)?.owner === t.owner);
   }
   return income;
 }
