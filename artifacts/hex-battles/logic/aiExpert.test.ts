@@ -307,6 +307,84 @@ describe("evaluatePosition", () => {
     expect(closer).toBeGreaterThan(farther);
   });
 
+  it("rewards cutting an enemy 3-strip in the middle, stranding units on single hexes (enemyIsolation)", () => {
+    // ai2 holds a 3-in-a-row strip with a peasant on each END tile; an ai1
+    // swordsman sits adjacent to the MIDDLE (1,-1). Capturing the middle (1,0)
+    // splits ai2 into two single hexes (0,0) and (2,0), each holding a peasant
+    // that the end-of-turn single-hex penalty will destroy. The enemyIsolation
+    // term must credit that cut — its contribution after the middle capture must
+    // exceed its contribution to the untouched strip (which has no isolated hex).
+    const tiles = [
+      makeTile(0, 0, "ai2"),
+      makeTile(1, 0, "ai2"),
+      makeTile(2, 0, "ai2"),
+      makeTile(1, -1, "ai1"),
+    ];
+    const s0: SimState = {
+      tileMap: makeTileMap(tiles),
+      entities: new Map<string, EntityType>([
+        ["0,0", "peasant"],
+        ["2,0", "peasant"],
+        ["1,-1", "swordsman"],
+      ]),
+      balances: new Map(),
+      cities: new Set(),
+    };
+    const afterMid = simulateAction(s0, { kind: "move", from: "1,-1", to: "1,0" }, "ai1");
+    const contribution = (s: SimState) =>
+      evaluatePosition("ai1", s.tileMap, s.entities, s.balances, s.cities, {
+        ...DEFAULT_WEIGHTS,
+        enemyIsolation: 50,
+      }) -
+      evaluatePosition("ai1", s.tileMap, s.entities, s.balances, s.cities, {
+        ...DEFAULT_WEIGHTS,
+        enemyIsolation: 0,
+      });
+    expect(contribution(afterMid)).toBeGreaterThan(contribution(s0));
+  });
+
+  it("counts breakthrough per target tile, not per attacker (no overkill on one tile)", () => {
+    // Two ai1 units both border the SAME lone capturable neutral tile (1,0).
+    // (0,0) and (1,-1) are mutually adjacent and each adjacent to (1,0), with no
+    // other non-owned neighbour. The breakthrough reward must credit the single
+    // takeable target once — not once per adjacent attacker — so the eval stops
+    // paying to pile 2-3 units onto one tile.
+    const map = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(1, -1, "ai1"),
+      makeTile(1, 0, "neutral"),
+    ]);
+    const w = { ...DEFAULT_WEIGHTS, breakthrough: 10 };
+    const w0 = { ...DEFAULT_WEIGHTS, breakthrough: 0 };
+    const contribution = (entities: Map<string, EntityType>) =>
+      evaluatePosition("ai1", map, entities, new Map(), new Set(), w) -
+      evaluatePosition("ai1", map, entities, new Map(), new Set(), w0);
+    const one = contribution(new Map<string, EntityType>([["0,0", "swordsman"]]));
+    const two = contribution(
+      new Map<string, EntityType>([["0,0", "swordsman"], ["1,-1", "swordsman"]]),
+    );
+    expect(two).toBe(one);
+  });
+
+  it("does not treat a lake/mountain neighbour as a real front (no drift toward water)", () => {
+    // A warrior whose only non-owned neighbour is a lake earns no border reward —
+    // water can never be captured, so it is not a front worth advancing toward.
+    const lakeMap = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "neutral", "lake"),
+    ]);
+    const entities = new Map<string, EntityType>([["0,0", "warrior"]]);
+    const withBorder = evaluatePosition("ai1", lakeMap, entities, new Map(), new Set(), {
+      ...DEFAULT_WEIGHTS,
+      borderBonus: 10,
+    });
+    const noBorder = evaluatePosition("ai1", lakeMap, entities, new Map(), new Set(), {
+      ...DEFAULT_WEIGHTS,
+      borderBonus: 0,
+    });
+    expect(withBorder).toBe(noBorder);
+  });
+
   it("values a scout's mobility over an equal-strength peasant (mobility term)", () => {
     // 3 grass tiles (income 6) sustain a scout's upkeep (6) just as a peasant's
     // (3), and a 20g reserve clears the buffer for both — so the deficit/buffer
@@ -432,6 +510,56 @@ describe("generateCandidateActions", () => {
         expect(t.terrain).not.toBe("lake");
       }
     }
+  });
+
+  it("does not offer an upgrade for an idle unit that cannot attack and is unthreatened", () => {
+    // 5-tile all-grass line (income 10 sustains a warrior's upkeep 9) with a lone
+    // peasant interior and no enemy anywhere. Upgrading to a warrior buys strength
+    // the unit cannot use this turn, with nothing to defend — the generator must
+    // not even offer the upgrade (the premature-upgrade bug).
+    const tileMap = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai1"),
+      makeTile(2, 0, "ai1"),
+      makeTile(3, 0, "ai1"),
+      makeTile(4, 0, "ai1"),
+    ]);
+    const entities = new Map<string, EntityType>([["2,0", "peasant"]]);
+    const balances = new Map<string, number>();
+    const terr = getContiguousTerritory(tileMap, "0,0", "ai1", entities);
+    balances.set(getTerritoryId(terr)!, 50);
+    const ctx = makeCtx(tileMap, entities, "ai1", balances);
+    const cands = generateCandidateActions(ctx, terr, 50);
+    expect(cands.some((c: ExpertAction) => c.kind === "upgrade")).toBe(false);
+  });
+
+  it("still offers an upgrade that unlocks a capture the un-upgraded unit cannot make", () => {
+    // Peasant (str1) next to an enemy tower (str1, ZoC1): it cannot take the tower,
+    // but a warrior (str2) can. The upgrade is the only route to that capture, so
+    // the gate must still offer it.
+    const tileMap = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(0, 1, "ai1"),
+      makeTile(0, 2, "ai1"),
+      makeTile(0, 3, "ai1"),
+      makeTile(1, 0, "ai1"),
+      makeTile(2, 0, "ai2"),
+    ]);
+    const entities = new Map<string, EntityType>([
+      ["1,0", "peasant"],
+      ["2,0", "tower"],
+    ]);
+    const balances = new Map<string, number>();
+    const terr = getContiguousTerritory(tileMap, "0,0", "ai1", entities);
+    balances.set(getTerritoryId(terr)!, 50);
+    const ctx = makeCtx(tileMap, entities, "ai1", balances);
+    const cands = generateCandidateActions(ctx, terr, 50);
+    expect(
+      cands.some(
+        (c: ExpertAction) =>
+          c.kind === "upgrade" && c.target === "1,0" && c.to === "warrior",
+      ),
+    ).toBe(true);
   });
 
   it("still generates cavalry sweep moves when an earlier unit fills the move cap", () => {
@@ -783,6 +911,76 @@ describe("runExpertTerritoryDecisionLoop", () => {
     const first = await firstExpertAction("0,0", ctx);
     expect(first?.kind).toBe("buy");
     if (first?.kind === "buy") expect(first.unitType).toBe("scout");
+  });
+
+  it("cuts the middle of an enemy 3-strip rather than nibbling an end (single-hex play)", async () => {
+    // ai2 holds a 3-in-a-row strip with a peasant on each END (0,0)/(2,0); the
+    // middle (1,0) is empty. An ai1 swordsman at (1,-1) can take the middle OR the
+    // (0,0) end. Cutting the middle strands BOTH end peasants on single hexes (the
+    // end-of-turn penalty then destroys them); taking the end kills one now but
+    // leaves the other two tiles contiguous. The expert should choose the middle.
+    const tileMap = makeTileMap([
+      makeTile(0, 0, "ai2"),
+      makeTile(1, 0, "ai2"),
+      makeTile(2, 0, "ai2"),
+      makeTile(1, -1, "ai1"),
+    ]);
+    const entities = new Map<string, EntityType>([
+      ["0,0", "peasant"],
+      ["2,0", "peasant"],
+      ["1,-1", "swordsman"],
+    ]);
+    const ctx = makeCtx(tileMap, entities, "ai1", new Map());
+
+    const first = await firstExpertAction("1,-1", ctx);
+    expect(first).toEqual({ kind: "move", from: "1,-1", to: "1,0" });
+  });
+
+  it("does not crowd a second unit onto a lone tile one unit can already take", async () => {
+    // Two ai1 peasants at the rear; a single capturable neutral tile (3,0) sits one
+    // sweep away. One peasant should take it — the other has no reason to pile onto
+    // the same tile. After the turn, no ai1 unit other than the capturer (which
+    // ends ON (3,0)) should sit adjacent to (3,0).
+    const tileMap = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai1"),
+      makeTile(2, 0, "ai1"),
+      makeTile(3, 0, "neutral"),
+    ]);
+    const entities = new Map<string, EntityType>([
+      ["0,0", "peasant"],
+      ["1,0", "peasant"],
+    ]);
+    const ws: AiWorkingState = {
+      tileMap,
+      entities,
+      balances: new Map(),
+      liveOwnerMap: new Map(),
+      graveyard: new Set(),
+      ruins: new Set(),
+      cities: new Set(),
+      spentUnits: new Set(),
+      partialMoves: new Map(),
+      attacksUsed: new Map(),
+      combatSpentUnits: new Set(),
+      freeTowerUsed: new Map(),
+    };
+    const tid = getTerritoryId(getContiguousTerritory(tileMap, "0,0", "ai1", entities))!;
+    ws.balances.set(tid, 0); // no buys — isolate the movement decision
+
+    await runOneAiTurnHeadless(ws, "ai1", 5, "expert");
+
+    const adj = (a: string, b: string) => {
+      const [aq, ar] = a.split(",").map(Number);
+      const [bq, br] = b.split(",").map(Number);
+      return Math.max(Math.abs(aq - bq), Math.abs(ar - br), Math.abs(-aq - ar + bq + br)) === 1;
+    };
+    const ai1Units = [...ws.entities.entries()].filter(
+      ([k, e]) => ws.tileMap.get(k)?.owner === "ai1" && e === "peasant",
+    );
+    const crowding = ai1Units.filter(([k]) => adj(k, "3,0")).length;
+    // At most the capturer's neighbours — i.e. no SECOND peasant parked next to (3,0).
+    expect(crowding).toBeLessThanOrEqual(1);
   });
 
   it("captures toward the enemy before capturing toward the void", async () => {

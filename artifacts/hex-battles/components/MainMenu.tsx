@@ -168,6 +168,8 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
                 { name: 'Medium', desc: 'The AI occasionally skips a move (about 20%) but still builds and expands steadily. A fair challenge for most players.' },
                 { name: 'Hard', desc: 'The AI uses a strategic decision tree and smart pathfinding to attack, defend, and expand as efficiently as possible, never skipping a move.' },
                 { name: 'Super Hard', desc: 'Plays like Hard, but also earns bonus income from every land hex it controls each round, giving it a growing economic edge over time.' },
+                { name: 'Expert', desc: 'Looks several moves ahead, weighing each action against your best reply. It concentrates force to break defences, cuts enemy territories apart to strand units on isolated hexes, and avoids leaving its own tiles open to a counterattack.' },
+                { name: 'Super Expert', desc: 'Plays like Expert, but also earns bonus income from every land hex it controls each round — the toughest opponent in the game.' },
               ].map(d => (
                 <View key={d.name} style={[styles.terrainRow, { marginBottom: 4 }]}>
                   <Text style={[styles.terrainName, { fontWeight: '700' }]}>{d.name}</Text>

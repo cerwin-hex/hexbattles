@@ -118,6 +118,18 @@ export interface EvalWeights {
   assetThreat: number;
   /** Reward per cluster the strongest opponent's territory is split into. */
   enemyFragmentation: number;
+  /**
+   * Reward for stranding enemy tiles on a *single* hex — the human "cut it in the
+   * middle" play. A territory reduced to one hex loses its whole balance and, at
+   * end of turn, its unit (→ graveyard) or building (→ ruins) to the single-hex
+   * penalty. Credited per isolated enemy hex with roughly what that penalty
+   * destroys (unit/fort strength, city bonus). Evaluated on absolute board state,
+   * so in the decision loop a pre-existing isolated hex appears in both the
+   * before and after positions and cancels — only a *newly* created cut is
+   * rewarded. This is what makes splitting a 3-in-a-row enemy strip in the middle
+   * outscore nibbling an end tile.
+   */
+  enemyIsolation: number;
   leader: number;
 }
 
@@ -145,6 +157,7 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   threat: 4,
   assetThreat: 8,
   enemyFragmentation: 2,
+  enemyIsolation: 3,
   leader: 1.5,
 };
 
@@ -228,8 +241,13 @@ export function evaluatePosition(
   let fortification = 0;
   let borderBonus = 0;
   let frontline = 0;
-  let breakthrough = 0;
-  let assault = 0;
+  // Breakthrough/assault are counted per distinct capturable *target* tile, not
+  // per adjacent attacker — so piling 2-3 units onto one lone tile no longer
+  // multiplies the reward (the capture only ever needs one unit). Massing force
+  // to crack a *defended* tile still pays: the target only enters the assault set
+  // once a unit strong enough to beat its ZoC is adjacent.
+  const captureTargets = new Set<string>();
+  const assaultTargets = new Set<string>();
   let enemyMilitary = 0;
   let advance = 0;
   let mobility = 0;
@@ -253,9 +271,18 @@ export function evaluatePosition(
     }
     if (t.owner !== owner) continue; // neutral-owned entity (none today) — skip
     const [kq, kr] = k.split(",").map(Number);
+    // A real front is a non-owned tile we could one day capture. Lake and
+    // mountain can never be taken, so a unit hugging only water/rock is not on a
+    // border worth holding — excluding them stops the AI drifting units toward
+    // impassable edges with nothing behind them.
     const onBorder = HEX_EDGES.some(({ dir: [dq, dr] }) => {
       const nt = tileMap.get(tileKey(kq + dq, kr + dr));
-      return !!nt && nt.owner !== owner;
+      return (
+        !!nt &&
+        nt.owner !== owner &&
+        nt.terrain !== "lake" &&
+        nt.terrain !== "mountain"
+      );
     });
     // Enemy-facing (the actual front) vs merely non-owned (incl. neutral/void).
     const enemyAdjacent = HEX_EDGES.some(({ dir: [dq, dr] }) => {
@@ -277,11 +304,9 @@ export function evaluatePosition(
         }
         advance += Math.max(0, ADVANCE_REACH - minD);
       }
-      // Breakthrough: can this unit capture an adjacent non-owned tile (any)?
-      // Assault: same, but only against a *defended* tile (ZoC ≥ 1) — rewards
-      // concentrating force into a unit strong enough to break real resistance.
-      let canCapture = false;
-      let canAssault = false;
+      // Breakthrough: tiles this unit can capture (any non-owned land tile).
+      // Assault: same, but only a *defended* tile (ZoC ≥ 1). Both record the
+      // TARGET tile, so two units adjacent to the same tile count it once.
       for (const { dir: [dq, dr] } of HEX_EDGES) {
         const nk = tileKey(kq + dq, kr + dr);
         const nt = tileMap.get(nk);
@@ -289,18 +314,19 @@ export function evaluatePosition(
         if (nt.terrain === "lake" || nt.terrain === "mountain") continue;
         const zoc = getMaxEnemyZoC(nk, owner, entities, tileMap);
         if (meta.strength > zoc) {
-          canCapture = true;
-          if (zoc >= 1) canAssault = true;
+          captureTargets.add(nk);
+          if (zoc >= 1) assaultTargets.add(nk);
         }
       }
-      if (canCapture) breakthrough += 1;
-      if (canAssault) assault += 1;
     } else if (e === "tower" || e === "castle") {
       fortification += meta.strength;
       if (onBorder) borderBonus += meta.strength;
       if (enemyAdjacent) frontline += meta.strength;
     }
   }
+
+  const breakthrough = captureTargets.size;
+  const assault = assaultTargets.size;
 
   // ── Positional value: every owned land tile's edges are classified by what
   // they face. Edges toward enemy territory are the contested front (valuable to
@@ -376,6 +402,30 @@ export function evaluatePosition(
   // cut move (exploiting a gap in their defence) outscores a plain grab. ──
   const enemyClusters = leaderOwner ? dtCountClusters(leaderOwner, tileMap) : 0;
 
+  // ── Enemy isolation: every enemy territory reduced to a single hex loses its
+  // whole balance and, at end of turn, its unit (→ grave) or building (→ ruins)
+  // to the single-hex penalty. Credit each isolated enemy hex with roughly what
+  // that penalty destroys. Evaluated on absolute state, so in the decision loop a
+  // pre-existing isolated hex cancels between the before/after positions — only a
+  // freshly cut one is rewarded (the "split the strip in the middle" play). ──
+  let enemyIsolated = 0;
+  const seenEnemyTerr = new Set<string>();
+  for (const t of tileMap.values()) {
+    if (t.owner === owner || t.owner === "neutral" || t.terrain === "mountain") continue;
+    if (seenEnemyTerr.has(t.key)) continue;
+    const eterr = getContiguousTerritory(tileMap, t.key, t.owner, entities);
+    for (const ct of eterr) seenEnemyTerr.add(ct.key);
+    if (eterr.length !== 1) continue;
+    const k = eterr[0].key;
+    const e = entities.get(k);
+    let v = 1; // the zeroed treasury / disrupted tile
+    if (e && e !== "rebel") {
+      if (ENTITY_META[e].isUnit || e === "tower" || e === "castle") v += ENTITY_META[e].strength;
+    }
+    if (cities.has(k)) v += CITY_BONUS;
+    enemyIsolated += v;
+  }
+
   const clusters = dtCountClusters(owner, tileMap);
 
   return (
@@ -398,7 +448,8 @@ export function evaluatePosition(
     clusters * w.fragmentation -
     threat * w.threat -
     assetThreat * w.assetThreat +
-    enemyClusters * w.enemyFragmentation -
+    enemyClusters * w.enemyFragmentation +
+    enemyIsolated * w.enemyIsolation -
     leaderIncome * w.leader
   );
 }
@@ -624,11 +675,18 @@ export function generateCandidateActions(
         !!pair[1] && ENTITY_META[pair[1]].isUnit && !ctx.spentUnits.has(pair[0]),
     );
 
+  // Border = adjacent to a capturable non-owned tile. Lake/mountain can never be
+  // taken, so a tile touching only water/rock is not a front (no reposition pull).
   const borderTiles = territory.filter((t) => {
     const [tq, tr] = t.key.split(",").map(Number);
     return HEX_EDGES.some(({ dir: [dq, dr] }) => {
       const nt = ctx.tileMap.get(tileKey(tq + dq, tr + dr));
-      return !!nt && nt.owner !== owner;
+      return (
+        !!nt &&
+        nt.owner !== owner &&
+        nt.terrain !== "lake" &&
+        nt.terrain !== "mountain"
+      );
     });
   });
 
@@ -804,6 +862,28 @@ export function generateCandidateActions(
   }
 
   // ── Upgrades: any owned entity with a defined upgrade we can afford ──
+  // Gate (mirrors the merge gate above): upgrading preserves the unit's action,
+  // so the eval would happily buy raw strength a turn early. Only offer an upgrade
+  // that (a) unlocks a capture the un-upgraded unit cannot make THIS turn, or
+  // (b) helps defend a threatened territory. Otherwise it is a premature upkeep
+  // hike — better to wait until the turn the strength is actually used.
+  const upgradeUnlocksCapture = (key: string, fromE: EntityType, toE: EntityType): boolean => {
+    if (!ENTITY_META[toE].isUnit) return false; // a fort can't attack
+    if (ctx.spentUnits.has(key)) return false; // no action left this turn
+    const sFrom = ENTITY_META[fromE].strength;
+    const sTo = ENTITY_META[toE].strength;
+    if (sTo <= sFrom) return false;
+    const [kq, kr] = key.split(",").map(Number);
+    return HEX_EDGES.some(({ dir: [dq, dr] }) => {
+      const nk = tileKey(kq + dq, kr + dr);
+      const nt = ctx.tileMap.get(nk);
+      if (!nt || nt.owner === owner) return false;
+      if (nt.terrain === "lake" || nt.terrain === "mountain") return false;
+      const zoc = getMaxEnemyZoC(nk, owner, ctx.entities, ctx.tileMap);
+      // The un-upgraded unit can't beat this ZoC (sFrom ≤ zoc) but the upgrade can.
+      return zoc < sTo && zoc >= sFrom;
+    });
+  };
   for (const t of territory) {
     const e = ctx.entities.get(t.key);
     if (!e) continue;
@@ -812,6 +892,7 @@ export function generateCandidateActions(
     const cost = ENTITY_META[up].cost - ENTITY_META[e].cost;
     const dUpk = ENTITY_META[up].upkeep - ENTITY_META[e].upkeep;
     if (cost > 0 && canAfford(cost, dUpk)) {
+      if (!defending && !upgradeUnlocksCapture(t.key, e, up)) continue;
       out.push({ kind: "upgrade", target: t.key, to: up, cost });
     }
   }
