@@ -62,17 +62,18 @@ function HexTileTerritoryLayerInner({
         const isCityZone = tile.cityBuffer || cities.has(tile.key);
         const liveOwner = liveTile.owner;
         const terrain = tile.terrain;
-        const isOwnedLake = terrain === "lake" && liveOwner && liveOwner !== "neutral";
+        // Lakes always keep the water fill (the water image overlays on top), even
+        // when owned via a bridge: ownership reads through the owner-coloured
+        // outer border drawn in BorderEdgeLayer, so the lake stays visibly water
+        // instead of being painted solid with the owner colour.
         const fill =
-          terrain === "lake" && !isOwnedLake
+          terrain === "lake"
             ? "#5BAFD6"
             : terrain === "mountain"
               ? TERRAIN_FILLS.mountain
-              : isOwnedLake
-                ? (TERRITORY_FILLS[liveOwner!] ?? TERRITORY_FILLS.neutral)
-                : isCityZone && liveOwner === "neutral"
-                  ? CITY_NEUTRAL_FILL
-                  : (TERRITORY_FILLS[liveOwner] ?? TERRITORY_FILLS.neutral);
+              : isCityZone && liveOwner === "neutral"
+                ? CITY_NEUTRAL_FILL
+                : (TERRITORY_FILLS[liveOwner] ?? TERRITORY_FILLS.neutral);
         return (
           <HexCell
             key={tile.key}

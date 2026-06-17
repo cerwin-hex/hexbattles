@@ -1314,7 +1314,11 @@ export default function GameScreen() {
               <BorderEdgeLayer
                 outerEdges={outerTerritoryEdges}
                 innerEdges={borderEdges}
-                showInnerEdges={showTerrainView}
+                // Always draw the owner-coloured inner border so every
+                // territory's outer boundary reads in its owner colour — even in
+                // the default player-colour view, where it integrates owned
+                // (bridged) lakes into the territory outline.
+                showInnerEdges={true}
                 hasSelection={hasSelection}
                 selectionEdges={selectionBorderEdges}
                 buildingSelectionEdges={buildingSelectionEdges}

@@ -92,6 +92,32 @@ describe("computeOuterTerritoryEdges incremental cache", () => {
     // Neutral non-impassable tile contributes no outer edges.
     expect(second.length).toBe(0);
   });
+
+  it("suppresses the black silhouette edge between an owned lake and its owner's land", () => {
+    const grass = tile(0, 0, "player", "grass");
+    const ownedLake = tile(1, 0, "player", "lake");
+    const { map, tileData, tileDataMap } = makeBoard([grass, ownedLake]);
+    const cache: { current: OuterEdgesCache } = { current: null };
+
+    const edges = computeOuterTerritoryEdges(
+      cache, tileData, map, tileDataMap, map, HEX_SIZE,
+    );
+    // The lake's 6 edges minus the one facing its owner's grass tile = 5.
+    expect(edgesNear(edges, 1000)).toBe(5);
+  });
+
+  it("keeps the black edge between a neutral lake and adjacent land", () => {
+    const grass = tile(0, 0, "player", "grass");
+    const neutralLake = tile(1, 0, "neutral", "lake");
+    const { map, tileData, tileDataMap } = makeBoard([grass, neutralLake]);
+    const cache: { current: OuterEdgesCache } = { current: null };
+
+    const edges = computeOuterTerritoryEdges(
+      cache, tileData, map, tileDataMap, map, HEX_SIZE,
+    );
+    // No ownership match, so all 6 of the lake's edges remain.
+    expect(edgesNear(edges, 1000)).toBe(6);
+  });
 });
 
 describe("computeSelectionBorderEdges", () => {

@@ -7,10 +7,11 @@ export interface BorderEdgeLayerProps {
   outerEdges: BorderEdge[];
   innerEdges: BorderEdge[];
   /**
-   * Whether to draw the owner-coloured inner boundary lines. True whenever the
-   * player-colour fill is hidden and terrain shows (a tile selection, or the
-   * dev-mode AI-turn terrain view), so ownership still reads via the coloured
-   * borders. Independent of `hasSelection` so the dev view gets them too.
+   * Whether to draw the owner-coloured inner boundary lines. Now permanently
+   * true: every territory's outer boundary reads in its owner colour in all
+   * views — the default player-colour view (where it integrates owned/bridged
+   * lakes into the territory outline), a tile selection, and the dev-mode
+   * AI-turn terrain view. Kept as a prop so the layer stays presentational.
    */
   showInnerEdges: boolean;
   hasSelection: boolean;

@@ -260,6 +260,14 @@ export function computeOuterTerritoryEdges(
 
       if (isImpassable) {
         if (neighborBase.terrain === tile.terrain) continue;
+        // An owned (bridged) lake belongs to its owner's territory. Suppress the
+        // black silhouette edge toward that owner's own land so the lake reads as
+        // part of the territory rather than a fenced-off hole — the owner-coloured
+        // inner border (computeBorderEdges) wraps its outward-facing edges instead.
+        if (tile.terrain === "lake" && liveOwner !== "neutral") {
+          const neighborLiveOwner = ownerOf(nk, neighborBase);
+          if (neighborLiveOwner === liveOwner) continue;
+        }
         const ptA = hexCornerPoint(cx, cy, HEX_SIZE, va);
         const ptB = hexCornerPoint(cx, cy, HEX_SIZE, vb);
         edges.push({
