@@ -33,6 +33,7 @@ export interface EconBreakdownResult {
   mineBonus: number;
   cityIncome: number;
   cityImproveBonus: number;
+  cityImproveCount: number;
   upkeepGroups: Array<{
     id: EntityType;
     name: string;
@@ -139,13 +140,17 @@ export function useEconBreakdown({
     // the equivalent same-owner check. Only Fields qualify (not sawmills/mines).
     const territoryKeys = new Set(selectedTerritory.map((t) => t.key));
     let cityImproveBonus = 0;
+    let cityImproveCount = 0;
     for (const t of selectedTerritory) {
       if (t.terrain !== "field") continue;
       const [q, r] = t.key.split(",").map(Number);
+      let fieldBonusHere = 0;
       for (const { dir: [dq, dr] } of HEX_EDGES) {
         const nk = tileKey(q + dq, r + dr);
-        if (cities.has(nk) && territoryKeys.has(nk)) cityImproveBonus += 1;
+        if (cities.has(nk) && territoryKeys.has(nk)) fieldBonusHere += 1;
       }
+      if (fieldBonusHere > 0) cityImproveCount += 1;
+      cityImproveBonus += fieldBonusHere;
     }
     const totalIncome =
       grassIncome +
@@ -187,6 +192,7 @@ export function useEconBreakdown({
       mineBonus,
       cityIncome,
       cityImproveBonus,
+      cityImproveCount,
       upkeepGroups,
       totalIncome,
       totalUpkeep,

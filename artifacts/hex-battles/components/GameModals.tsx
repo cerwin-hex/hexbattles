@@ -26,6 +26,7 @@ export interface EconBreakdown {
   mineBonus: number;
   cityIncome: number;
   cityImproveBonus: number;
+  cityImproveCount: number;
   upkeepGroups: {
     id: EntityType;
     name: string;
@@ -216,7 +217,7 @@ export default function GameModals({
               {econBreakdown && econBreakdown.cityImproveBonus > 0 && (
                 <View style={styles.econRow}>
                   <Text style={[styles.econRowLabel, styles.econIndentLabel]}>
-                    ↳ Adj. fields
+                    ↳ Adj. fields ×{econBreakdown.cityImproveCount}
                   </Text>
                   <CoinValue
                     value={`+${econBreakdown.cityImproveBonus}`}
