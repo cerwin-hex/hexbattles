@@ -106,13 +106,13 @@ export const CITY_BONUS = 1;
 
 /**
  * Gold a peasant pays to build each improvement, keyed by the TARGET terrain
- * (field 2, sawmill 3, mine 5). Use `improveCostFor` rather than reading this
+ * (field 2, sawmill 3, mine 4). Use `improveCostFor` rather than reading this
  * map directly.
  */
 const IMPROVE_COST_BY_TARGET: Partial<Record<TerrainType, number>> = {
   field:   2,
   sawmill: 3,
-  mine:    5,
+  mine:    4,
 };
 
 /** Gold cost for a peasant to build the given improvement terrain. */

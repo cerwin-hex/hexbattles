@@ -524,10 +524,10 @@ describe("improvement constants", () => {
     expect(IMPROVED_TERRAINS.has("mine")).toBe(true);
     expect(IMPROVED_TERRAINS.has("grass")).toBe(false);
   });
-  it("costs field 2, sawmill 3, mine 5 to improve", () => {
+  it("costs field 2, sawmill 3, mine 4 to improve", () => {
     expect(improveCostFor("field")).toBe(2);
     expect(improveCostFor("sawmill")).toBe(3);
-    expect(improveCostFor("mine")).toBe(5);
+    expect(improveCostFor("mine")).toBe(4);
   });
   it("reverts improved terrain to its base", () => {
     expect(baseTerrainFor("field")).toBe("grass");

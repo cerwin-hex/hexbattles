@@ -636,9 +636,9 @@ describe("canImproveTile", () => {
   it("requires a city in the territory", () => {
     expect(canImproveTile({ ...base, territoryHasCity: false })).toBe(false);
   });
-  it("rejects insufficient gold (field costs 2, mine costs 5)", () => {
+  it("rejects insufficient gold (field costs 2, mine costs 4)", () => {
     expect(canImproveTile({ ...base, terrain: "grass", balance: 1 })).toBe(false);
-    expect(canImproveTile({ ...base, terrain: "desert", balance: 4 })).toBe(false);
+    expect(canImproveTile({ ...base, terrain: "desert", balance: 3 })).toBe(false);
   });
   it("rejects non-improvable terrain (mountain) and already-improved terrain", () => {
     expect(canImproveTile({ ...base, terrain: "mountain" })).toBe(false);
