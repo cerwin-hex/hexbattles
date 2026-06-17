@@ -68,7 +68,7 @@ export function WelcomeModal() {
             <Section title={`You Are the ${playerEntry.label} Player`}>
               <Text style={styles.body}>
                 Your territories are shown in{' '}
-                <Text style={[styles.body, { color: playerEntry.border, fontFamily: 'Inter_700Bold' }]}>
+                <Text style={[styles.body, { color: playerEntry.fill, fontFamily: 'Inter_700Bold' }]}>
                   {playerEntry.label.toLowerCase()}
                 </Text>
                 . You start each game with only a few scattered pieces of land and a little gold. Every other colour belongs to an AI opponent — and they all want what's yours. (You can change your colour in Settings.)

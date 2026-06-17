@@ -171,7 +171,7 @@ function ColorSwatch({
       activeOpacity={0.75}
       style={[
         styles.swatch,
-        { backgroundColor: entry.fill, borderColor: active ? "#F0D080" : entry.border },
+        { backgroundColor: entry.fill, borderColor: active ? "#F0D080" : entry.fill },
         active && styles.swatchActive,
       ]}
     >

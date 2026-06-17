@@ -66,17 +66,16 @@ export const SELECTED_UNIT_RING = '#50FF50';
 
 interface ColorEntry {
   fill: string;
-  border: string;
   label: string;
 }
 
 export const COLOR_PALETTE: Record<ColorKey, ColorEntry> = {
-  blue: { fill: '#2E6EE8', border: '#6AAAF4', label: 'Blue' },
-  red: { fill: '#E03838', border: '#F06060', label: 'Red' },
-  green: { fill: '#38B838', border: '#60CC60', label: 'Green' },
-  orange: { fill: '#E08828', border: '#F0AA44', label: 'Orange' },
-  purple: { fill: '#C838C8', border: '#E060E0', label: 'Purple' },
-  teal: { fill: '#38C8C8', border: '#60E0E0', label: 'Teal' },
+  blue: { fill: '#2E6EE8', label: 'Blue' },
+  red: { fill: '#E03838', label: 'Red' },
+  green: { fill: '#38B838', label: 'Green' },
+  orange: { fill: '#E08828', label: 'Orange' },
+  purple: { fill: '#C838C8', label: 'Purple' },
+  teal: { fill: '#38C8C8', label: 'Teal' },
 };
 
 const AI_OWNER_ORDER = ['ai1', 'ai2', 'ai3', 'ai4', 'ai5'] as const;
@@ -94,16 +93,20 @@ export function buildOwnerColorMaps(playerColor: ColorKey): OwnerColorMaps {
   const borders: Record<string, string> = {};
   const labels: Record<string, string> = { player: 'You' };
 
+  // Each owner has a single colour (the fill). Both maps point at it: territory
+  // outlines and unit discs all derive from this one per-owner colour. (UnitToken
+  // lightens the fill toward white so units stay bright — see DISC_LIGHTEN there.)
+  // The `borders` map is kept as a separate field only for call-site clarity.
   const playerEntry = COLOR_PALETTE[playerColor];
   fills.player = playerEntry.fill;
-  borders.player = playerEntry.border;
+  borders.player = playerEntry.fill;
 
   AI_OWNER_ORDER.forEach((aiKey, i) => {
     const colorKey = remaining[i];
     if (!colorKey) return;
     const entry = COLOR_PALETTE[colorKey];
     fills[aiKey] = entry.fill;
-    borders[aiKey] = entry.border;
+    borders[aiKey] = entry.fill;
     labels[aiKey] = entry.label;
   });
 

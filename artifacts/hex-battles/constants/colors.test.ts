@@ -6,7 +6,16 @@ describe("buildOwnerColorMaps", () => {
   it("assigns the chosen color to the player slot", () => {
     const maps = buildOwnerColorMaps("red");
     expect(maps.fills.player).toBe(COLOR_PALETTE.red.fill);
-    expect(maps.borders.player).toBe(COLOR_PALETTE.red.border);
+    // Borders now reuse the fill colour rather than the lighter `border` variant.
+    expect(maps.borders.player).toBe(COLOR_PALETTE.red.fill);
+  });
+
+  it("maps borders to the fill colour, not the lighter border variant", () => {
+    const maps = buildOwnerColorMaps("blue");
+    expect(maps.borders.player).toBe(maps.fills.player);
+    for (const k of ["ai1", "ai2", "ai3", "ai4", "ai5"]) {
+      expect(maps.borders[k]).toBe(maps.fills[k]);
+    }
   });
 
   it("distributes the remaining five colors to ai1..ai5 without duplicates", () => {

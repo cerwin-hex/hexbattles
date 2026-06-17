@@ -55,10 +55,12 @@ function ringOutlineWidth(entityId: EntityType): number {
 
 /**
  * How far the disc fill is mixed toward white relative to the raw owner colour
- * (0 = owner colour as-is, 1 = white). Keeps the disc a touch lighter than the
- * territory border colour so the dark icon ink reads clearly.
+ * (0 = owner colour as-is, 1 = white). The owner colour is now the (darker) fill
+ * colour rather than the old lighter border variant, so this is tuned higher
+ * (~0.42, was 0.22) to keep unit discs about as bright as before — a least-fit
+ * across the palette put the matching amount near 0.40.
  */
-const DISC_LIGHTEN = 0.22;
+const DISC_LIGHTEN = 0.42;
 
 /** Mix a #rrggbb colour toward white by `amount` (0..1). Non-hex inputs pass through. */
 function lighten(hex: string, amount: number): string {
