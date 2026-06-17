@@ -20,8 +20,8 @@ export const ENTITY_META: Record<EntityType, EntityMeta> = {
   peasant:       { name: 'Peasant',   cost: 10, upkeep: 3,  isUnit: true,  strength: 1 },
   warrior:       { name: 'Warrior',   cost: 20, upkeep: 9,  isUnit: true,  strength: 2 },
   swordsman:     { name: 'Swordsman', cost: 30, upkeep: 27, isUnit: true,  strength: 3 },
-  scout:         { name: 'Scout',     cost: 15, upkeep: 6,  isUnit: true,  strength: 1, movement: 5, maxAttacks: 2 },
-  knight:        { name: 'Knight',    cost: 25, upkeep: 18, isUnit: true,  strength: 2, movement: 5, maxAttacks: 2 },
+  scout:         { name: 'Scout',     cost: 12, upkeep: 4,  isUnit: true,  strength: 1, movement: 5, maxAttacks: 2 },
+  knight:        { name: 'Knight',    cost: 24, upkeep: 12, isUnit: true,  strength: 2, movement: 5, maxAttacks: 2 },
   // NOTE: tower/castle upkeep here is the per-building BASE rate only.
   // Actual territory upkeep is LINEAR (n-th building costs n×base); use calcDefenseUpkeep/nextDefenseUpkeep.
   tower:         { name: 'Tower',     cost: 15, upkeep: 1,  isUnit: false, strength: 1 },

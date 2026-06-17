@@ -541,7 +541,7 @@ describe("runAiTerritoryDecisionLoop", () => {
   it("prefers buying a scout onto a rebel when the territory can afford it", async () => {
     // AI owns a 4-tile row with a rebel squatting on (3,0) and no units to move
     // onto it, so Priority G buys directly. Income = 6 (three non-rebel grass)
-    // sustains a scout (upkeep 6) given the rebel tile's own income, and the
+    // sustains a scout (upkeep 4) given the rebel tile's own income, and the
     // balance covers the cost — so the AI prefers a Scout over a peasant for
     // the charge tempo.
     const tiles = [
@@ -570,10 +570,10 @@ describe("runAiTerritoryDecisionLoop", () => {
 
   it("falls back to a peasant on a rebel when a scout is too costly to sustain", async () => {
     // AI owns just (0,0)+(1,0) with a rebel on (1,0) and no units. Income = 2
-    // (only (0,0) is non-rebel grass) + (1,0)'s 2 = 4, which cannot sustain a
-    // scout (upkeep 6: 4 − 6 < 0) but can sustain a peasant (upkeep 3). Balance
+    // ((0,0) grass) + (1,0)'s 1 (desert) = 3, which cannot sustain a
+    // scout (upkeep 4: 3 − 4 < 0) but can sustain a peasant (upkeep 3). Balance
     // 20 covers either cost, so the AI falls back to the affordable peasant.
-    const tiles = [makeTile(0, 0, "ai1"), makeTile(1, 0, "ai1")];
+    const tiles = [makeTile(0, 0, "ai1"), makeTile(1, 0, "ai1", "desert")];
     const entities = new Map<string, EntityType>([["1,0", "rebel"]]);
     const balances = new Map([["0,0", 20]]);
     const aiCtx = makeAiCtx(tiles, "ai1", entities, balances);
@@ -753,11 +753,11 @@ describe("runAiTerritoryDecisionLoop", () => {
       // Priority 2 first/second loops: no entities → skip.
       // Priority 2 third loop (buy unit):
       //   peasant / scout str 1 < eStr 2 → skip.
-      //   Within tier 2, cavalry is preferred: knight str 2 ≥ 2 ✓, cost=25, upkeep=18
-      //   canAfford(25, 18): 50≥25 && income(10) − (0+18) = −8 → 50 + (−8) = 42 ≥ 0 ✓
+      //   Within tier 2, cavalry is preferred: knight str 2 ≥ 2 ✓, cost=24, upkeep=12
+      //   canAfford(24, 12): 50≥24 && income(10) − (0+12) = −2 → 50 + (−2) = 48 ≥ 0 ✓
       //   borderPlacements: (3,0) is border tile adjacent to (4,0), empty,
       //     hexDistance(3,0, 4,0)=1 ≤ 5 ✓ → sorted closest first → (3,0)
-      //   → exec.buy("knight", "3,0", 25, false)
+      //   → exec.buy("knight", "3,0", 24, false)
       const { aiCtx } = makeDefendingSetup(
         new Map<string, EntityType>(),
         "warrior",
@@ -774,7 +774,7 @@ describe("runAiTerritoryDecisionLoop", () => {
         (exec.buy as ReturnType<typeof vi.fn>).mock.calls[0];
       expect(unitType).toBe("knight");
       expect(targetKey).toBe("3,0");
-      expect(cost).toBe(25);
+      expect(cost).toBe(24);
       expect(outside).toBe(false);
     });
   });

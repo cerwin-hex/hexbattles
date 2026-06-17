@@ -387,7 +387,7 @@ describe("evaluatePosition", () => {
   });
 
   it("values a scout's mobility over an equal-strength peasant (mobility term)", () => {
-    // 3 grass tiles (income 6) sustain a scout's upkeep (6) just as a peasant's
+    // 3 grass tiles (income 6) sustain a scout's upkeep (4) just as a peasant's
     // (3), and a 20g reserve clears the buffer for both — so the deficit/buffer
     // terms are equal and only mobility distinguishes the two.
     const map = makeTileMap([
@@ -892,7 +892,7 @@ describe("runExpertTerritoryDecisionLoop", () => {
 
   it("buys a mobile scout over a cheaper peasant when the territory can sustain it", async () => {
     // ai1 (income 6) can grab the neutral (1,0). With a healthy reserve (30) a
-    // scout (cost 15, upkeep 6) neither drains the cash buffer nor runs a deficit,
+    // scout (cost 12, upkeep 4) neither drains the cash buffer nor runs a deficit,
     // so it is the sustainable choice — and its movement 5 / 2 attacks grab far
     // more ground per turn than the cheaper peasant. The expert should prefer it
     // rather than spamming peasants. (At tight cash the buffer penalty correctly
