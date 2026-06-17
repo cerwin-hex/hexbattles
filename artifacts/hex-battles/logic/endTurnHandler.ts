@@ -31,6 +31,7 @@ export interface EndTurnParams {
   liveOwnerMap: Map<string, TerritoryOwner>;
   aiTurnRef: { current: boolean };
   setMoveHistory: Dispatch<SetStateAction<MoveHistorySnapshot[]>>;
+  setMutableTileMap: (m: Map<string, HexTile>) => void;
   setTerritoryBalances: (m: Map<string, number>) => void;
   setEntities: (m: Map<string, EntityType>) => void;
   setGraveyard: (s: Set<string>) => void;
@@ -69,10 +70,10 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
     aiDifficulty,
     graveyard,
     ruins,
-    mutableTileMap,
     liveOwnerMap,
     aiTurnRef,
     setMoveHistory,
+    setMutableTileMap,
     setTerritoryBalances,
     setEntities,
     setGraveyard,
@@ -93,7 +94,15 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
   if (isAiTurn || gameResult !== null) return;
   setMoveHistory([]);
 
-  const prevTileMapSnapshot = new Map(mutableTileMap);
+  // `activeTileMap` is the live React-state map (it equals `mutableTileMap`
+  // during play). Never mutate it in place: doing so corrupts downstream
+  // incremental caches that diff against the prior map (see the border-edge
+  // cache, which would miss a bankruptcy owner→neutral flip). Instead work on a
+  // private clone, apply every ownership change to it, and commit it once via
+  // `setMutableTileMap`. `prevTileMapSnapshot` stays frozen as the pre-turn
+  // state for `applySingleHexPenalty`.
+  const prevTileMapSnapshot = new Map(activeTileMap);
+  const nextTileMap = new Map(activeTileMap);
   const nextBalances = new Map(territoryBalances);
   let nextEntities = new Map(entities);
   const visited = new Set<string>();
@@ -102,10 +111,10 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
 
   // Income and upkeep are suspended in round 1
   if (turn !== 1) {
-    for (const tile of Array.from(activeTileMap.values())) {
+    for (const tile of Array.from(nextTileMap.values())) {
       if (tile.owner !== "player" || visited.has(tile.key)) continue;
       const territory = getContiguousTerritory(
-        activeTileMap,
+        nextTileMap,
         tile.key,
         "player",
         nextEntities,
@@ -113,7 +122,7 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
       for (const t of territory) visited.add(t.key);
       const territoryId = getTerritoryId(territory);
       if (!territoryId) continue;
-      const income = calcTerritoryIncome(territory, nextEntities, cities, activeTileMap);
+      const income = calcTerritoryIncome(territory, nextEntities, cities, nextTileMap);
       const upkeep = calcTerritoryUpkeep(territory, nextEntities);
       const current = nextBalances.get(territoryId) ?? 0;
       const delta = income - upkeep;
@@ -130,7 +139,7 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
           const e = nextEntities.get(t.key);
           if (e && ENTITY_META[e].isUnit) {
             unitUpkeepSaved += ENTITY_META[e].upkeep;
-            if (mutableTileMap.get(t.key)?.terrain === "lake") {
+            if (nextTileMap.get(t.key)?.terrain === "lake") {
               nextEntities.set(t.key, "bridge");
             } else {
               nextEntities.delete(t.key);
@@ -145,8 +154,8 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
               nextEntities.delete(t.key);
               nextRuins.add(t.key);
               if (e === "bridge") {
-                const lt = mutableTileMap.get(t.key);
-                if (lt) mutableTileMap.set(t.key, { ...lt, owner: "neutral" });
+                const lt = nextTileMap.get(t.key);
+                if (lt) nextTileMap.set(t.key, { ...lt, owner: "neutral" });
               }
             }
           }
@@ -170,10 +179,10 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
   if (turn > 2) {
     for (const aiOwner of aiOwners) {
       const aiVisited = new Set<string>();
-      for (const tile of Array.from(activeTileMap.values())) {
+      for (const tile of Array.from(nextTileMap.values())) {
         if (tile.owner !== aiOwner || aiVisited.has(tile.key)) continue;
         const territory = getContiguousTerritory(
-          activeTileMap,
+          nextTileMap,
           tile.key,
           aiOwner,
           nextEntities,
@@ -182,7 +191,7 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
         const territoryId = getTerritoryId(territory);
         if (!territoryId) continue;
         if (!nextBalances.has(territoryId)) nextBalances.set(territoryId, 0);
-        const income = calcTerritoryIncome(territory, nextEntities, cities, activeTileMap);
+        const income = calcTerritoryIncome(territory, nextEntities, cities, nextTileMap);
         const landTileCount = territory.filter(t => t.terrain !== "lake").length;
         // Income bonus tiers: super_hard = "hard + bonus income"; super_expert =
         // "smart brain + bonus income" (the very top). Plain expert is the smart
@@ -206,7 +215,7 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
             const e = nextEntities.get(t.key);
             if (e && ENTITY_META[e].isUnit) {
               unitUpkeepSaved += ENTITY_META[e].upkeep;
-              if (mutableTileMap.get(t.key)?.terrain === "lake") {
+              if (nextTileMap.get(t.key)?.terrain === "lake") {
                 nextEntities.set(t.key, "bridge");
               } else {
                 nextEntities.delete(t.key);
@@ -221,8 +230,8 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
                 nextEntities.delete(t.key);
                 nextRuins.add(t.key);
                 if (e === "bridge") {
-                  const lt = mutableTileMap.get(t.key);
-                  if (lt) mutableTileMap.set(t.key, { ...lt, owner: "neutral" });
+                  const lt = nextTileMap.get(t.key);
+                  if (lt) nextTileMap.set(t.key, { ...lt, owner: "neutral" });
                 }
               }
             }
@@ -241,7 +250,7 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
   if (turn !== 1) {
     applySingleHexPenalty(
       prevTileMapSnapshot,
-      mutableTileMap,
+      nextTileMap,
       nextBalances,
       nextEntities,
       nextGraveyard,
@@ -256,14 +265,14 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
     // whole pass quadratic once graveyard/ruins accumulated late in the game.
     nextEntities = new Map(nextEntities);
     for (const gravKey of graveyard) {
-      const gravTile = activeTileMap.get(gravKey);
+      const gravTile = nextTileMap.get(gravKey);
       if (gravTile?.terrain === "lake") continue;
       if (!nextEntities.has(gravKey) && Math.random() < 0.75) {
         nextEntities.set(gravKey, "rebel");
       }
     }
     for (const ruinKey of ruins) {
-      const ruinTile = activeTileMap.get(ruinKey);
+      const ruinTile = nextTileMap.get(ruinKey);
       if (ruinTile?.terrain === "lake") continue;
       if (!nextEntities.has(ruinKey) && Math.random() < 0.75) {
         nextEntities.set(ruinKey, "rebel");
@@ -280,7 +289,7 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
     ];
     const preSpawnEntities = nextEntities;
     const rebelSpawns = new Map(nextEntities);
-    for (const tile of activeTileMap.values()) {
+    for (const tile of nextTileMap.values()) {
       if (!allOwners.includes(tile.owner)) continue;
       if (tile.terrain === "mountain" || tile.terrain === "lake") continue;
       if (preSpawnEntities.has(tile.key)) continue;
@@ -302,6 +311,7 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
     nextEntities = rebelSpawns;
   }
 
+  setMutableTileMap(nextTileMap);
   setTerritoryBalances(nextBalances);
   setEntities(nextEntities);
   setGraveyard(nextGraveyard);
@@ -319,11 +329,11 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
   setAttacksUsed(new Map());
   closeRibbon();
 
-  if (!checkWinLoss(mutableTileMap)) {
+  if (!checkWinLoss(nextTileMap)) {
     setIsAiTurn(true);
     aiTurnRef.current = true;
     runAiTurn(
-      mutableTileMap,
+      nextTileMap,
       nextEntities,
       nextBalances,
       turn,

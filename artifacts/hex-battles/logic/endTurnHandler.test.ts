@@ -41,6 +41,7 @@ function makeParams(overrides: Partial<EndTurnParams> = {}): EndTurnParams {
     liveOwnerMap: new Map(),
     aiTurnRef: { current: false },
     setMoveHistory: vi.fn(),
+    setMutableTileMap: vi.fn(),
     setTerritoryBalances: vi.fn(),
     setEntities: vi.fn(),
     setGraveyard: vi.fn(),
@@ -300,6 +301,38 @@ describe("bankruptcy — unit liquidation", () => {
     const newRuins = (params.setRuins as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(newEntities.has("0,0")).toBe(false);
     expect(newRuins.has("0,0")).toBe(true);
+  });
+
+  it("releases a demolished bridge's lake tile to neutral without mutating the input map", () => {
+    // Exact repro: a 2-tile territory — grass with a rebel (income suppressed)
+    // plus a bridged lake tile. Income 0, bridge upkeep 1 → bankrupt → the
+    // bridge is demolished to a ruin and its lake tile must be released to
+    // neutral. The committed map (setMutableTileMap) must reflect that, and the
+    // ORIGINAL input maps must be left untouched (no in-place mutation, or the
+    // border-edge cache would never notice the ownership change).
+    const grass = makeTile(0, 0, "player", "grass");
+    const lake = makeTile(1, 0, "player", "lake");
+    const tiles = [grass, lake];
+    const activeMap = tileMap(tiles);
+    const mutableMap = tileMap(tiles.map((t) => ({ ...t })));
+    const params = makeParams({
+      turn: 2,
+      activeTileMap: activeMap,
+      mutableTileMap: mutableMap,
+      territoryBalances: new Map([[getTerritoryId(getContiguousTerritory(activeMap, "0,0", "player", ents([["0,0", "rebel"], ["1,0", "bridge"]])))!, 0]]),
+      entities: ents([["0,0", "rebel"], ["1,0", "bridge"]]),
+    });
+
+    handleEndTurnLogic(params);
+
+    const committed = (params.setMutableTileMap as ReturnType<typeof vi.fn>).mock.calls[0][0] as Map<string, HexTile>;
+    const newRuins = (params.setRuins as ReturnType<typeof vi.fn>).mock.calls[0][0] as Set<string>;
+    // The lake tile is released in the committed map…
+    expect(committed.get("1,0")?.owner).toBe("neutral");
+    expect(newRuins.has("1,0")).toBe(true);
+    // …and the input maps are never mutated in place.
+    expect(activeMap.get("1,0")?.owner).toBe("player");
+    expect(mutableMap.get("1,0")?.owner).toBe("player");
   });
 
   it("clears UI state on end turn", () => {

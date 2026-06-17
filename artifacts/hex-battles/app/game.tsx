@@ -1175,6 +1175,7 @@ export default function GameScreen() {
       liveOwnerMap,
       aiTurnRef,
       setMoveHistory,
+      setMutableTileMap,
       setTerritoryBalances,
       setEntities,
       setGraveyard,
