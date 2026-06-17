@@ -332,6 +332,10 @@ export interface FreeForAllConfig {
   /** One difficulty per seat (length N, N seats labelled ai1..aiN). */
   difficulties: Difficulty[];
   maxTurns: number;
+  /** Optional hook fired right before an owner's turn runs — used to switch a
+   *  per-seat brain variant for new-vs-old Expert A/B comparisons (see
+   *  `mirrorAbFFA`). */
+  onBeforeOwnerTurn?: (owner: TerritoryOwner) => void;
 }
 
 export interface FreeForAllResult {
@@ -342,6 +346,8 @@ export interface FreeForAllResult {
   computeMs: number;
   /** Number of AI owner-turns executed. */
   ownerTurns: number;
+  /** Lowest territory balance seen at any point (must stay >= 0: no over-spend). */
+  minBalance: number;
 }
 
 /**
@@ -394,6 +400,7 @@ export async function playFreeForAll(cfg: FreeForAllConfig): Promise<FreeForAllR
 
     let computeMs = 0;
     let ownerTurns = 0;
+    let minBalance = 0;
     let turn = 1;
     for (; turn <= cfg.maxTurns; turn++) {
       if (turn >= 3) creditIncome(ws, diffByOwner, seats);
@@ -403,10 +410,15 @@ export async function playFreeForAll(cfg: FreeForAllConfig): Promise<FreeForAllR
         ws.partialMoves = new Map();
         ws.attacksUsed = new Map();
         ws.combatSpentUnits = new Set();
+        cfg.onBeforeOwnerTurn?.(owner);
         const t0 = performance.now();
         await runAiTurn(ws, cbs, [owner], turn, diffByOwner[owner]);
         computeMs += performance.now() - t0;
         ownerTurns++;
+        // Invariant: no territory may ever hold a negative balance (over-spend).
+        for (const bal of ws.balances.values()) {
+          if (bal < minBalance) minBalance = bal;
+        }
       }
       const alive = seats.filter((s) => landTiles(ws, s) > 0);
       if (alive.length <= 1) {
@@ -435,6 +447,7 @@ export async function playFreeForAll(cfg: FreeForAllConfig): Promise<FreeForAllR
       turns: Math.min(turn, cfg.maxTurns),
       computeMs,
       ownerTurns,
+      minBalance,
     };
   } finally {
     Math.random = origRandom;
@@ -481,4 +494,58 @@ export async function playSeries(
     else winsB++;
   }
   return { winsA, winsB, draws, games: n };
+}
+
+export interface MirrorAbResult {
+  /** Games won by the rotating "new" seat. */
+  newWins: number;
+  /** Games won by some "current" seat. */
+  otherWins: number;
+  draws: number;
+  games: number;
+  /** Expected wins for the new seat if "new" were strength-neutral (games / seats).
+   *  Compare `newWins` against this: well above ⇒ stronger, well below ⇒ weaker. */
+  neutral: number;
+}
+
+/**
+ * Reusable new-vs-old A/B harness for evaluating a FUTURE change to the Expert
+ * brain in a multi-AI free-for-all — the canonical way to judge an Expert tweak
+ * (Expert-vs-Hard is saturated and cannot see a small delta; see the memory note).
+ *
+ * Every seat is Expert. One rotating seat plays the "new" variant, the rest play
+ * "current"; the rotation cancels seat/map bias. The caller defines what "new" and
+ * "current" mean by toggling the relevant expert knob inside `apply` — e.g. for a
+ * weight tweak: `(v) => __setExpertWeightsOverride(v === "new" ? NEW_WEIGHTS : null)`,
+ * or for a behaviour flag: `(v) => __setExpertSearchConfig(v === "new" ? {...} : null)`.
+ * `apply` MUST fully reset to the shipping brain on "current" so other seats are
+ * unmodified.
+ *
+ * Returns aggregate wins plus the strength-neutral baseline (`neutral`). Judge a
+ * change by `newWins` vs `neutral` over enough seeds (30+ for a real signal at
+ * these seat counts — a handful is only a smoke check).
+ */
+export async function mirrorAbFFA(
+  apply: (variant: "new" | "current", owner: TerritoryOwner) => void,
+  opts: { seats: number; tiles: number; seeds: number; maxTurns: number; baseSeed?: number },
+): Promise<MirrorAbResult> {
+  const { seats, tiles, seeds, maxTurns, baseSeed = 4000 } = opts;
+  const seatIds = ALL_SEATS.slice(0, seats);
+  let newWins = 0;
+  let otherWins = 0;
+  let draws = 0;
+  for (let s = 0; s < seeds; s++) {
+    const newOwner = seatIds[s % seats]; // rotate the new seat to cancel bias
+    const r = await playFreeForAll({
+      seed: baseSeed + s,
+      tiles,
+      maxTurns,
+      difficulties: new Array(seats).fill("expert" as Difficulty),
+      onBeforeOwnerTurn: (owner) => apply(owner === newOwner ? "new" : "current", owner),
+    });
+    if (r.winner === "draw") draws++;
+    else if (r.winner === newOwner) newWins++;
+    else otherWins++;
+  }
+  return { newWins, otherWins, draws, games: seeds, neutral: seeds / seats };
 }

@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   playMatch,
-  playSeries,
   playFreeForAll,
+  mirrorAbFFA,
   runOneAiTurnHeadless,
 } from "@/logic/aiSelfPlay";
 import { __setExpertSearchConfig, __setExpertCandidateMode, __setExpertMaxIters } from "@/logic/aiExpert";
@@ -102,31 +102,10 @@ describe("no over-spend invariant", () => {
 });
 
 describe("expert strength (self-play)", () => {
-  fullIt(
-    "clearly beats hard on equal economy (proves the brain)",
-    async () => {
-      const r = await playSeries(24, "expert", "hard", { tiles: 50, maxTurns: 45 });
-      // Observed 22-2; require a clear majority.
-      expect(r.winsA).toBeGreaterThanOrEqual(18);
-      expect(r.winsA).toBeGreaterThan(r.winsB);
-    },
-    600000,
-  );
-
-  fullIt(
-    "super_expert (smart brain + bonus economy) beats super_hard",
-    async () => {
-      const r = await playSeries(32, "super_expert", "super_hard", {
-        tiles: 50,
-        maxTurns: 45,
-      });
-      // Observed ~69%; require > 55% over 32 games.
-      expect(r.winsA / r.games).toBeGreaterThan(0.55);
-      expect(r.winsA).toBeGreaterThan(r.winsB);
-    },
-    600000,
-  );
-
+  // Expert tiers are NOT tested against the Hard tiers: those match-ups are
+  // saturated (Expert ~92% vs hard; super_expert ~69% vs super_hard) and so blind
+  // to the small deltas that matter when tuning Expert. Changes to the Expert brain
+  // are judged new-vs-old instead (see `mirrorAbFFA` / the perf-neutrality A/B).
   fullIt(
     "super_expert is the dominant seat in 4-AI free-for-alls (3-4 opponents)",
     async () => {
@@ -176,6 +155,61 @@ describe("expert strength (self-play)", () => {
       // High variance over 16 snowball games — require non-regression on aggregate.
       // Observed: 1-ply 15/16, 2-ply 16/16.
       expect(twoPlyWins).toBeGreaterThanOrEqual(onePlyWins);
+    },
+    600000,
+  );
+
+  fullIt(
+    "expert is robust with 1-4 AI opponents on 100-tile boards (incl. the 3-opponent config)",
+    async () => {
+      // Covers every opponent count the game ships (1-4 AI ⇒ 2-5 all-Expert seats),
+      // on the 100-tile boards the game is most often played on, with extra weight
+      // on the most-played setup: 100 tiles + 3 Expert opponents (4 seats). Equal-
+      // difficulty FFAs are highly seat/seed dependent, so this asserts ROBUSTNESS,
+      // not a win rate: every game must run to a clean terminal state with a valid
+      // winner and sane land totals — and, the key invariant, no territory ever
+      // over-spends (minBalance >= 0), even with several AIs grinding a big board.
+      const configs: Array<{ seats: number; seeds: number }> = [
+        { seats: 2, seeds: 1 }, // 1 AI opponent (1v1 is covered in depth above)
+        { seats: 3, seeds: 2 }, // 2 AI opponents
+        { seats: 4, seeds: 3 }, // 3 AI opponents — the most-played setup
+        { seats: 5, seeds: 2 }, // 4 AI opponents
+      ];
+      for (const { seats, seeds } of configs) {
+        const seatIds = (["ai1", "ai2", "ai3", "ai4", "ai5"] as TerritoryOwner[]).slice(0, seats);
+        for (let s = 0; s < seeds; s++) {
+          const r = await playFreeForAll({
+            seed: 2400 + seats * 10 + s,
+            tiles: 100,
+            difficulties: new Array(seats).fill("expert" as Difficulty),
+            maxTurns: 32,
+          });
+          expect(r.minBalance).toBeGreaterThanOrEqual(0); // no over-spend
+          expect(r.ownerTurns).toBeGreaterThan(0);
+          const total = seatIds.reduce((acc, sd) => acc + (r.land[sd] ?? 0), 0);
+          expect(total).toBeGreaterThan(0);
+          expect([...seatIds, "draw"]).toContain(r.winner);
+        }
+      }
+    },
+    900000,
+  );
+
+  fullIt(
+    "new-vs-old mirror A/B harness is wired and unbiased (tool for future Expert tuning)",
+    async () => {
+      // `mirrorAbFFA` is the reusable harness for judging a FUTURE Expert change:
+      // one rotating "new" seat vs the rest "current", all Expert, on the multi-AI
+      // boards the game is actually played on. Real use sets a toggle inside
+      // apply("new") (e.g. __setExpertWeightsOverride) and runs 30+ seeds. Here the
+      // apply is a no-op, so "new" === "current": this only proves the plumbing —
+      // seat rotation, win attribution, and the neutral baseline — is correct, so a
+      // real tuning run can be trusted. (Kept small; it tests the tool, not strength.)
+      const r = await mirrorAbFFA(() => {}, { seats: 3, tiles: 50, seeds: 3, maxTurns: 25 });
+      expect(r.games).toBe(3);
+      expect(r.newWins + r.otherWins + r.draws).toBe(r.games);
+      expect(r.neutral).toBeCloseTo(1); // 3 games / 3 seats
+      expect(r.newWins).toBeGreaterThanOrEqual(0);
     },
     600000,
   );
