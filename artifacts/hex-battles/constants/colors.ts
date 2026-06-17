@@ -54,6 +54,7 @@ export const TERRAIN_FILLS: Record<string, string> = {
   forest: '#2D6A2D',
   field: '#E0C04A',
   sawmill: '#6B4A2A',
+  mine: '#9BA0A6',
 };
 
 export const CITY_NEUTRAL_FILL = '#C0B8B0';

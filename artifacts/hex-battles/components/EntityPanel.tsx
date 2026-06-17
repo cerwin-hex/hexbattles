@@ -3,7 +3,7 @@ import { Text, TouchableOpacity, View } from "react-native";
 import {
   ENTITY_META,
   UNIT_UPGRADE,
-  IMPROVE_COST,
+  improveCostFor,
   improveTargetFor,
   getContiguousTerritory,
   getTerritoryId,
@@ -58,11 +58,11 @@ export default function EntityPanel({
       : 0;
   const isSpent = spentUnits.has(selectedEntityKey);
   const entityTile = activeTileMap.get(selectedEntityKey);
-  const entityTerritoryId = entityTile
-    ? getTerritoryId(
-        getContiguousTerritory(activeTileMap, selectedEntityKey, "player", entities),
-      )
-    : null;
+  const entityTerritory = entityTile
+    ? getContiguousTerritory(activeTileMap, selectedEntityKey, "player", entities)
+    : [];
+  const entityTerritoryId = entityTile ? getTerritoryId(entityTerritory) : null;
+  const territoryHasCity = entityTerritory.some((t) => cities.has(t.key));
   const entityTerritoryBalance = entityTerritoryId
     ? (territoryBalances.get(entityTerritoryId) ?? 0)
     : 0;
@@ -76,6 +76,10 @@ export default function EntityPanel({
     : !!entityTerritoryId && entityTerritoryBalance >= removeCost;
 
   const improveTarget = entityTile ? improveTargetFor(entityTile.terrain) : null;
+  const improveCost = improveTarget ? improveCostFor(improveTarget) : 0;
+  const improveLabel = improveTarget
+    ? `Build ${improveTarget.charAt(0).toUpperCase()}${improveTarget.slice(1)}`
+    : "Build";
   const improveEnabled =
     !!entityTile &&
     !!improveTarget &&
@@ -85,6 +89,7 @@ export default function EntityPanel({
       isSpent,
       balance: entityTerritoryBalance,
       isCity: cities.has(selectedEntityKey),
+      territoryHasCity,
     });
 
   return (
@@ -182,7 +187,7 @@ export default function EntityPanel({
               !improveEnabled && styles.buildBtnTextDisabled,
             ]}
           >
-            ⚒ Improve ({IMPROVE_COST})
+            ⚒ {improveLabel} ({improveCost})
           </Text>
         </TouchableOpacity>
       )}

@@ -130,17 +130,17 @@ export function WelcomeModal() {
               <View style={styles.incomeBox}>
                 <Text style={styles.incomeRow}>Grass / Forest  →  <Text style={styles.gold}>2 gold</Text> per turn</Text>
                 <Text style={styles.incomeRow}>Desert  →  <Text style={styles.gold}>1 gold</Text> per turn</Text>
-                <Text style={styles.incomeRow}>City  →  <Text style={styles.gold}>+2 gold bonus</Text> on top of terrain</Text>
+                <Text style={styles.incomeRow}>City  →  <Text style={styles.gold}>+1 gold bonus</Text> on top of terrain</Text>
                 <Text style={styles.incomeRow}>Mountain / Lake  →  <Text style={styles.dimGold}>0 gold</Text></Text>
               </View>
             </Section>
 
             <Section title="Improvements">
               <Text style={styles.body}>
-                A <Text style={styles.highlight}>Peasant</Text> can improve the tile it stands on for <Text style={styles.gold}>3 gold</Text>, turning grass into a <Text style={styles.highlight}>Field</Text> and forest into a <Text style={styles.highlight}>Sawmill</Text>. Improving uses up the peasant's action for that turn.
+                Once a territory has a <Text style={styles.highlight}>City</Text>, a <Text style={styles.highlight}>Peasant</Text> there can improve the tile it stands on: grass into a <Text style={styles.highlight}>Field</Text> (<Text style={styles.gold}>2 gold</Text>), forest into a <Text style={styles.highlight}>Sawmill</Text> (<Text style={styles.gold}>3 gold</Text>), or desert into a <Text style={styles.highlight}>Mine</Text> (<Text style={styles.gold}>5 gold</Text>). Improving uses up the peasant's action for that turn.
               </Text>
               <Text style={[styles.body, { marginTop: 8 }]}>
-                An improved tile earns <Text style={styles.highlight}>+1 gold</Text> every turn, and an extra <Text style={styles.highlight}>+1</Text> while it sits next to one of your cities. Founding a city, tower or castle on an improved tile destroys the improvement, so build elsewhere if you want to keep it.
+                A <Text style={styles.highlight}>Field</Text> earns <Text style={styles.highlight}>+1 gold</Text> every turn, plus an extra <Text style={styles.highlight}>+1</Text> while it sits next to one of your cities. A <Text style={styles.highlight}>Sawmill</Text> earns <Text style={styles.highlight}>+1 gold</Text> and costs only 1 movement to enter. A <Text style={styles.highlight}>Mine</Text> earns <Text style={styles.highlight}>+2 gold</Text>. Founding a city, tower or castle on an improved tile destroys the improvement, so build elsewhere if you want to keep it.
               </Text>
             </Section>
 

@@ -74,7 +74,7 @@ export default function PurchaseRibbon({
           const isBridge = item.id === "bridge";
           const round1Locked = turn === 1 && !isTower;
           const cityAlreadyBuilt = item.id === "city" && territoryHasCity;
-          const cityTooSmall = item.id === "city" && selectedTerritory.length < 6;
+          const cityTooSmall = item.id === "city" && selectedTerritory.length < 5;
           const cityLocked = cityAlreadyBuilt || cityTooSmall;
           const bridgeLocked = isBridge && !hasBridgePlacementAvailable;
           const playerUsedTilesSet = freeTowerUsedTiles.get("player") ?? new Set<string>();
@@ -93,7 +93,7 @@ export default function PurchaseRibbon({
             : cityAlreadyBuilt
               ? "BUILT"
               : cityTooSmall
-                ? "<6 tiles"
+                ? "<5 tiles"
                 : playerTowerFree
                   ? "FREE"
                   : `${item.cost}`;

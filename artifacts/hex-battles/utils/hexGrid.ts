@@ -28,7 +28,7 @@ export const ENTITY_META: Record<EntityType, EntityMeta> = {
   castle:        { name: 'Castle',    cost: 30, upkeep: 5,  isUnit: false, strength: 2 },
   bridge:        { name: 'Bridge',    cost: 5,  upkeep: 1,  isUnit: false, strength: 0 },
   rebel:         { name: 'Rebel',     cost: 0,  upkeep: 0,  isUnit: false, strength: 0 },
-  city:          { name: 'City',      cost: 10, upkeep: 0,  isUnit: false, strength: 0 },
+  city:          { name: 'City',      cost: 5,  upkeep: 0,  isUnit: false, strength: 0 },
 };
 
 /** Default movement budget for units without an explicit `movement` in ENTITY_META. */
@@ -88,6 +88,7 @@ export const TERRAIN_INCOME: Record<TerrainType, number> = {
   forest:   2,
   field:    3,
   sawmill:  3,
+  mine:     3,
 };
 
 export const TERRAIN_MOVE_COST: Record<TerrainType, number> = {
@@ -97,13 +98,27 @@ export const TERRAIN_MOVE_COST: Record<TerrainType, number> = {
   lake:     1,
   forest:   2,
   field:    1,
-  sawmill:  2,
+  sawmill:  1,
+  mine:     1,
 };
 
-export const CITY_BONUS = 2;
+export const CITY_BONUS = 1;
 
-/** Gold cost for a peasant to improve the tile it stands on. */
-export const IMPROVE_COST = 3;
+/**
+ * Gold a peasant pays to build each improvement, keyed by the TARGET terrain
+ * (field 2, sawmill 3, mine 5). Use `improveCostFor` rather than reading this
+ * map directly.
+ */
+const IMPROVE_COST_BY_TARGET: Partial<Record<TerrainType, number>> = {
+  field:   2,
+  sawmill: 3,
+  mine:    5,
+};
+
+/** Gold cost for a peasant to build the given improvement terrain. */
+export function improveCostFor(targetTerrain: TerrainType): number {
+  return IMPROVE_COST_BY_TARGET[targetTerrain] ?? 0;
+}
 
 /** Tile-count above which a single territory pays administrative burden. */
 export const ADMIN_BURDEN_THRESHOLD = 20;
@@ -112,11 +127,13 @@ export const ADMIN_BURDEN_THRESHOLD = 20;
 export const IMPROVED_TERRAINS: ReadonlySet<TerrainType> = new Set<TerrainType>([
   "field",
   "sawmill",
+  "mine",
 ]);
 
 const IMPROVE_TARGET: Partial<Record<TerrainType, TerrainType>> = {
   grass: "field",
   forest: "sawmill",
+  desert: "mine",
 };
 
 /** The terrain a peasant would produce by improving `terrain`, or null. */
@@ -127,6 +144,7 @@ export function improveTargetFor(terrain: TerrainType): TerrainType | null {
 const IMPROVEMENT_BASE: Partial<Record<TerrainType, TerrainType>> = {
   field: "grass",
   sawmill: "forest",
+  mine: "desert",
 };
 
 /**

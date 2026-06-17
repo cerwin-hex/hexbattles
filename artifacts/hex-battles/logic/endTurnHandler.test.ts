@@ -194,8 +194,8 @@ describe("income and upkeep", () => {
     });
     handleEndTurnLogic(params);
     const newBalances = (params.setTerritoryBalances as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    // grass 2 + city bonus 2 = 4 income, 0 upkeep → balance = 4
-    expect(newBalances.get("0,0")).toBe(4);
+    // grass 2 + city bonus 1 = 3 income, 0 upkeep → balance = 3
+    expect(newBalances.get("0,0")).toBe(3);
   });
 });
 

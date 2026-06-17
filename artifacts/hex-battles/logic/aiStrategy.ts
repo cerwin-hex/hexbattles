@@ -16,7 +16,7 @@ import {
   unitMaxAttacks,
   isCavalry,
   cavalryMoveKind,
-  IMPROVE_COST,
+  improveCostFor,
   IMPROVED_TERRAINS,
 } from "@/utils/hexGrid";
 import { advanceAttacksUsed, advanceCombatSpent, calcTerritoryIncome, calcTerritoryUpkeep, effectiveRemaining, isChargeAttack, mergeResult, resolveMovedUnitMoves } from "@/logic/gameLogic";
@@ -506,7 +506,7 @@ export async function runAiTerritoryDecisionLoop(
     if (!actionTaken) {
       const cityCost = ENTITY_META.city.cost;
       const alreadyHasCity = currTerr.some((t) => aiCtx.cities.has(t.key));
-      if (canAfford(cityCost, 0) && currTerr.length >= 6 && !alreadyHasCity) {
+      if (canAfford(cityCost, 0) && currTerr.length >= 5 && !alreadyHasCity) {
         const bldgZoC = new Set<string>();
         for (const [bk, be] of aiCtx.entities) {
           if (be !== "tower" && be !== "castle") continue;
@@ -766,7 +766,7 @@ export async function runAiTerritoryDecisionLoop(
       }
 
       if (!actionTaken) {
-        const neutralPrio = (t: HexTile): number => aiCtx.cities.has(t.key) ? 3 : (t.terrain === "grass" || t.terrain === "forest" || t.terrain === "field" || t.terrain === "sawmill") ? 2 : 1;
+        const neutralPrio = (t: HexTile): number => aiCtx.cities.has(t.key) ? 3 : (t.terrain === "grass" || t.terrain === "forest" || t.terrain === "field" || t.terrain === "sawmill" || t.terrain === "mine") ? 2 : 1;
         const neutralMoves: { fk: string; tk: string; prio: number }[] = [];
         for (const [uk, ue] of availUnits) {
           const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!), aiCtx.combatSpentUnits);
@@ -936,7 +936,7 @@ export async function runAiTerritoryDecisionLoop(
     // the loop filters availUnits against and that exec.improve mutates).
     if (!actionTaken) {
       const dev = dtFindImproveMove(currTerr, aiCtx, aiCtx.spentUnits, currBal);
-      if (dev) actionTaken = await exec.improve(dev.key, dev.terrain, IMPROVE_COST);
+      if (dev) actionTaken = await exec.improve(dev.key, dev.terrain, improveCostFor(dev.terrain));
     }
 
     if (!actionTaken) break;

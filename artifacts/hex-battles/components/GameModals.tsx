@@ -16,12 +16,14 @@ export interface EconBreakdown {
   forestCount: number;
   sawmillCount: number;
   desertCount: number;
+  mineCount: number;
   cityCount: number;
   grassIncome: number;
   fieldBonus: number;
   forestIncome: number;
   sawmillBonus: number;
   desertIncome: number;
+  mineBonus: number;
   cityIncome: number;
   cityImproveBonus: number;
   upkeepGroups: {
@@ -184,6 +186,18 @@ export default function GameModals({
                   />
                 </View>
               )}
+              {econBreakdown && econBreakdown.mineCount > 0 && (
+                <View style={styles.econRow}>
+                  <Text style={[styles.econRowLabel, styles.econIndentLabel]}>
+                    ↳ Mine ×{econBreakdown.mineCount}
+                  </Text>
+                  <CoinValue
+                    value={`+${econBreakdown.mineBonus}`}
+                    textStyle={styles.econRowValue}
+                    size={13}
+                  />
+                </View>
+              )}
               {econBreakdown && econBreakdown.cityCount > 0 && (
                 <View style={[styles.econRow, styles.econGroupGap]}>
                   <View style={styles.econLabelRow}>
@@ -202,7 +216,7 @@ export default function GameModals({
               {econBreakdown && econBreakdown.cityImproveBonus > 0 && (
                 <View style={styles.econRow}>
                   <Text style={[styles.econRowLabel, styles.econIndentLabel]}>
-                    ↳ Improvements
+                    ↳ Adj. fields
                   </Text>
                   <CoinValue
                     value={`+${econBreakdown.cityImproveBonus}`}

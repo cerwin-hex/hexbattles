@@ -926,7 +926,7 @@ describe("runAiTerritoryDecisionLoop", () => {
   it("improves an idle peasant's tile when no combat is available", async () => {
     // Pure AI-only map (no enemy/neutral tiles anywhere) so no attack, expansion,
     // or "move closer to enemy" action can fire. With nothing better to do and
-    // spare gold (balance >= IMPROVE_COST=3), the loop falls through to its
+    // spare gold (balance >= the field cost of 2), the loop falls through to its
     // last-resort improve attempt: the idle peasant on a grass tile is improved
     // in place (grass -> "field").
     const tiles = [
@@ -937,6 +937,7 @@ describe("runAiTerritoryDecisionLoop", () => {
     // Territory ID = lexicographically smallest key = "0,0".
     const balances = new Map([["0,0", 10]]);
     const aiCtx = makeAiCtx(tiles, "ai1", entities, balances);
+    aiCtx.cities = new Set(["1,0"]); // a city in the territory enables improving
 
     // Recording improve mock. isTurnActive flips to false after the first
     // improve so the loop exits next iteration (mirrors the existing harness's
@@ -952,6 +953,6 @@ describe("runAiTerritoryDecisionLoop", () => {
     const [target, terrain, cost] = (exec.improve as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(target).toBe("0,0");
     expect(terrain).toBe("field");
-    expect(cost).toBe(3);
+    expect(cost).toBe(2);
   });
 });

@@ -4,7 +4,6 @@ import {
   CITY_BONUS,
   ENTITY_META,
   TERRAIN_INCOME,
-  IMPROVED_TERRAINS,
   calcAdminBurden,
   calcDefenseUpkeep,
   nextDefenseUpkeep,
@@ -24,12 +23,14 @@ export interface EconBreakdownResult {
   forestCount: number;
   sawmillCount: number;
   desertCount: number;
+  mineCount: number;
   cityCount: number;
   grassIncome: number;
   fieldBonus: number;
   forestIncome: number;
   sawmillBonus: number;
   desertIncome: number;
+  mineBonus: number;
   cityIncome: number;
   cityImproveBonus: number;
   upkeepGroups: Array<{
@@ -67,6 +68,7 @@ export function useEconBreakdown({
     let forestCount = 0;
     let sawmillCount = 0;
     let desertCount = 0;
+    let mineCount = 0;
     let cityCount = 0;
     const upkeepGroupMap = new Map<EntityType, number>();
     for (const t of selectedTerritory) {
@@ -75,7 +77,8 @@ export function useEconBreakdown({
       if (t.terrain === "field") fieldCount++;
       if (t.terrain === "forest" || t.terrain === "sawmill") forestCount++;
       if (t.terrain === "sawmill") sawmillCount++;
-      if (t.terrain === "desert") desertCount++;
+      if (t.terrain === "desert" || t.terrain === "mine") desertCount++;
+      if (t.terrain === "mine") mineCount++;
       const entityId = entities.get(t.key);
       if (cities.has(t.key)) cityCount++;
       if (entityId && entityId !== "rebel") {
@@ -128,15 +131,16 @@ export function useEconBreakdown({
     const sawmillBonus =
       sawmillCount * (TERRAIN_INCOME.sawmill - TERRAIN_INCOME.forest);
     const desertIncome = desertCount * TERRAIN_INCOME.desert;
+    const mineBonus = mineCount * (TERRAIN_INCOME.mine - TERRAIN_INCOME.desert);
     const cityIncome = cityCount * CITY_BONUS;
-    // City-adjacency improvement bonus: +1 per improved tile neighbouring a
-    // same-owner city. Mirrors calcTerritoryIncome — a city in the same
-    // territory is, by construction, the same owner, so membership in the
-    // territory key set is the equivalent same-owner check.
+    // City-adjacency field bonus: +1 per Field tile neighbouring a same-owner
+    // city. Mirrors calcTerritoryIncome — a city in the same territory is, by
+    // construction, the same owner, so membership in the territory key set is
+    // the equivalent same-owner check. Only Fields qualify (not sawmills/mines).
     const territoryKeys = new Set(selectedTerritory.map((t) => t.key));
     let cityImproveBonus = 0;
     for (const t of selectedTerritory) {
-      if (!IMPROVED_TERRAINS.has(t.terrain)) continue;
+      if (t.terrain !== "field") continue;
       const [q, r] = t.key.split(",").map(Number);
       for (const { dir: [dq, dr] } of HEX_EDGES) {
         const nk = tileKey(q + dq, r + dr);
@@ -149,6 +153,7 @@ export function useEconBreakdown({
       forestIncome +
       sawmillBonus +
       desertIncome +
+      mineBonus +
       cityIncome +
       cityImproveBonus;
     const totalUpkeep = upkeepGroups.reduce((s, g) => s + g.total, 0);
@@ -172,12 +177,14 @@ export function useEconBreakdown({
       forestCount,
       sawmillCount,
       desertCount,
+      mineCount,
       cityCount,
       grassIncome,
       fieldBonus,
       forestIncome,
       sawmillBonus,
       desertIncome,
+      mineBonus,
       cityIncome,
       cityImproveBonus,
       upkeepGroups,

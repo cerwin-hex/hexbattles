@@ -12,7 +12,7 @@ export interface ImprovementMarkerLayerProps {
 
 // Draws a half-size hex on top of improved tiles so the upgrade is visible in
 // terrain view (the base terrain layer keeps showing the original grass/forest
-// colour underneath). Field = corn-yellow, sawmill = brown.
+// colour underneath). Field = corn-yellow, sawmill = brown, mine = silver-grey.
 function ImprovementMarkerLayerInner({
   tileData,
   activeTileMap,
@@ -23,7 +23,8 @@ function ImprovementMarkerLayerInner({
     <>
       {tileData.map(({ tile, cx, cy }) => {
         const terrain = activeTileMap.get(tile.key)?.terrain ?? tile.terrain;
-        if (terrain !== "field" && terrain !== "sawmill") return null;
+        if (terrain !== "field" && terrain !== "sawmill" && terrain !== "mine")
+          return null;
         return (
           <Polygon
             key={tile.key}

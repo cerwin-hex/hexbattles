@@ -355,15 +355,23 @@ describe("dtFindImproveMove", () => {
     expect(dtFindImproveMove(tiles, ctx, new Set(), 10)).toBeNull();
   });
 
-  it("returns null when balance < IMPROVE_COST (3)", () => {
+  it("returns null when the territory has no city", () => {
     const tiles = [makeTile(0, 0, "ai1", "grass")];
     const ctx = makeCtx(tiles, [["0,0", "peasant"]], [], "ai1");
-    expect(dtFindImproveMove(tiles, ctx, new Set(), 2)).toBeNull();
+    expect(dtFindImproveMove(tiles, ctx, new Set(), 10)).toBeNull();
+  });
+
+  it("returns null when balance < the improvement cost (field 2)", () => {
+    const tiles = [makeTile(0, 0, "ai1", "grass"), makeTile(1, 0, "ai1", "grass")];
+    const ctx = makeCtx(tiles, [["0,0", "peasant"]], [], "ai1");
+    ctx.cities = new Set(["1,0"]);
+    expect(dtFindImproveMove(tiles, ctx, new Set(), 1)).toBeNull();
   });
 
   it("improves a peasant's grass tile into a field", () => {
-    const tiles = [makeTile(0, 0, "ai1", "grass")];
+    const tiles = [makeTile(0, 0, "ai1", "grass"), makeTile(1, 0, "ai1", "grass")];
     const ctx = makeCtx(tiles, [["0,0", "peasant"]], [], "ai1");
+    ctx.cities = new Set(["1,0"]); // a city in the same territory enables improving
     expect(dtFindImproveMove(tiles, ctx, new Set(), 10)).toEqual({
       key: "0,0",
       terrain: "field",
@@ -376,7 +384,7 @@ describe("dtFindImproveMove", () => {
     const cityTile = makeTile(0, 0, "ai1", "grass");
     const forestTile = makeTile(1, 0, "ai1", "forest");
     const farGrass = makeTile(5, 5, "ai1", "grass");
-    const territory = [forestTile, farGrass];
+    const territory = [cityTile, forestTile, farGrass];
     const ctx: AiContext = {
       tileMap: tileMap([cityTile, forestTile, farGrass]),
       entities: ents([["1,0", "peasant"], ["5,5", "peasant"]]),
@@ -394,8 +402,9 @@ describe("dtFindImproveMove", () => {
   });
 
   it("skips spent peasants", () => {
-    const tiles = [makeTile(0, 0, "ai1", "grass")];
+    const tiles = [makeTile(0, 0, "ai1", "grass"), makeTile(1, 0, "ai1", "grass")];
     const ctx = makeCtx(tiles, [["0,0", "peasant"]], [], "ai1");
+    ctx.cities = new Set(["1,0"]);
     expect(dtFindImproveMove(tiles, ctx, new Set(["0,0"]), 10)).toBeNull();
   });
 

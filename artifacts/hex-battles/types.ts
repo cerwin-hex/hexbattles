@@ -1,4 +1,4 @@
-export type TerrainType = 'grass' | 'desert' | 'mountain' | 'lake' | 'forest' | 'field' | 'sawmill';
+export type TerrainType = 'grass' | 'desert' | 'mountain' | 'lake' | 'forest' | 'field' | 'sawmill' | 'mine';
 export type TerritoryOwner = 'neutral' | 'player' | 'ai1' | 'ai2' | 'ai3' | 'ai4' | 'ai5';
 export type EntityType = 'peasant' | 'warrior' | 'swordsman' | 'scout' | 'knight' | 'tower' | 'castle' | 'city' | 'rebel' | 'bridge';
 

@@ -16,7 +16,7 @@ import {
   isCavalry,
   cavalryMoveKind,
   DEFAULT_MOVEMENT,
-  IMPROVE_COST,
+  improveCostFor,
   IMPROVED_TERRAINS,
 } from "@/utils/hexGrid";
 import { calcTerritoryIncome, calcTerritoryUpkeep, mergeResult } from "@/logic/gameLogic";
@@ -917,7 +917,7 @@ export function generateCandidateActions(
   }
   const cityCost = ENTITY_META.city.cost;
   const hasCity = territory.some((t) => ctx.cities.has(t.key));
-  if (!hasCity && territory.length >= 6 && canAfford(cityCost)) {
+  if (!hasCity && territory.length >= 5 && canAfford(cityCost)) {
     // Building on an improved tile would destroy the improvement; don't.
     for (const t of innerPlacements) {
       if (IMPROVED_TERRAINS.has(t.terrain)) continue;
@@ -1152,7 +1152,8 @@ export async function runExpertTerritoryDecisionLoop(
       // to do. `ctx.spentUnits` is the live set `exec.improve` mutates, so a
       // improved peasant is not re-picked on the next iteration.
       const dev = dtFindImproveMove(territory, ctx, ctx.spentUnits, bal);
-      if (dev && (await exec.improve(dev.key, dev.terrain, IMPROVE_COST))) continue;
+      if (dev && (await exec.improve(dev.key, dev.terrain, improveCostFor(dev.terrain))))
+        continue;
       break;
     }
     let ok = false;

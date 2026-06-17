@@ -14,7 +14,7 @@ import {
   getContiguousTerritory,
   getTerritoryId,
   generateHexGrid,
-  IMPROVE_COST,
+  improveCostFor,
   improveTargetFor,
   baseTerrainFor,
   IMPROVED_TERRAINS,
@@ -72,7 +72,7 @@ describe("TERRAIN_INCOME", () => {
   it("mountain yields 0", () => expect(TERRAIN_INCOME.mountain).toBe(0));
   it("lake yields 0", () => expect(TERRAIN_INCOME.lake).toBe(0));
   it("forest yields 2", () => expect(TERRAIN_INCOME.forest).toBe(2));
-  it("CITY_BONUS is 2", () => expect(CITY_BONUS).toBe(2));
+  it("CITY_BONUS is 1", () => expect(CITY_BONUS).toBe(1));
 });
 
 // ─── calcDefenseUpkeep ────────────────────────────────────────────────────────
@@ -509,25 +509,30 @@ describe("improvement constants", () => {
   it("maps improvable terrain to its upgrade", () => {
     expect(improveTargetFor("grass")).toBe("field");
     expect(improveTargetFor("forest")).toBe("sawmill");
+    expect(improveTargetFor("desert")).toBe("mine");
   });
   it("returns null for non-improvable terrain", () => {
-    expect(improveTargetFor("desert")).toBeNull();
     expect(improveTargetFor("field")).toBeNull();
     expect(improveTargetFor("sawmill")).toBeNull();
+    expect(improveTargetFor("mine")).toBeNull();
     expect(improveTargetFor("lake")).toBeNull();
     expect(improveTargetFor("mountain")).toBeNull();
   });
   it("recognises improved terrains", () => {
     expect(IMPROVED_TERRAINS.has("field")).toBe(true);
     expect(IMPROVED_TERRAINS.has("sawmill")).toBe(true);
+    expect(IMPROVED_TERRAINS.has("mine")).toBe(true);
     expect(IMPROVED_TERRAINS.has("grass")).toBe(false);
   });
-  it("costs 3 to improve", () => {
-    expect(IMPROVE_COST).toBe(3);
+  it("costs field 2, sawmill 3, mine 5 to improve", () => {
+    expect(improveCostFor("field")).toBe(2);
+    expect(improveCostFor("sawmill")).toBe(3);
+    expect(improveCostFor("mine")).toBe(5);
   });
   it("reverts improved terrain to its base", () => {
     expect(baseTerrainFor("field")).toBe("grass");
     expect(baseTerrainFor("sawmill")).toBe("forest");
+    expect(baseTerrainFor("mine")).toBe("desert");
   });
   it("leaves non-improved terrain unchanged", () => {
     expect(baseTerrainFor("grass")).toBe("grass");

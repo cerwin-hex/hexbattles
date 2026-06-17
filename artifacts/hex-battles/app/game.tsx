@@ -60,7 +60,7 @@ import {
 } from "@/utils/hexMath";
 import {
   ENTITY_META,
-  IMPROVE_COST,
+  improveCostFor,
   generateHexGrid,
   getContiguousTerritory,
   getTerritoryId,
@@ -1040,8 +1040,11 @@ export default function GameScreen() {
       );
       const tid = getTerritoryId(territory);
       if (!tid) return;
+      // Improvements require a city in the same territory.
+      if (!territory.some((t) => cities.has(t.key))) return;
+      const cost = improveCostFor(targetTerrain);
       const bal = territoryBalances.get(tid) ?? 0;
-      if (bal < IMPROVE_COST) return;
+      if (bal < cost) return;
       pushHistory();
       setMutableTileMap((prev) => {
         const next = new Map(prev);
@@ -1051,7 +1054,7 @@ export default function GameScreen() {
       });
       setTerritoryBalances((prev) => {
         const next = new Map(prev);
-        next.set(tid, bal - IMPROVE_COST);
+        next.set(tid, bal - cost);
         return next;
       });
       setSpentUnits((prev) => new Set(prev).add(selectedEntityKey));

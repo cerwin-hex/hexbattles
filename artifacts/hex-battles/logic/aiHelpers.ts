@@ -1,7 +1,7 @@
 import type { EntityType, HexTile, TerrainType, TerritoryOwner } from "@/types";
 import { HEX_EDGES, hexDistance, tileKey } from "@/utils/hexMath";
 import {
-  IMPROVE_COST,
+  improveCostFor,
   improveTargetFor,
   ENTITY_META,
   getContiguousTerritory,
@@ -216,10 +216,11 @@ export function dtFindMergeMove(
 
 /**
  * Finds the best in-place tile improvement for the AI: a non-spent peasant
- * standing on improvable terrain (grass→field, forest→sawmill). Prefers a
- * peasant adjacent to one of the AI's own cities (the income bonus stacks
- * there). v1 scope: improves ONLY peasants already on a improvable tile — it
- * does not reposition peasants.
+ * standing on improvable terrain (grass→field, forest→sawmill, desert→mine).
+ * Requires a city in the territory (same rule the player follows). Prefers a
+ * peasant adjacent to one of the AI's own cities (the field bonus stacks there).
+ * v1 scope: improves ONLY peasants already on a improvable tile — it does not
+ * reposition peasants.
  */
 export function dtFindImproveMove(
   territory: HexTile[],
@@ -227,12 +228,13 @@ export function dtFindImproveMove(
   spentUnits: Set<string>,
   balance: number,
 ): { key: string; terrain: TerrainType } | null {
-  if (balance < IMPROVE_COST) return null;
+  if (!territory.some((t) => ctx.cities.has(t.key))) return null;
   let best: { key: string; terrain: TerrainType } | null = null;
   let bestPrio = -1;
   for (const t of territory) {
     const target = improveTargetFor(t.terrain);
     if (!target) continue;
+    if (balance < improveCostFor(target)) continue;
     if (ctx.entities.get(t.key) !== "peasant") continue;
     if (ctx.cities.has(t.key)) continue;
     if (spentUnits.has(t.key)) continue;

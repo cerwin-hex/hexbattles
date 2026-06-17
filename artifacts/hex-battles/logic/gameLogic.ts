@@ -12,10 +12,9 @@ import {
   unitMaxAttacks,
   isCavalry,
   calcAdminBurden,
-  IMPROVED_TERRAINS,
   HEX_EDGES,
   tileKey,
-  IMPROVE_COST,
+  improveCostFor,
   improveTargetFor,
 } from "@/utils/hexGrid";
 import { STRENGTH_TO_UNIT, STRENGTH_TO_CAVALRY } from "@/constants/gameConstants";
@@ -292,8 +291,9 @@ export function resolveMovedUnitMoves(o: {
 
 /**
  * Whether a selected unit may improve the tile it stands on: a non-spent peasant
- * on improvable terrain (grass/forest) whose territory holds at least
- * IMPROVE_COST gold. Shared by the player UI (EntityPanel) and the AI.
+ * on improvable terrain (grass→field, forest→sawmill, desert→mine) whose
+ * territory holds a city and at least the improvement's cost in gold. Shared by
+ * the player UI (EntityPanel) and the AI.
  */
 export function canImproveTile(o: {
   entityId: EntityType | undefined;
@@ -301,18 +301,22 @@ export function canImproveTile(o: {
   isSpent: boolean;
   balance: number;
   isCity: boolean;
+  /** Whether the peasant's territory contains a city (required to improve). */
+  territoryHasCity: boolean;
 }): boolean {
   if (o.entityId !== "peasant") return false;
   if (o.isCity) return false;
   if (o.isSpent) return false;
-  if (improveTargetFor(o.terrain) === null) return false;
-  return o.balance >= IMPROVE_COST;
+  if (!o.territoryHasCity) return false;
+  const target = improveTargetFor(o.terrain);
+  if (target === null) return false;
+  return o.balance >= improveCostFor(target);
 }
 
 /**
  * Gross per-turn income of a single tile: terrain income, plus CITY_BONUS when
- * the tile is a city, plus the city-adjacency improvement bonus (+1 per adjacent
- * owned city for an improved tile). `isOwnedCityNeighbor` decides whether a
+ * the tile is a city, plus the city-adjacency field bonus (+1 per adjacent
+ * owned city for a Field tile only). `isOwnedCityNeighbor` decides whether a
  * neighbouring city counts as same-owner — callers supply the appropriate check
  * (tileMap owner comparison in the real economy, a same-territory key set in the
  * UI breakdown). Sharing this with calcTerritoryIncome keeps the rebel-loss
@@ -324,7 +328,8 @@ export function tileEconomicIncome(
   isOwnedCityNeighbor: (neighborKey: string) => boolean,
 ): number {
   let income = (TERRAIN_INCOME[tile.terrain] ?? 0) + (cities.has(tile.key) ? CITY_BONUS : 0);
-  if (IMPROVED_TERRAINS.has(tile.terrain)) {
+  // Only Fields earn the city-adjacency bonus (+1 per neighbouring owned city).
+  if (tile.terrain === "field") {
     const [q, r] = tile.key.split(",").map(Number);
     for (const { dir: [dq, dr] } of HEX_EDGES) {
       const nk = tileKey(q + dq, r + dr);

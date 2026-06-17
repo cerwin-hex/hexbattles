@@ -68,7 +68,7 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
                 Gold is held per territory, not in one shared purse. Each separate block of land you own keeps its own treasury, earns its own income, and pays its own upkeep. You can only buy something in a territory that can afford it outright.
               </Text>
               <Text style={[styles.ruleBody, { marginTop: 8 }]}>
-                At the end of every turn each territory collects income from its tiles (grass/forest 2, desert 1, +2 per city, mountain/lake 0) and pays upkeep for its units and buildings. If a territory cannot cover its bill, it goes bankrupt: its treasury drains to zero, all of its units are disbanded, and — if upkeep still exceeds income — its buildings are demolished too.
+                At the end of every turn each territory collects income from its tiles (grass/forest 2, desert 1, +1 per city, mountain/lake 0) and pays upkeep for its units and buildings. If a territory cannot cover its bill, it goes bankrupt: its treasury drains to zero, all of its units are disbanded, and — if upkeep still exceeds income — its buildings are demolished too.
               </Text>
               <Text style={[styles.ruleBody, { marginTop: 8 }]}>
                 Large realms also pay an administrative burden. Once a single territory exceeds 20 tiles, it owes extra upkeep of half a gold for every tile above that threshold, so spreading too wide eats into your profits.
@@ -79,10 +79,10 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
               <Text style={styles.ruleSectionTitle}>Improvements</Text>
               <View style={styles.ruleDivider} />
               <Text style={styles.ruleBody}>
-                A Peasant can improve the tile it stands on for 3 gold, turning grass into a Field and forest into a Sawmill. Improving uses up the peasant's action for that turn.
+                Once a territory has a City, a Peasant there can improve the tile it stands on: grass into a Field (2 gold), forest into a Sawmill (3 gold), or desert into a Mine (5 gold). Improving uses up the peasant's action for that turn.
               </Text>
               <Text style={[styles.ruleBody, { marginTop: 8 }]}>
-                An improved tile earns +1 gold per turn, plus another +1 while it borders one of your cities. Founding a city, tower or castle on an improved tile destroys the improvement.
+                A Field earns +1 gold per turn, plus another +1 while it borders one of your cities. A Sawmill earns +1 gold and costs only 1 movement to enter. A Mine earns +2 gold. Founding a city, tower or castle on an improved tile destroys the improvement.
               </Text>
             </View>
 

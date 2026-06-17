@@ -811,9 +811,11 @@ describe("runExpertTerritoryDecisionLoop", () => {
     // A peasant (str 1) on (1,0) sits next to an enemy tower (str 1) on (2,0).
     // It cannot take the tower (needs str > 1). A fresh warrior is unaffordable
     // (balance 19 < cost 20), so the ONLY path to a str-2 unit on the front is to
-    // upgrade the peasant. The 5-tile territory (income 10) sustains the warrior
-    // (upkeep 9), so the deficit term does not block it — the upgrade is the
-    // cheapest route to capturing the tower next turn.
+    // upgrade the peasant. The 5-tile territory already holds a city (income 11)
+    // and so sustains the warrior (upkeep 9), so the deficit term does not block
+    // it — the upgrade is the cheapest route to capturing the tower next turn.
+    // The pre-existing city also keeps the now-5-tile city threshold from adding
+    // a competing build-city candidate.
     const tileMap = makeTileMap([
       makeTile(0, 0, "ai1"),
       makeTile(0, 1, "ai1"),
@@ -830,6 +832,7 @@ describe("runExpertTerritoryDecisionLoop", () => {
     const terr = getContiguousTerritory(tileMap, "0,0", "ai1", entities);
     balances.set(getTerritoryId(terr)!, 19);
     const ctx = makeCtx(tileMap, entities, "ai1", balances);
+    ctx.cities = new Set(["0,3"]);
 
     const first = await firstExpertAction("0,0", ctx);
     expect(first).toEqual({ kind: "upgrade", target: "1,0", to: "warrior", cost: 10 });
@@ -1151,10 +1154,11 @@ describe("expert improve (last-resort)", () => {
   it("improves an idle peasant's grass tile when no better action exists", async () => {
     // A fully interior, all-grass territory surrounded by void: no enemies, no
     // border tiles, nothing to capture. One idle peasant sits on grass. The
-    // balance (5) covers IMPROVE_COST (3) but is too little for any unit/building
+    // balance (5) covers the field cost (2) but is too little for any unit/building
     // buy (cheapest unit is 10), so the candidate generator emits no score-improving
     // action and the expert loop's `best` is null. With nothing better to do, the
     // expert should fall back to improving the peasant's tile (grass→field).
+    // Improving requires a city in the territory (here at 1,1).
     const tileMap = makeTileMap([
       makeTile(0, 0, "ai1"),
       makeTile(1, 0, "ai1"),
@@ -1166,6 +1170,7 @@ describe("expert improve (last-resort)", () => {
     const terr = getContiguousTerritory(tileMap, "0,0", "ai1", entities);
     balances.set(getTerritoryId(terr)!, 5);
     const ctx = makeCtx(tileMap, entities, "ai1", balances);
+    ctx.cities = new Set(["1,1"]);
 
     const calls: Array<{ target: string; terrain: string; cost: number }> = [];
     const exec: AiDecisionExec = {
@@ -1188,7 +1193,7 @@ describe("expert improve (last-resort)", () => {
     await runExpertTerritoryDecisionLoop("0,0", ctx, exec, () => true);
 
     expect(calls.length).toBe(1);
-    expect(calls[0]).toEqual({ target: "0,0", terrain: "field", cost: 3 });
+    expect(calls[0]).toEqual({ target: "0,0", terrain: "field", cost: 2 });
   });
 
   it("prefers a capture over improving (improve is strictly last-resort)", async () => {
