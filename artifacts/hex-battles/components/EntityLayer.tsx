@@ -50,8 +50,8 @@ function EntityLayerInner({
         const meta = ENTITY_META[entityId];
         const isRebel = entityId === "rebel";
         const isBuilding = !meta.isUnit && !isRebel;
-        // Units and rebels are slightly smaller than buildings.
-        const r = HEX_SIZE * (isBuilding ? 0.6 : 0.55);
+        // Units and rebels are slightly smaller than buildings; rebels smaller still.
+        const r = HEX_SIZE * (isBuilding ? 0.6 : isRebel ? 0.5 : 0.55);
         const isSelected = selectedEntityKey === key;
         const isSpent = spentUnits.has(key);
         const liveTile = activeTileMap.get(key);
@@ -72,16 +72,18 @@ function EntityLayerInner({
         // Uniform ring weight so player units match the rebel ring; the green
         // colour carries the selection cue.
         const borderWidth = 3.0;
-        // Per-state opacity: a spent player unit dims to 70%; rebels and enemy
-        // units sit at 90% (matching the idle-unit dimming); selected units and
-        // buildings are fully opaque.
+        // Per-state opacity: a spent player unit dims to 70%; rebels sit at 80%;
+        // enemy units sit at 90% (matching the idle-unit dimming); selected units
+        // and buildings are fully opaque.
         const isEnemyUnit = meta.isUnit && liveTile?.owner !== "player";
         const opacity =
           isPlayerUnit && isSpent && !isSelected
             ? 0.7
-            : isRebel || isEnemyUnit
-              ? 0.9
-              : 1.0;
+            : isRebel
+              ? 0.8
+              : isEnemyUnit
+                ? 0.9
+                : 1.0;
         return (
           // Key by entity type as well as tile: when a tile's entity changes
           // type in place (e.g. AI-step undo reverts a captured tower from the
