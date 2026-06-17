@@ -67,10 +67,10 @@ export default function EntityPanel({
     ? (territoryBalances.get(entityTerritoryId) ?? 0)
     : 0;
   const removeCost = 0;
-  const upgradeEnabled =
-    canUpgrade &&
-    entityTerritoryBalance >= upgradeCost &&
-    (!isUnit || !isSpent);
+  // A spent unit can still be upgraded, mirroring how a fresh unit may be merged
+  // into a spent one: the upgrade just swaps the entity type and never touches
+  // spentUnits, so the upgraded unit stays spent for the rest of the turn.
+  const upgradeEnabled = canUpgrade && entityTerritoryBalance >= upgradeCost;
   const removeEnabled = isUnit
     ? !isSpent
     : !!entityTerritoryId && entityTerritoryBalance >= removeCost;
