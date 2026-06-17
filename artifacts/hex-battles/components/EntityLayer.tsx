@@ -3,6 +3,7 @@ import { StyleSheet, View } from "react-native";
 import { ENTITY_META } from "@/utils/hexGrid";
 import { useOwnerColors } from "@/contexts/SettingsContext";
 import { UnitToken } from "@/components/UnitToken";
+import { SELECTED_UNIT_RING } from "@/constants/colors";
 import type { EntityType, HexTile, TerritoryOwner } from "@/types";
 
 export interface EntityLayerProps {
@@ -59,15 +60,17 @@ function EntityLayerInner({
         // Idle (non-spent, non-selected) player units bounce in IdleUnitLayer.
         const isIdleBouncing = isPlayerUnit && !isSpent && !isSelected;
         if (isIdleBouncing) return null;
-        // No background fill — tokens are a bare icon inside a coloured ring,
-        // so the ring's hue is the only owner/state cue (gold rebel / green
-        // selected / owner colour otherwise).
+        // Unit/rebel tokens are a bare icon inside a coloured disc, so the disc's
+        // hue is the only owner/state cue (gold rebel / green selected / owner
+        // colour otherwise). Buildings render ring-less in UnitToken and ignore
+        // borderColor entirely — their selection is shown only by the green tile
+        // border in BorderEdgeLayer.
         const ownerColor =
           TERRITORY_BORDERS[liveTile?.owner ?? ""] ?? "#FFD700";
         const borderColor = isRebel
           ? "#FFD700"
           : isSelected
-            ? "#50FF50"
+            ? SELECTED_UNIT_RING
             : ownerColor;
         // Uniform ring weight so player units match the rebel ring; the green
         // colour carries the selection cue.

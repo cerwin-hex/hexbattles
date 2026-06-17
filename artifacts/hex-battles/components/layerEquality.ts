@@ -46,6 +46,7 @@ export interface BorderEdgeLayerEqualProps {
   showInnerEdges: boolean;
   hasSelection: boolean;
   selectionEdges: BorderEdge[];
+  buildingSelectionEdges: BorderEdge[];
 }
 
 export function areBorderEdgeLayerEqual(
@@ -57,7 +58,8 @@ export function areBorderEdgeLayerEqual(
     prev.innerEdges === next.innerEdges &&
     prev.showInnerEdges === next.showInnerEdges &&
     prev.hasSelection === next.hasSelection &&
-    prev.selectionEdges === next.selectionEdges
+    prev.selectionEdges === next.selectionEdges &&
+    prev.buildingSelectionEdges === next.buildingSelectionEdges
   );
 }
 

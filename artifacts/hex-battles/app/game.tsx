@@ -792,6 +792,7 @@ export default function GameScreen() {
     minUnitCost,
     territoryHasCity,
     selectionBorderEdges,
+    buildingSelectionEdges,
     affordableTerritoryTileKeys,
   } = useSelectionState({
     selectedTileKey,
@@ -1316,6 +1317,7 @@ export default function GameScreen() {
                 showInnerEdges={showTerrainView}
                 hasSelection={hasSelection}
                 selectionEdges={selectionBorderEdges}
+                buildingSelectionEdges={buildingSelectionEdges}
               />
 
               <MovementHighlightTapTargets

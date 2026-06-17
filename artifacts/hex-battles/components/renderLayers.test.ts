@@ -99,6 +99,7 @@ function makeBorderEdgeLayerProps(
     showInnerEdges: false,
     hasSelection: false,
     selectionEdges: [],
+    buildingSelectionEdges: [],
     ...overrides,
   };
 }
@@ -113,8 +114,9 @@ describe("areBorderEdgeLayerEqual", () => {
     const outerEdges: BorderEdge[] = [];
     const innerEdges: BorderEdge[] = [];
     const selectionEdges: BorderEdge[] = [];
-    const a = makeBorderEdgeLayerProps({ outerEdges, innerEdges, selectionEdges, hasSelection: true });
-    const b = makeBorderEdgeLayerProps({ outerEdges, innerEdges, selectionEdges, hasSelection: true });
+    const buildingSelectionEdges: BorderEdge[] = [];
+    const a = makeBorderEdgeLayerProps({ outerEdges, innerEdges, selectionEdges, buildingSelectionEdges, hasSelection: true });
+    const b = makeBorderEdgeLayerProps({ outerEdges, innerEdges, selectionEdges, buildingSelectionEdges, hasSelection: true });
     expect(areBorderEdgeLayerEqual(a, b)).toBe(true);
   });
 
@@ -144,6 +146,17 @@ describe("areBorderEdgeLayerEqual", () => {
       outerEdges: base.outerEdges,
       innerEdges: base.innerEdges,
       selectionEdges: [],
+    });
+    expect(areBorderEdgeLayerEqual(base, next)).toBe(false);
+  });
+
+  it("returns false when buildingSelectionEdges reference changes", () => {
+    const base = makeBorderEdgeLayerProps();
+    const next = makeBorderEdgeLayerProps({
+      outerEdges: base.outerEdges,
+      innerEdges: base.innerEdges,
+      selectionEdges: base.selectionEdges,
+      buildingSelectionEdges: [],
     });
     expect(areBorderEdgeLayerEqual(base, next)).toBe(false);
   });

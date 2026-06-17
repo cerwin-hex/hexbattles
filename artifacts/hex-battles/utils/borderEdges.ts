@@ -326,6 +326,7 @@ export function computeSelectionBorderEdges(
   tileMap: Map<string, HexTile>,
   INNER_SIZE: number,
   BORDER_W: number,
+  color: string = "#FFFFFF",
 ): BorderEdge[] {
   if (selectedTileKeys.size === 0) return [];
   const edges: BorderEdge[] = [];
@@ -347,7 +348,7 @@ export function computeSelectionBorderEdges(
         y1: ptA.y,
         x2: ptB.x,
         y2: ptB.y,
-        color: "#FFFFFF",
+        color,
         width: BORDER_W,
       });
     }

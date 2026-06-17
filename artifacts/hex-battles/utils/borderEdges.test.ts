@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import type { BorderEdge, HexTile, TerritoryOwner } from "@/types";
-import { computeBorderEdges, computeOuterTerritoryEdges } from "@/utils/borderEdges";
+import {
+  computeBorderEdges,
+  computeOuterTerritoryEdges,
+  computeSelectionBorderEdges,
+} from "@/utils/borderEdges";
 import type { BorderEdgesCache, OuterEdgesCache } from "@/utils/borderEdges";
 
 const INNER_SIZE = 40;
@@ -87,5 +91,38 @@ describe("computeOuterTerritoryEdges incremental cache", () => {
     );
     // Neutral non-impassable tile contributes no outer edges.
     expect(second.length).toBe(0);
+  });
+});
+
+describe("computeSelectionBorderEdges", () => {
+  it("outlines a single tile with all 6 edges in the default white", () => {
+    const grass = tile(0, 0, "player", "grass");
+    const { map, tileDataMap } = makeBoard([grass]);
+
+    const edges = computeSelectionBorderEdges(
+      new Set([grass.key]),
+      tileDataMap,
+      map,
+      INNER_SIZE,
+      BORDER_W,
+    );
+    expect(edges.length).toBe(6);
+    expect(edges.every((e) => e.color === "#FFFFFF")).toBe(true);
+  });
+
+  it("honors the color param for the building selection cue", () => {
+    const grass = tile(0, 0, "player", "grass");
+    const { map, tileDataMap } = makeBoard([grass]);
+
+    const edges = computeSelectionBorderEdges(
+      new Set([grass.key]),
+      tileDataMap,
+      map,
+      INNER_SIZE,
+      BORDER_W,
+      "#50FF50",
+    );
+    expect(edges.length).toBe(6);
+    expect(edges.every((e) => e.color === "#50FF50")).toBe(true);
   });
 });

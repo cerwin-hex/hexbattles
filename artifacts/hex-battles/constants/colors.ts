@@ -60,6 +60,10 @@ export const CITY_NEUTRAL_FILL = '#C0B8B0';
 export const CITY_BORDER_COLOR = '#8B7A5A';
 export const CITY_BUFFER_BORDER = '#B8B8B8';
 
+// Light-green selection cue shared by the selected-unit ring (EntityLayer) and
+// the selected-building tile border (BorderEdgeLayer).
+export const SELECTED_UNIT_RING = '#50FF50';
+
 interface ColorEntry {
   fill: string;
   border: string;

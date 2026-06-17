@@ -13,6 +13,7 @@ import {
 } from "@/utils/hexGrid";
 import { mergeResult } from "@/logic/gameLogic";
 import { computeSelectionBorderEdges } from "@/utils/borderEdges";
+import { SELECTED_UNIT_RING } from "@/constants/colors";
 
 interface SelectionStateParams {
   selectedTileKey: string | null;
@@ -272,6 +273,24 @@ export function useSelectionState({
     [selectedTileKeys, tileDataMap, tileMap, INNER_SIZE],
   );
 
+  // A light-green outline around the single tile of a selected building (tower,
+  // castle, bridge) — the same hue as the selected-unit ring. Independent of the
+  // territory selection: bridges can sit on a lake tile that yields no
+  // contiguous territory, so this keys off `selectedEntityKey` directly.
+  const buildingSelectionEdges = useMemo<BorderEdge[]>(() => {
+    if (!selectedEntityKey) return [];
+    const e = entities.get(selectedEntityKey);
+    if (!e || ENTITY_META[e].isUnit || e === "city" || e === "rebel") return [];
+    return computeSelectionBorderEdges(
+      new Set([selectedEntityKey]),
+      tileDataMap,
+      tileMap,
+      INNER_SIZE,
+      BORDER_W,
+      SELECTED_UNIT_RING,
+    );
+  }, [selectedEntityKey, entities, tileDataMap, tileMap, INNER_SIZE, BORDER_W]);
+
   const affordableTerritoryCache = useRef<{
     activeTileMap: Map<string, HexTile>;
     entities: Map<string, EntityType>;
@@ -357,6 +376,7 @@ export function useSelectionState({
     minUnitCost,
     territoryHasCity,
     selectionBorderEdges,
+    buildingSelectionEdges,
     affordableTerritoryTileKeys,
   };
 }

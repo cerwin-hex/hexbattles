@@ -15,6 +15,12 @@ export interface BorderEdgeLayerProps {
   showInnerEdges: boolean;
   hasSelection: boolean;
   selectionEdges: BorderEdge[];
+  /**
+   * Light-green outline around the single tile of a selected building (tower,
+   * castle, bridge). Rendered independently of `hasSelection` — a selected
+   * bridge on a lake tile may yield no contiguous territory selection.
+   */
+  buildingSelectionEdges: BorderEdge[];
 }
 
 function BorderEdgeLayerInner({
@@ -23,6 +29,7 @@ function BorderEdgeLayerInner({
   showInnerEdges,
   hasSelection,
   selectionEdges,
+  buildingSelectionEdges,
 }: BorderEdgeLayerProps) {
   return (
     <G>
@@ -64,6 +71,18 @@ function BorderEdgeLayerInner({
             strokeLinecap="round"
           />
         ))}
+      {buildingSelectionEdges.map((edge, i) => (
+        <Line
+          key={`bld-${i}`}
+          x1={edge.x1}
+          y1={edge.y1}
+          x2={edge.x2}
+          y2={edge.y2}
+          stroke={edge.color}
+          strokeWidth={edge.width}
+          strokeLinecap="round"
+        />
+      ))}
     </G>
   );
 }
