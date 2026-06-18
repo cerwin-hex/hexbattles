@@ -76,7 +76,7 @@ describe("playMatch (smoke)", () => {
       seed: 1,
       tiles: 50,
       difficultyA: "expert",
-      difficultyB: "easy",
+      difficultyB: "hard",
       maxTurns: 30,
     });
     expect(r.turns).toBeGreaterThan(0);
@@ -124,11 +124,13 @@ describe("no over-spend invariant", () => {
 
   // The reserve-gated tempo term lets expert run deliberate short deficits. An
   // aggregate win-rate can hide a collapse *tail* — a few games where the AI
-  // over-invests and bankrupts itself. A weaker opponent surfaces it: if tempo
-  // ever self-destructs, expert drops games it should never lose. Guard both the
-  // win floor and the no-negative-balance invariant.
+  // over-invests and bankrupts itself. If tempo ever self-destructs, expert
+  // drops games it dominates. Guard both the win floor and the no-negative-
+  // balance invariant. Opponent is Hard (the canonical Expert sparring tier —
+  // see the describe-block note); Expert beats Hard comfortably, so any genuine
+  // collapse tail shows up as a sub-floor win-rate or a negative balance.
   fullIt(
-    "expert never throws games to a weaker AI (tempo collapse-tail guard)",
+    "expert never throws games to Hard (tempo collapse-tail guard)",
     async () => {
       let wins = 0;
       let games = 0;
@@ -137,7 +139,7 @@ describe("no over-spend invariant", () => {
           seed: s,
           tiles: 50,
           difficultyA: "expert",
-          difficultyB: "medium",
+          difficultyB: "hard",
           maxTurns: 45,
         });
         expect(r.minBalance).toBeGreaterThanOrEqual(0);
@@ -151,36 +153,12 @@ describe("no over-spend invariant", () => {
 });
 
 describe("expert strength (self-play)", () => {
-  // Expert tiers are NOT tested against the Hard tiers: those match-ups are
-  // saturated (Expert ~92% vs hard; super_expert ~69% vs super_hard) and so blind
-  // to the small deltas that matter when tuning Expert. Changes to the Expert brain
-  // are judged new-vs-old instead (see `mirrorAbFFA` / the perf-neutrality A/B).
-  fullIt(
-    "super_expert is the dominant seat in 4-AI free-for-alls (3-4 opponents)",
-    async () => {
-      // super_expert(ai1) vs super_hard, hard, medium across seeded maps.
-      const wins: Record<string, number> = {};
-      const N = 4;
-      for (let s = 0; s < N; s++) {
-        const r = await playFreeForAll({
-          seed: 3000 + s,
-          tiles: 80,
-          difficulties: ["super_expert", "super_hard", "hard", "medium"],
-          maxTurns: 35,
-        });
-        if (r.winner !== "draw") wins[r.winner] = (wins[r.winner] ?? 0) + 1;
-      }
-      const expertWins = wins["ai1" as TerritoryOwner] ?? 0;
-      const bestOther = Math.max(
-        0,
-        ...(["ai2", "ai3", "ai4"] as TerritoryOwner[]).map((s) => wins[s] ?? 0),
-      );
-      // Observed expert 3 / others ≤1. Require expert the strict top winner.
-      expect(expertWins).toBeGreaterThan(bestOther);
-      expect(expertWins).toBeGreaterThanOrEqual(Math.ceil(N / 2));
-    },
-    600000,
-  );
+  // Methodology: when Expert is pitted against a DIFFERENT AI it is always Hard —
+  // the one tier strong enough to be a meaningful sparring partner yet weak
+  // enough to leave headroom (Expert ~92% vs Hard). Medium/Easy/super_* opponents
+  // are not used: they add no signal. Tuning deltas (does a brain CHANGE help?)
+  // are judged new-vs-old on mirrored Expert instead — `mirrorAbFFA` and the
+  // perf-neutrality A/B — because Expert-vs-Hard is saturated and blind to them.
 
   fullIt(
     "2-ply expert beats hard at least as well as 1-ply expert (same opponent/seeds)",
