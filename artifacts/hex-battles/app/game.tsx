@@ -129,10 +129,6 @@ import {
   getSavedGameSync,
   setSavedGame,
 } from "@/utils/savedGame";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
-const SPLASH_SEEN_KEY = "hex_battles_splash_seen";
-
 export default function GameScreen() {
 
   const params = useLocalSearchParams<{
@@ -214,16 +210,8 @@ export default function GameScreen() {
   const splashOpacity = useSharedValue(1);
 
   useEffect(() => {
-    let cancelled = false;
-    AsyncStorage.getItem(SPLASH_SEEN_KEY).then((val) => {
-      if (cancelled) return;
-      if (val !== null) return;
-      setShowSplash(true);
-      AsyncStorage.setItem(SPLASH_SEEN_KEY, "1").catch(() => {});
-    });
-    return () => {
-      cancelled = true;
-    };
+    if (resumeSnapshot) return;
+    setShowSplash(true);
   }, []);
 
   useEffect(() => {
