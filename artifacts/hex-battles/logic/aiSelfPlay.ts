@@ -336,6 +336,8 @@ export interface FreeForAllConfig {
    *  per-seat brain variant for new-vs-old Expert A/B comparisons (see
    *  `mirrorAbFFA`). */
   onBeforeOwnerTurn?: (owner: TerritoryOwner) => void;
+  /** TEMP DIAGNOSTIC: fired right after an owner's turn, with the live state. */
+  onAfterOwnerTurn?: (owner: TerritoryOwner, ws: AiWorkingState) => void;
 }
 
 export interface FreeForAllResult {
@@ -419,6 +421,7 @@ export async function playFreeForAll(cfg: FreeForAllConfig): Promise<FreeForAllR
         for (const bal of ws.balances.values()) {
           if (bal < minBalance) minBalance = bal;
         }
+        cfg.onAfterOwnerTurn?.(owner, ws);
       }
       const alive = seats.filter((s) => landTiles(ws, s) > 0);
       if (alive.length <= 1) {

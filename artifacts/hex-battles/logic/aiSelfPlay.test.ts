@@ -5,13 +5,62 @@ import {
   mirrorAbFFA,
   runOneAiTurnHeadless,
 } from "@/logic/aiSelfPlay";
-import { __setExpertSearchConfig, __setExpertCandidateMode, __setExpertMaxIters } from "@/logic/aiExpert";
+import {
+  __setExpertSearchConfig, __setExpertCandidateMode, __setExpertMaxIters,
+  evaluatePosition, simulateAction, opponentBestResponse, DEFAULT_WEIGHTS,
+  type SimState,
+} from "@/logic/aiExpert";
 import type { TerritoryOwner, Difficulty, HexTile, EntityType } from "@/types";
 import type { AiWorkingState } from "@/logic/aiStrategy";
 import {
   getContiguousTerritory,
   getTerritoryId,
+  getMaxEnemyZoC,
+  getValidMoves,
+  HEX_EDGES,
+  ENTITY_META,
+  unitMovement,
 } from "@/utils/hexGrid";
+
+// Count this owner's genuinely-IDLE units that are sitting next to an EMPTY
+// enemy/neutral tile they could freely take, where — looking one move ahead (the
+// same 2-ply scoring the decision loop uses) — the capture is a net gain. That
+// is free value left on the table: the loop should have taken it. Excludes:
+//   - units that already acted this turn (a partial-move entry) — they are not
+//     standing still, and may simply lack the movement left to reach the tile;
+//   - captures the 2-ply search DECLINES (delta <= 0) — those are correct holds
+//     (the enemy punishes the overextension), not idling.
+function countTwoPlyPositiveIdleCaptures(owner: TerritoryOwner, ws: AiWorkingState): number {
+  const W = DEFAULT_WEIGHTS;
+  const { tileMap, entities, balances, cities, spentUnits } = ws;
+  const score = (st: SimState) => evaluatePosition(owner, st.tileMap, st.entities, st.balances, st.cities, W);
+  const base: SimState = { tileMap, entities, balances, cities };
+  const baseScore2 = score(opponentBestResponse(owner, base, W).state);
+  let idle = 0;
+  for (const tile of tileMap.values()) {
+    if (tile.owner !== owner) continue;
+    const ue = entities.get(tile.key);
+    if (!ue || !ENTITY_META[ue].isUnit || spentUnits.has(tile.key)) continue;
+    if (ws.partialMoves.has(tile.key)) continue; // already moved this turn
+    const ustr = ENTITY_META[ue].strength;
+    const [q, r] = tile.key.split(",").map(Number);
+    const vm = getValidMoves(tile.key, owner, entities, tileMap, spentUnits,
+      unitMovement(ue), ws.combatSpentUnits);
+    let hasFreeCapture = false;
+    for (const { dir: [dq, dr] } of HEX_EDGES) {
+      const nk = `${q + dq},${r + dr}`;
+      const nt = tileMap.get(nk);
+      if (!nt || nt.owner === owner || nt.terrain === "mountain" || nt.terrain === "lake") continue;
+      if (entities.get(nk)) continue; // EMPTY targets only — a free, uncontested grab
+      if (!vm.has(nk) || ustr <= getMaxEnemyZoC(nk, owner, entities, tileMap)) continue;
+      const after = simulateAction(base, { kind: "move", from: tile.key, to: nk }, owner);
+      const d2 = score(opponentBestResponse(owner, after, W).state) - baseScore2;
+      if (d2 > 1e-6) { hasFreeCapture = true; break; }
+    }
+    if (hasFreeCapture) idle++;
+  }
+  return idle;
+}
 
 // The strength series are real games (~1.3s each), too slow for the default
 // suite. They run only when AI_SELFPLAY is set; the headline results are
@@ -371,4 +420,32 @@ describe("cavalry single-turn sweep (end-to-end)", () => {
     expect(ws.tileMap.get("3,0")?.owner).toBe("neutral");
     expect(ws.tileMap.get("4,0")?.owner).toBe("neutral");
   });
+});
+
+describe("free-capture starvation (search pruning)", () => {
+  // Regression for the "idle unit standing next to a takeable tile for rounds"
+  // report. The 2-ply search only deep-scores the top-K candidates by 1-ply
+  // score; in a big late-game territory, front moves (high 1-ply, but bad after
+  // the enemy replies) fill the top-K and crowd out a genuinely-safe rear
+  // capture (modest 1-ply, but a real gain) — so the loop picks nothing and the
+  // unit idles every turn. The fix adds safe captures to the 2-ply set, then
+  // lets 2-ply decide. Invariant: across real all-Expert games, no idle unit is
+  // ever left next to a capture that is a net gain one move ahead.
+  fullIt(
+    "leaves no 2-ply-positive capture on the table in 100-tile 4-Expert games",
+    async () => {
+      let positiveIdle = 0;
+      for (let seed = 5000; seed < 5007; seed++) {
+        await playFreeForAll({
+          seed, tiles: 100, maxTurns: 30,
+          difficulties: ["expert", "expert", "expert", "expert"],
+          onAfterOwnerTurn: (owner, ws) => {
+            positiveIdle += countTwoPlyPositiveIdleCaptures(owner, ws);
+          },
+        });
+      }
+      expect(positiveIdle).toBe(0);
+    },
+    180000,
+  );
 });

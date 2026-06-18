@@ -1065,6 +1065,20 @@ export function __setExpertMaxIters(n: number | null): void {
   MAX_ITERS_OVERRIDE = n;
 }
 
+// The 2-ply pass only deep-scores the top-K candidates by 1-ply score. In a big
+// late-game territory, front moves (high 1-ply score, but bad after the enemy's
+// reply) fill the top-K and crowd out a genuinely-safe capture of an empty tile
+// (modest 1-ply score — income only, no frontline bonus — but a real gain).
+// The loop then finds nothing positive among the top-K and the unit idles next
+// to a free tile, every turn. Augmenting the 2-ply set with those safe captures
+// lets the search SEE them; 2-ply still decides (captures the enemy punishes
+// stay declined). Toggleable for the self-play A/B that proves it never regresses.
+let SAFE_CAPTURE_AUGMENT = true;
+const SAFE_CAPTURE_AUGMENT_CAP = 8;
+export function __setExpertSafeCaptureAugment(on: boolean | null): void {
+  SAFE_CAPTURE_AUGMENT = on ?? true;
+}
+
 export async function runExpertTerritoryDecisionLoop(
   startTileKey: string,
   ctx: AiContext,
@@ -1121,12 +1135,28 @@ export async function runExpertTerritoryDecisionLoop(
       // act, so compare against the do-nothing post-reply baseline.
       const baseReplied = opponentBestResponse(owner, base, weights).state;
       const baseScore2 = score(baseReplied);
-      const topK = scored
-        .slice()
-        .sort((a, b) => b.score1 - a.score1)
-        .slice(0, Math.max(1, search.k));
+      const ranked = scored.slice().sort((a, b) => b.score1 - a.score1);
+      const evalSet = ranked.slice(0, Math.max(1, search.k));
+      if (SAFE_CAPTURE_AUGMENT) {
+        // Add safe captures (a move onto an empty non-owned tile — the ZoC check
+        // in candidate-gen already guarantees it is takeable) that fell outside
+        // the top-K, deduped by target and capped to bound the extra 2-ply cost.
+        const inSet = new Set(evalSet.map((s) => s.cand));
+        const seenTargets = new Set<string>();
+        let added = 0;
+        for (const sc of ranked) {
+          if (added >= SAFE_CAPTURE_AUGMENT_CAP) break;
+          if (inSet.has(sc.cand) || sc.cand.kind !== "move") continue;
+          const dest = ctx.tileMap.get(sc.cand.to);
+          if (!dest || dest.owner === owner || ctx.entities.get(sc.cand.to)) continue;
+          if (seenTargets.has(sc.cand.to)) continue;
+          seenTargets.add(sc.cand.to);
+          evalSet.push(sc);
+          added++;
+        }
+      }
       let bestDelta = SCORE_EPSILON;
-      for (const sc of topK) {
+      for (const sc of evalSet) {
         const replied = opponentBestResponse(owner, sc.after, weights).state;
         const score2 = score(replied);
         const delta = score2 - baseScore2;
