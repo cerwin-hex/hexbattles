@@ -8,6 +8,7 @@ import {
   DEFAULT_WEIGHTS,
   __setExpertSearchConfig,
   __setExpertCandidateMode,
+  __setExpertIdleFortPenalty,
   type SimState,
   type ExpertAction,
 } from "@/logic/aiExpert";
@@ -93,6 +94,48 @@ describe("evaluatePosition", () => {
     const sBig = evaluatePosition("ai1", big, new Map(), new Map(), new Set());
     const sSmall = evaluatePosition("ai1", small, new Map(), new Map(), new Set());
     expect(sBig).toBeGreaterThan(sSmall);
+  });
+
+  describe("idle-fort penalty (front-relevant fortification)", () => {
+    afterEach(() => __setExpertIdleFortPenalty(null));
+
+    // ai1 blob with a tower at (0,1); the only substantial enemy is a far cluster
+    // ~15 tiles away — so the tower defends nothing.
+    const rearMap = makeTileMap([
+      makeTile(0, 0, "ai1"), makeTile(1, 0, "ai1"), makeTile(2, 0, "ai1"),
+      makeTile(0, 1, "ai1"), makeTile(1, 1, "ai1"),
+      makeTile(15, 0, "ai2"), makeTile(16, 0, "ai2"), makeTile(15, 1, "ai2"),
+    ]);
+    const withTower = new Map<string, EntityType>([["0,1", "tower"]]);
+    const withoutTower = new Map<string, EntityType>();
+
+    it("scores removing a deep-rear tower as an improvement when enabled", () => {
+      __setExpertIdleFortPenalty(true);
+      const sWith = evaluatePosition("ai1", rearMap, withTower, new Map(), new Set());
+      const sWithout = evaluatePosition("ai1", rearMap, withoutTower, new Map(), new Set());
+      expect(sWithout).toBeGreaterThan(sWith); // removing the idle tower is better
+    });
+
+    it("keeps a deep-rear tower (original behaviour) when disabled", () => {
+      __setExpertIdleFortPenalty(false);
+      const sWith = evaluatePosition("ai1", rearMap, withTower, new Map(), new Set());
+      const sWithout = evaluatePosition("ai1", rearMap, withoutTower, new Map(), new Set());
+      expect(sWith).toBeGreaterThan(sWithout); // fortification credit ⇒ keep it
+    });
+
+    it("still credits a front tower (not penalised) when enabled", () => {
+      // Tower at (2,0) is adjacent to an enemy cluster — a real defensive asset.
+      const frontMap = makeTileMap([
+        makeTile(0, 0, "ai1"), makeTile(1, 0, "ai1"), makeTile(2, 0, "ai1"),
+        makeTile(3, 0, "ai2"), makeTile(4, 0, "ai2"), makeTile(4, 1, "ai2"),
+      ]);
+      const fWith = new Map<string, EntityType>([["2,0", "tower"]]);
+      const fWithout = new Map<string, EntityType>();
+      __setExpertIdleFortPenalty(true);
+      const sWith = evaluatePosition("ai1", frontMap, fWith, new Map(), new Set());
+      const sWithout = evaluatePosition("ai1", frontMap, fWithout, new Map(), new Set());
+      expect(sWith).toBeGreaterThan(sWithout); // front tower is still worth keeping
+    });
   });
 
   it("penalises a tile capturable by an adjacent stronger enemy (threat term)", () => {

@@ -121,6 +121,12 @@ export interface EvalWeights {
    */
   assault: number;
   fortification: number;
+  /** Penalty per fort (tower/castle) that defends nothing — no enemy on its
+   * border and no substantial enemy within FORT_RELEVANCE_DIST. Such a fort is
+   * pure standing upkeep (and, because defence upkeep scales linearly, it also
+   * inflates the cost of every USEFUL front fort). Counter-weight so the Expert
+   * tears a useless rear fort down instead of paying for it forever. */
+  idleFort: number;
   /** Penalty per strength point of enemy (non-owner) units and fortifications.
    * Enemy military is otherwise invisible to the eval, so capturing a unit or
    * fort scored the same as grabbing an equal-terrain empty tile. This makes
@@ -192,6 +198,7 @@ export const DEFAULT_WEIGHTS: EvalWeights = {
   breakthrough: 1.5,
   assault: 4,
   fortification: 3,
+  idleFort: 4,
   enemyMilitary: 6,
   borderBonus: 1.5,
   frontline: 1,
@@ -287,6 +294,7 @@ export function evaluatePosition(
   // breakthrough, assault, and the enemy's standing military (kill incentive) ──
   let unitStrength = 0;
   let fortification = 0;
+  let idleForts = 0;
   let borderBonus = 0;
   let frontline = 0;
   // Breakthrough/assault are counted per distinct capturable *target* tile, not
@@ -363,9 +371,26 @@ export function evaluatePosition(
         }
       }
     } else if (e === "tower" || e === "castle") {
-      fortification += meta.strength;
-      if (onBorder) borderBonus += meta.strength;
-      if (enemyAdjacent) frontline += meta.strength;
+      // A fort earns its keep only near the front. Idle rear forts (no enemy on
+      // the border, none substantial within reach) are not credited and are
+      // penalised — they are pure upkeep that also inflates every useful fort's
+      // linearly-scaling cost. (Toggle off ⇒ original: credit every fort.)
+      let frontRelevant = onBorder || enemyAdjacent;
+      if (!frontRelevant && enemyCoords.length > 0) {
+        let minD = Infinity;
+        for (const [eq, er] of enemyCoords) {
+          const d = hexDistance(kq, kr, eq, er);
+          if (d < minD) minD = d;
+        }
+        frontRelevant = minD <= FORT_RELEVANCE_DIST;
+      }
+      if (frontRelevant || !IDLE_FORT_PENALTY) {
+        fortification += meta.strength;
+        if (onBorder) borderBonus += meta.strength;
+        if (enemyAdjacent) frontline += meta.strength;
+      } else {
+        idleForts++;
+      }
     }
   }
 
@@ -488,6 +513,7 @@ export function evaluatePosition(
     breakthrough * w.breakthrough +
     assault * w.assault +
     fortification * w.fortification -
+    idleForts * w.idleFort -
     enemyMilitary * w.enemyMilitary +
     borderBonus * w.borderBonus +
     frontline * w.frontline +
@@ -1077,6 +1103,17 @@ let SAFE_CAPTURE_AUGMENT = true;
 const SAFE_CAPTURE_AUGMENT_CAP = 8;
 export function __setExpertSafeCaptureAugment(on: boolean | null): void {
   SAFE_CAPTURE_AUGMENT = on ?? true;
+}
+
+// A fort is "idle" (defends nothing) when it is not on the enemy-facing border
+// and no substantial enemy is within this hex distance. Matches the rear-fort
+// remove-candidate threshold so the eval never penalises a fort the loop can't
+// also tear down. Toggleable for the self-play A/B (off ⇒ original behaviour:
+// every fort credited, no penalty).
+const FORT_RELEVANCE_DIST = 6;
+let IDLE_FORT_PENALTY = true;
+export function __setExpertIdleFortPenalty(on: boolean | null): void {
+  IDLE_FORT_PENALTY = on ?? true;
 }
 
 export async function runExpertTerritoryDecisionLoop(
