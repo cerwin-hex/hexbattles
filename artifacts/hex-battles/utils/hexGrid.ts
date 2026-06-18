@@ -197,7 +197,7 @@ export function nextDefenseUpkeep(type: 'tower' | 'castle', currentCount: number
 }
 
 /** Returns true when a lake tile is bridged or occupied by a unit (captured bridge). */
-function isLakePassable(key: string, entities?: Map<string, EntityType>): boolean {
+export function isLakePassable(key: string, entities?: Map<string, EntityType>): boolean {
   const e = entities?.get(key);
   if (!e) return false;
   return e === 'bridge' || ENTITY_META[e].isUnit;
@@ -364,6 +364,55 @@ export function getValidMoves(
     }
   }
 
+  return result;
+}
+
+/**
+ * Tiles outside the player's territory onto which an armed unit may be bought
+ * directly into an attack/capture. A launch tile is any territory tile a unit
+ * could legally stand on (lakes only when passable — bridged or unit-occupied);
+ * targets are its non-territory neighbours the unit can beat on ZoC.
+ *
+ * Must stay consistent with `getValidMoves`: a near-side unit that can move
+ * across a friendly-occupied bridge to attack should also be buyable across it.
+ */
+export function getPlacementAttackTiles(
+  armedEntityId: EntityType,
+  selectedTerritory: HexTile[],
+  selectedTileKeys: Set<string>,
+  tileMap: Map<string, HexTile>,
+  entities: Map<string, EntityType>,
+): Set<string> {
+  const meta = ENTITY_META[armedEntityId];
+  const result = new Set<string>();
+  if (!meta.isUnit) return result;
+  for (const tile of selectedTerritory) {
+    if (tile.terrain === "mountain") continue;
+    if (tile.terrain === "lake" && !isLakePassable(tile.key, entities)) continue;
+    const [q, r] = tile.key.split(",").map(Number);
+    for (const { dir: [dq, dr] } of HEX_EDGES) {
+      const nk = tileKey(q + dq, r + dr);
+      if (selectedTileKeys.has(nk)) continue;
+      const neighbor = tileMap.get(nk);
+      if (!neighbor) continue;
+      if (neighbor.terrain === "mountain") continue;
+      if (neighbor.terrain === "lake" && !isLakePassable(nk, entities)) continue;
+      const existingEntity = entities.get(nk);
+      // Cavalry can never assault a fortification, even when buying into combat.
+      if (isCavalry(armedEntityId) && cavalryMoveKind(existingEntity) === "building")
+        continue;
+      if (existingEntity && existingEntity !== "rebel") {
+        // buildings with higher strength can't be captured
+        if (
+          !ENTITY_META[existingEntity].isUnit &&
+          meta.strength < ENTITY_META[existingEntity].strength
+        )
+          continue;
+      }
+      const enemyZoC = getMaxEnemyZoC(nk, "player", entities, tileMap);
+      if (meta.strength > enemyZoC) result.add(nk);
+    }
+  }
   return result;
 }
 

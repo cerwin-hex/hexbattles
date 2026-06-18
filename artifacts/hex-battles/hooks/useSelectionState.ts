@@ -6,10 +6,8 @@ import {
   getContiguousTerritory,
   getTerritoryId,
   getValidMoves,
-  getMaxEnemyZoC,
+  getPlacementAttackTiles,
   unitMovement,
-  isCavalry,
-  cavalryMoveKind,
 } from "@/utils/hexGrid";
 import { mergeResult } from "@/logic/gameLogic";
 import { computeSelectionBorderEdges } from "@/utils/borderEdges";
@@ -214,39 +212,13 @@ export function useSelectionState({
 
   const validPlacementAttackTiles = useMemo<Set<string>>(() => {
     if (!armedEntityId) return new Set();
-    const meta = ENTITY_META[armedEntityId];
-    if (!meta.isUnit) return new Set();
-    const result = new Set<string>();
-    for (const tile of selectedTerritory) {
-      if (tile.terrain === "mountain") continue;
-      if (tile.terrain === "lake" && entities.get(tile.key) !== "bridge") continue;
-      const [q, r] = tile.key.split(",").map(Number);
-      for (const {
-        dir: [dq, dr],
-      } of HEX_EDGES) {
-        const nk = tileKey(q + dq, r + dr);
-        if (selectedTileKeys.has(nk)) continue;
-        const neighbor = activeTileMap.get(nk);
-        if (!neighbor) continue;
-        if (neighbor.terrain === "mountain") continue;
-        if (neighbor.terrain === "lake" && entities.get(nk) !== "bridge") continue;
-        const existingEntity = entities.get(nk);
-        // Cavalry can never assault a fortification, even when buying into combat.
-        if (isCavalry(armedEntityId) && cavalryMoveKind(existingEntity) === "building")
-          continue;
-        if (existingEntity && existingEntity !== "rebel") {
-          // buildings with higher strength can't be captured
-          if (
-            !ENTITY_META[existingEntity].isUnit &&
-            meta.strength < ENTITY_META[existingEntity].strength
-          )
-            continue;
-        }
-        const enemyZoC = getMaxEnemyZoC(nk, "player", entities, activeTileMap);
-        if (meta.strength > enemyZoC) result.add(nk);
-      }
-    }
-    return result;
+    return getPlacementAttackTiles(
+      armedEntityId,
+      selectedTerritory,
+      selectedTileKeys,
+      activeTileMap,
+      entities,
+    );
   }, [
     armedEntityId,
     selectedTerritory,

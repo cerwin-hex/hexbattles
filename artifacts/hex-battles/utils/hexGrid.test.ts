@@ -10,6 +10,7 @@ import {
   getZoCStrength,
   getMaxEnemyZoC,
   getValidMoves,
+  getPlacementAttackTiles,
   getMoveCost,
   getContiguousTerritory,
   getTerritoryId,
@@ -554,5 +555,49 @@ describe("calcAdminBurden", () => {
     expect(calcAdminBurden(26)).toBe(3);
     expect(calcAdminBurden(30)).toBe(5);
     expect(calcAdminBurden(40)).toBe(10);
+  });
+});
+
+// ─── getPlacementAttackTiles ────────────────────────────────────────────────────
+
+describe("getPlacementAttackTiles", () => {
+  // P(0,0) player grass — B(1,0) player lake — E(2,0) enemy grass (ZoC 0).
+  const map = tileMap([
+    makeTile(0, 0, "player", "grass"),
+    makeTile(1, 0, "player", "lake"),
+    makeTile(2, 0, "ai1", "grass"),
+  ]);
+
+  function placeAcross(ents: Map<string, EntityType>): Set<string> {
+    const terr = getContiguousTerritory(map, "0,0", "player", ents);
+    const keys = new Set(terr.map((t) => t.key));
+    return getPlacementAttackTiles("scout", terr, keys, map, ents);
+  }
+
+  it("allows buying a unit directly across an (empty) bridge", () => {
+    expect(placeAcross(entities([["1,0", "bridge"]])).has("2,0")).toBe(true);
+  });
+
+  it("allows buying across a bridge that a friendly unit is parked on", () => {
+    // While a unit sits on the bridge the stored entity is the unit, not
+    // "bridge"; the crossing is still passable, so buying across must work —
+    // matching getValidMoves, which lets a near-side unit move across it.
+    const ents = entities([["1,0", "warrior"]]);
+    const moveEnts = entities([["1,0", "warrior"], ["0,0", "scout"]]);
+    expect(getValidMoves("0,0", "player", moveEnts, map, new Set()).has("2,0")).toBe(true);
+    expect(placeAcross(ents).has("2,0")).toBe(true);
+  });
+
+  it("does not launch from an impassable (unbridged, empty) lake tile", () => {
+    const lakeOnly = tileMap([
+      makeTile(0, 0, "player", "grass"),
+      makeTile(1, 0, "neutral", "lake"),
+      makeTile(2, 0, "ai1", "grass"),
+    ]);
+    const terr = getContiguousTerritory(lakeOnly, "0,0", "player", entities([]));
+    const keys = new Set(terr.map((t) => t.key));
+    expect(
+      getPlacementAttackTiles("scout", terr, keys, lakeOnly, entities([])).has("2,0"),
+    ).toBe(false);
   });
 });
