@@ -12,7 +12,7 @@ import {
   getTerritoryId,
   ENTITY_META,
 } from "@/utils/hexGrid";
-import { applySingleHexPenalty, calcTerritoryIncome, calcTerritoryUpkeep } from "@/logic/gameLogic";
+import { applySingleHexPenalty } from "@/logic/gameLogic";
 import { runAiTurn } from "@/logic/aiStrategy";
 import type { AiWorkingState, AiTurnCallbacks } from "@/logic/aiStrategy";
 import { __setExpertWeightsOverride, __setExpertSearchConfig, type EvalWeights } from "@/logic/aiExpert";
@@ -75,70 +75,10 @@ function ownerStats(ws: AiWorkingState, owner: TerritoryOwner): OwnerStats {
   return { land: landTiles(ws, owner), units, forts, balance };
 }
 
-/** Headless income/upkeep step — mirrors the AI branch of endTurnHandler. */
-/** Mirrors endTurnHandler: only the two "super" tiers get the income bonus. */
-function ownerGetsIncomeBonus(
-  owner: TerritoryOwner,
-  diffByOwner: Record<string, Difficulty>,
-): boolean {
-  const d = diffByOwner[owner];
-  return d === "super_hard" || d === "super_expert";
-}
-
-function creditIncome(
-  ws: AiWorkingState,
-  diffByOwner: Record<string, Difficulty>,
-  seats: TerritoryOwner[] = COMPETITORS,
-): void {
-  for (const owner of seats) {
-    const visited = new Set<string>();
-    for (const tile of Array.from(ws.tileMap.values())) {
-      if (tile.owner !== owner || visited.has(tile.key)) continue;
-      const territory = getContiguousTerritory(ws.tileMap, tile.key, owner, ws.entities);
-      for (const t of territory) visited.add(t.key);
-      const tid = getTerritoryId(territory);
-      if (!tid) continue;
-      if (!ws.balances.has(tid)) ws.balances.set(tid, 0);
-      const income = calcTerritoryIncome(territory, ws.entities, ws.cities, ws.tileMap);
-      const landTileCount = territory.filter((t) => t.terrain !== "lake").length;
-      const incomeModifier = ownerGetsIncomeBonus(owner, diffByOwner)
-        ? landTileCount
-        : 0;
-      const upkeep = calcTerritoryUpkeep(territory, ws.entities);
-      const current = ws.balances.get(tid) ?? 0;
-      const delta = income + incomeModifier - upkeep;
-      const newBalance = current + delta;
-      if (newBalance < 0) {
-        ws.balances.set(tid, 0);
-        let unitUpkeepSaved = 0;
-        for (const t of territory) {
-          const e = ws.entities.get(t.key);
-          if (e && ENTITY_META[e].isUnit) {
-            unitUpkeepSaved += ENTITY_META[e].upkeep;
-            if (ws.tileMap.get(t.key)?.terrain === "lake") ws.entities.set(t.key, "bridge");
-            else ws.entities.delete(t.key);
-            ws.graveyard.add(t.key);
-          }
-        }
-        if (delta + unitUpkeepSaved < 0) {
-          for (const t of territory) {
-            const e = ws.entities.get(t.key);
-            if (e && !ENTITY_META[e].isUnit && e !== "rebel" && e !== "city") {
-              ws.entities.delete(t.key);
-              ws.ruins.add(t.key);
-              if (e === "bridge") {
-                const lt = ws.tileMap.get(t.key);
-                if (lt) ws.tileMap.set(t.key, { ...lt, owner: "neutral" });
-              }
-            }
-          }
-        }
-      } else {
-        ws.balances.set(tid, newBalance);
-      }
-    }
-  }
-}
+// Income/upkeep is no longer applied by a separate self-play step. Each owner's
+// economy now runs at the start of its own turn inside the real `runAiTurn` (via
+// `applyOwnerEconomy`), so driving `runAiTurn` per owner credits income exactly
+// once per round — the single authority shared with the React game.
 
 function makeHeadlessCbs(): AiTurnCallbacks {
   let aiStateMap = new Map<string, AiState>();
@@ -277,9 +217,6 @@ export async function playMatch(cfg: MatchConfig): Promise<MatchResult> {
     const t0 = Date.now();
     let turn = 1;
     for (; turn <= cfg.maxTurns; turn++) {
-      // AI income is credited from turn 3 onward (matches endTurnHandler cadence).
-      if (turn >= 3) creditIncome(ws, diffByOwner);
-
       for (const owner of COMPETITORS) {
         if (landTiles(ws, owner) === 0) continue;
         // Fresh per-turn movement budget, like end-of-turn reset in the game.
@@ -405,7 +342,6 @@ export async function playFreeForAll(cfg: FreeForAllConfig): Promise<FreeForAllR
     let minBalance = 0;
     let turn = 1;
     for (; turn <= cfg.maxTurns; turn++) {
-      if (turn >= 3) creditIncome(ws, diffByOwner, seats);
       for (const owner of seats) {
         if (landTiles(ws, owner) === 0) continue;
         ws.spentUnits = new Set();

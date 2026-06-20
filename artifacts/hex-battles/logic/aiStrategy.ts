@@ -19,7 +19,7 @@ import {
   improveCostFor,
   IMPROVED_TERRAINS,
 } from "@/utils/hexGrid";
-import { advanceAttacksUsed, advanceCombatSpent, calcTerritoryIncome, calcTerritoryUpkeep, effectiveRemaining, isChargeAttack, mergeResult, resolveMovedUnitMoves } from "@/logic/gameLogic";
+import { advanceAttacksUsed, advanceCombatSpent, applyOwnerEconomy, calcTerritoryIncome, calcTerritoryUpkeep, effectiveRemaining, isChargeAttack, mergeResult, resolveMovedUnitMoves } from "@/logic/gameLogic";
 import {
   dtSplitScore,
   dtCaptureNegatesIncome,
@@ -1052,6 +1052,43 @@ export async function runAiTurn(
     );
     if (aiTiles.length === 0) continue;
 
+    // AI income/upkeep at the start of this owner's turn — the single place it
+    // happens each round, mirroring the player (whose economy runs at the end of
+    // the AI phase). Credited from round 3 onward (currentTurn > 2): the player
+    // is first credited at the end of round 2, and this one-round AI delay keeps
+    // both sides at 10 + (R-2) income credits at the start of round R. The two
+    // "super" tiers also get a land-tile income bonus.
+    if (currentTurn > 2) {
+      const incomeBonus =
+        difficulty === "super_hard" || difficulty === "super_expert";
+      const prevSnapshot = new Map(ws.tileMap);
+      ws.tileMap = new Map(ws.tileMap);
+      ws.entities = new Map(ws.entities);
+      ws.balances = new Map(ws.balances);
+      ws.graveyard = new Set(ws.graveyard);
+      ws.ruins = new Set(ws.ruins);
+      const bankrupt = applyOwnerEconomy({
+        owner: aiOwner,
+        tileMap: ws.tileMap,
+        entities: ws.entities,
+        balances: ws.balances,
+        cities: ws.cities,
+        graveyard: ws.graveyard,
+        ruins: ws.ruins,
+        incomeBonus,
+      });
+      if (bankrupt) {
+        cbs.applySingleHexPenalty(
+          prevSnapshot, ws.tileMap, ws.balances, ws.entities, ws.graveyard, ws.ruins,
+        );
+      }
+      cbs.state.setEntities(new Map(ws.entities));
+      cbs.state.setTerritoryBalances(new Map(ws.balances));
+      cbs.state.setGraveyard(new Set(ws.graveyard));
+      cbs.state.setRuins(new Set(ws.ruins));
+      cbs.state.setMutableTileMap(new Map(ws.tileMap));
+    }
+
     const cache = new TerritoryCache();
 
     for (const startTile of aiTiles) {
@@ -1568,93 +1605,38 @@ export async function runAiTurn(
     }
   }
 
-  // ── Player bankruptcy check after all AI moves ─────────────────────────────
+  // ── Player economy at the start of the player's next turn ──────────────────
+  // The AI phase has finished and control is about to return to the player, so
+  // apply the player's income/upkeep here — the SINGLE place it happens each
+  // round (income suspended in round 1). It used to ALSO run in `endTurnHandler`
+  // at the player's End Turn, which double-charged upkeep and wrongly bankrupted
+  // negative-net territories whose reserves covered exactly one application
+  // (e.g. a 6g {2 grass + bridge/warrior} territory: 6 → 0 there, then 0 → −6).
   if (currentTurn !== 1) {
-    // Board state before the demolitions below, so the single-hex sweep only
+    // Snapshot before any bankruptcy demolitions so the single-hex sweep only
     // penalizes remnants the bankruptcy itself isolates (not pre-existing ones).
-    const prevBankruptcySnapshot = new Map(ws.tileMap);
-    const playerVisited = new Set<string>();
-    let playerBankruptcyOccurred = false;
-    for (const tile of Array.from(ws.tileMap.values())) {
-      if (tile.owner !== "player" || playerVisited.has(tile.key)) continue;
-      if (tile.terrain === "mountain") continue;
-      const territory = getContiguousTerritory(ws.tileMap, tile.key, "player", ws.entities);
-      for (const t of territory) playerVisited.add(t.key);
-      const territoryId = getTerritoryId(territory);
-      if (!territoryId) continue;
-      const income = calcTerritoryIncome(territory, ws.entities, ws.cities, ws.tileMap);
-      const upkeep = calcTerritoryUpkeep(territory, ws.entities);
-      const current = ws.balances.get(territoryId) ?? 0;
-      const delta = income - upkeep;
-      const newBalance = current + delta;
-      if (newBalance < 0) {
-        // Bankruptcy: reserves + income could not cover upkeep, so the balance
-        // is drained to 0 and units (and possibly buildings) are liquidated.
-        playerBankruptcyOccurred = true;
-        ws.balances = new Map(ws.balances);
-        ws.balances.set(territoryId, 0);
-        ws.entities = new Map(ws.entities);
-        ws.graveyard = new Set(ws.graveyard);
-        let unitUpkeepSaved = 0;
-        for (const t of territory) {
-          const e = ws.entities.get(t.key);
-          if (e && ENTITY_META[e].isUnit) {
-            unitUpkeepSaved += ENTITY_META[e].upkeep;
-            // If the unit was standing on a bridge tile, restore the bridge
-            // entity so the lake tile stays connected to the territory.
-            if (ws.tileMap.get(t.key)?.terrain === 'lake') {
-              ws.entities.set(t.key, 'bridge');
-            } else {
-              ws.entities.delete(t.key);
-            }
-            ws.graveyard.add(t.key);
-          }
-        }
-        if (delta + unitUpkeepSaved < 0) {
-          ws.ruins = new Set(ws.ruins);
-          for (const t of territory) {
-            const e = ws.entities.get(t.key);
-            if (e && !ENTITY_META[e].isUnit && e !== "rebel" && e !== "city") {
-              ws.entities.delete(t.key);
-              ws.ruins.add(t.key);
-              // A demolished bridge must release its lake tile back to neutral,
-              // otherwise the owned lake keeps rendering as a bridge (with a
-              // territory border) even though the structure is gone.
-              if (e === "bridge") {
-                const lt = ws.tileMap.get(t.key);
-                if (lt?.terrain === "lake") {
-                  ws.tileMap = new Map(ws.tileMap);
-                  ws.tileMap.set(t.key, { ...lt, owner: "neutral" });
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-
-    if (playerBankruptcyOccurred) {
-      // Demolished bridges/buildings can leave isolated single-hex remnants
-      // (especially dangling bridges). Mirror endTurnHandler and sweep them so
-      // they don't linger on the board with inherited reserves. Clone the
-      // working sets first since the sweep mutates them in place.
-      ws.tileMap = new Map(ws.tileMap);
-      ws.balances = new Map(ws.balances);
-      ws.graveyard = new Set(ws.graveyard);
-      ws.ruins = new Set(ws.ruins);
+    const prevSnapshot = new Map(ws.tileMap);
+    ws.tileMap = new Map(ws.tileMap);
+    ws.entities = new Map(ws.entities);
+    ws.balances = new Map(ws.balances);
+    ws.graveyard = new Set(ws.graveyard);
+    ws.ruins = new Set(ws.ruins);
+    const bankrupt = applyOwnerEconomy({
+      owner: "player",
+      tileMap: ws.tileMap,
+      entities: ws.entities,
+      balances: ws.balances,
+      cities: ws.cities,
+      graveyard: ws.graveyard,
+      ruins: ws.ruins,
+      incomeBonus: false,
+    });
+    if (bankrupt) {
       cbs.applySingleHexPenalty(
-        prevBankruptcySnapshot,
-        ws.tileMap,
-        ws.balances,
-        ws.entities,
-        ws.graveyard,
-        ws.ruins,
+        prevSnapshot, ws.tileMap, ws.balances, ws.entities, ws.graveyard, ws.ruins,
       );
-      cbs.state.setEntities(new Map(ws.entities));
-      cbs.state.setTerritoryBalances(new Map(ws.balances));
-      cbs.state.setGraveyard(new Set(ws.graveyard));
-      cbs.state.setRuins(new Set(ws.ruins));
     }
+    // Final-state publish below commits the credited balances / liquidations.
   }
 
   // ── Win/loss check ─────────────────────────────────────────────────────────

@@ -382,7 +382,10 @@ describe("cavalry single-turn sweep (end-to-end)", () => {
     ws.balances.set(startTid!, 0);
 
     const before = countLand(ws, "ai1");
-    await runOneAiTurnHeadless(ws, "ai1", 5, "expert");
+    // Run in round 2: income/upkeep is suspended before round 3, so the knight's
+    // 12g upkeep on a 0-reserve territory can't bankrupt it mid-test — this
+    // isolates the charge-capture mechanic from the start-of-turn economy.
+    await runOneAiTurnHeadless(ws, "ai1", 2, "expert");
     const after = countLand(ws, "ai1");
 
     // Exactly two new tiles — the charge cap, isolated from any buying.

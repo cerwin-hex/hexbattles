@@ -330,7 +330,9 @@ describe("runAiTurn", () => {
       await runAiTurn(ws, cbs, [], 2, "easy");
 
       expect(ws.entities.has("0,0")).toBe(false); // bankrupt units liquidated
-      expect(ws.balances.get("5,5")).toBe(30); // solvent territory untouched
+      // Solvent territory is left intact by the sweep and earns its income:
+      // 2 grass = +4 → 30 + 4 = 34 (the economy authority credits net income now).
+      expect(ws.balances.get("5,5")).toBe(34);
     });
 
     it("does not run the bankruptcy check on round 1", async () => {

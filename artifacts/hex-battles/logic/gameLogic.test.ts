@@ -3,6 +3,7 @@ import type { HexTile, EntityType, TerritoryOwner } from "@/types";
 import {
   calcTerritoryUpkeep,
   applySingleHexPenalty,
+  applyOwnerEconomy,
   initTerritoryBalances,
   mergeResult,
   resolveMovedUnitMoves,
@@ -644,5 +645,146 @@ describe("canImproveTile", () => {
     expect(canImproveTile({ ...base, terrain: "mountain" })).toBe(false);
     expect(canImproveTile({ ...base, terrain: "field" })).toBe(false);
     expect(canImproveTile({ ...base, terrain: "mine" })).toBe(false);
+  });
+});
+
+// ─── applyOwnerEconomy ────────────────────────────────────────────────────────
+// The single source of truth for the per-owner economy step (income/upkeep/
+// bankruptcy), applied once per owner per round at the start of that owner's
+// turn. These were previously inlined in endTurnHandler; they live here now that
+// the four drifted copies are unified into this one function.
+
+describe("applyOwnerEconomy", () => {
+  function run(o: {
+    owner?: TerritoryOwner;
+    tiles: HexTile[];
+    entities?: [string, EntityType][];
+    balances?: [string, number][];
+    cities?: string[];
+    incomeBonus?: boolean;
+  }) {
+    const tileMapM = tileMap(o.tiles);
+    const entitiesM = ents(o.entities ?? []);
+    const balancesM = new Map<string, number>(o.balances ?? []);
+    const graveyard = new Set<string>();
+    const ruins = new Set<string>();
+    const bankrupt = applyOwnerEconomy({
+      owner: o.owner ?? "player",
+      tileMap: tileMapM,
+      entities: entitiesM,
+      balances: balancesM,
+      cities: new Set(o.cities ?? []),
+      graveyard,
+      ruins,
+      incomeBonus: o.incomeBonus ?? false,
+    });
+    return { bankrupt, tileMap: tileMapM, entities: entitiesM, balances: balancesM, graveyard, ruins };
+  }
+
+  it("credits grass tile income (2) to the balance", () => {
+    const r = run({ tiles: [makeTile(0, 0, "player")], balances: [["0,0", 10]] });
+    expect(r.balances.get("0,0")).toBe(12); // 10 + 2 income − 0 upkeep
+    expect(r.bankrupt).toBe(false);
+  });
+
+  it("deducts unit upkeep from income", () => {
+    const r = run({
+      tiles: [makeTile(0, 0, "player")],
+      entities: [["0,0", "peasant"]],
+      balances: [["0,0", 10]],
+    });
+    expect(r.balances.get("0,0")).toBe(9); // 10 + 2 − 3
+  });
+
+  it("adds the city bonus to income", () => {
+    const r = run({
+      tiles: [makeTile(0, 0, "player")],
+      balances: [["0,0", 0]],
+      cities: ["0,0"],
+    });
+    expect(r.balances.get("0,0")).toBe(3); // grass 2 + city 1
+  });
+
+  it("kills units and drains the balance to 0 on bankruptcy", () => {
+    // Desert (income 1) + swordsman (upkeep 27), no reserves → bankrupt.
+    const r = run({
+      tiles: [makeTile(0, 0, "player", "desert")],
+      entities: [["0,0", "swordsman"]],
+      balances: [["0,0", 0]],
+    });
+    expect(r.bankrupt).toBe(true);
+    expect(r.balances.get("0,0")).toBe(0);
+    expect(r.entities.has("0,0")).toBe(false);
+    expect(r.graveyard.has("0,0")).toBe(true);
+  });
+
+  it("does not bankrupt when reserves cover the deficit", () => {
+    // Grass (2) + peasant (3) → net −1; reserve 100 covers it.
+    const r = run({
+      tiles: [makeTile(0, 0, "player")],
+      entities: [["0,0", "peasant"]],
+      balances: [["0,0", 100]],
+    });
+    expect(r.bankrupt).toBe(false);
+    expect(r.balances.get("0,0")).toBe(99);
+    expect(r.entities.has("0,0")).toBe(true);
+  });
+
+  it("survives at exactly 0 (boundary: 0 is not < 0)", () => {
+    // Two grass (income 4) + warrior on a lake/bridge (upkeep 9 + implied 1 = 10)
+    // → net −6; a 6g reserve lands the balance at exactly 0 without bankruptcy.
+    const r = run({
+      tiles: [
+        makeTile(0, 0, "player", "grass"),
+        makeTile(1, 0, "player", "grass"),
+        makeTile(0, 1, "player", "lake"),
+      ],
+      entities: [["0,1", "warrior"]],
+      balances: [["0,0", 6]],
+    });
+    expect(r.bankrupt).toBe(false);
+    expect(r.balances.get("0,0")).toBe(0);
+    expect(r.entities.get("0,1")).toBe("warrior");
+  });
+
+  it("demolishes buildings when liquidating units cannot cover the deficit", () => {
+    // Desert (1) + castle (upkeep 5), no units to liquidate → building demolished.
+    const r = run({
+      tiles: [makeTile(0, 0, "player", "desert")],
+      entities: [["0,0", "castle"]],
+      balances: [["0,0", 0]],
+    });
+    expect(r.bankrupt).toBe(true);
+    expect(r.entities.has("0,0")).toBe(false);
+    expect(r.ruins.has("0,0")).toBe(true);
+  });
+
+  it("releases a demolished bridge's lake tile to neutral", () => {
+    // Grass with a rebel (income suppressed) + bridged lake → income 0, bridge
+    // upkeep 1 → bankrupt → bridge demolished, its lake tile released to neutral.
+    const r = run({
+      tiles: [makeTile(0, 0, "player", "grass"), makeTile(1, 0, "player", "lake")],
+      entities: [["0,0", "rebel"], ["1,0", "bridge"]],
+      balances: [["0,0", 0]],
+    });
+    expect(r.bankrupt).toBe(true);
+    expect(r.ruins.has("1,0")).toBe(true);
+    expect(r.tileMap.get("1,0")?.owner).toBe("neutral");
+  });
+
+  it("grants the land-tile income bonus only when incomeBonus is set", () => {
+    const base = { tiles: [makeTile(0, 0, "ai1")], owner: "ai1" as TerritoryOwner, balances: [["0,0", 0] as [string, number]] };
+    expect(run({ ...base, incomeBonus: false }).balances.get("0,0")).toBe(2); // grass only
+    expect(run({ ...base, incomeBonus: true }).balances.get("0,0")).toBe(3);  // grass 2 + 1 land tile
+  });
+
+  it("only touches the named owner's territories", () => {
+    const r = run({
+      owner: "player",
+      tiles: [makeTile(0, 0, "player"), makeTile(5, 5, "ai1")],
+      balances: [["0,0", 0], ["5,5", 0]],
+    });
+    expect(r.balances.get("0,0")).toBe(2); // player credited
+    expect(r.balances.get("5,5")).toBe(0); // ai1 untouched
   });
 });

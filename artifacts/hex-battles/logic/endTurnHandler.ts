@@ -3,17 +3,11 @@ import type {
   EntityType,
   HexTile,
   TerritoryOwner,
-  Difficulty,
   MoveHistorySnapshot,
   GameResult,
 } from "@/types";
 import { HEX_EDGES, tileKey } from "@/utils/hexMath";
-import {
-  ENTITY_META,
-  getContiguousTerritory,
-  getTerritoryId,
-} from "@/utils/hexGrid";
-import { applySingleHexPenalty, calcTerritoryIncome, calcTerritoryUpkeep } from "@/logic/gameLogic";
+import { applySingleHexPenalty } from "@/logic/gameLogic";
 
 export interface EndTurnParams {
   isAiTurn: boolean;
@@ -23,8 +17,6 @@ export interface EndTurnParams {
   turn: number;
   activeTileMap: Map<string, HexTile>;
   cities: Set<string>;
-  aiOwners: TerritoryOwner[];
-  aiDifficulty: Difficulty;
   graveyard: Set<string>;
   ruins: Set<string>;
   mutableTileMap: Map<string, HexTile>;
@@ -66,8 +58,6 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
     turn,
     activeTileMap,
     cities,
-    aiOwners,
-    aiDifficulty,
     graveyard,
     ruins,
     liveOwnerMap,
@@ -105,148 +95,27 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
   const nextTileMap = new Map(activeTileMap);
   const nextBalances = new Map(territoryBalances);
   let nextEntities = new Map(entities);
-  const visited = new Set<string>();
   const nextGraveyard = new Set<string>();
   const nextRuins = new Set<string>();
 
-  // Income and upkeep are suspended in round 1
-  if (turn !== 1) {
-    for (const tile of Array.from(nextTileMap.values())) {
-      if (tile.owner !== "player" || visited.has(tile.key)) continue;
-      const territory = getContiguousTerritory(
-        nextTileMap,
-        tile.key,
-        "player",
-        nextEntities,
-      );
-      for (const t of territory) visited.add(t.key);
-      const territoryId = getTerritoryId(territory);
-      if (!territoryId) continue;
-      const income = calcTerritoryIncome(territory, nextEntities, cities, nextTileMap);
-      const upkeep = calcTerritoryUpkeep(territory, nextEntities);
-      const current = nextBalances.get(territoryId) ?? 0;
-      const delta = income - upkeep;
-      const newBalance = current + delta;
-      if (newBalance < 0) {
-        // Bankruptcy: reserves + income could not cover upkeep, so the balance
-        // is fully drained paying as much of the bill as possible (lands at 0),
-        // then units are liquidated, and if upkeep still exceeds income,
-        // buildings are demolished.
-        nextBalances.set(territoryId, 0);
-        nextEntities = new Map(nextEntities);
-        let unitUpkeepSaved = 0;
-        for (const t of territory) {
-          const e = nextEntities.get(t.key);
-          if (e && ENTITY_META[e].isUnit) {
-            unitUpkeepSaved += ENTITY_META[e].upkeep;
-            if (nextTileMap.get(t.key)?.terrain === "lake") {
-              nextEntities.set(t.key, "bridge");
-            } else {
-              nextEntities.delete(t.key);
-            }
-            nextGraveyard.add(t.key);
-          }
-        }
-        if (delta + unitUpkeepSaved < 0) {
-          for (const t of territory) {
-            const e = nextEntities.get(t.key);
-            if (e && !ENTITY_META[e].isUnit && e !== "rebel" && e !== "city") {
-              nextEntities.delete(t.key);
-              nextRuins.add(t.key);
-              if (e === "bridge") {
-                const lt = nextTileMap.get(t.key);
-                if (lt) nextTileMap.set(t.key, { ...lt, owner: "neutral" });
-              }
-            }
-          }
-        }
-      } else {
-        nextBalances.set(territoryId, newBalance);
-      }
-    }
-  }
+  // The PLAYER's income/upkeep/bankruptcy is no longer applied here. It now runs
+  // exactly once per round at the player's turn boundary — the end of the AI
+  // phase (see `runAiTurn` in aiStrategy.ts), i.e. the start of the player's next
+  // turn. Applying it here as well double-charged upkeep and wrongly bankrupted
+  // negative-net territories whose reserves covered exactly one application.
 
-  // AI income/upkeep must match the player's SPEND cadence, not merely the same
-  // crediting moment. The player's income is credited here at the end of turn N
-  // but isn't spendable until the player's next turn (round N+1) — a one-round
-  // delay. The AI, however, plays its turn immediately after this handler (see
-  // runAiTurn below), so income credited here would be spent in the SAME round,
-  // putting the AI a full economy cycle ahead (it could e.g. upgrade its free
-  // round-1 tower already in round 2, which the player cannot). To give the AI
-  // the same one-round delay we credit its income one handler later: from turn 3
-  // onward (turn > 2). Net effect: at the start of round R both sides hold
-  // 10 + (R-2) income credits.
-  if (turn > 2) {
-    for (const aiOwner of aiOwners) {
-      const aiVisited = new Set<string>();
-      for (const tile of Array.from(nextTileMap.values())) {
-        if (tile.owner !== aiOwner || aiVisited.has(tile.key)) continue;
-        const territory = getContiguousTerritory(
-          nextTileMap,
-          tile.key,
-          aiOwner,
-          nextEntities,
-        );
-        for (const t of territory) aiVisited.add(t.key);
-        const territoryId = getTerritoryId(territory);
-        if (!territoryId) continue;
-        if (!nextBalances.has(territoryId)) nextBalances.set(territoryId, 0);
-        const income = calcTerritoryIncome(territory, nextEntities, cities, nextTileMap);
-        const landTileCount = territory.filter(t => t.terrain !== "lake").length;
-        // Income bonus tiers: super_hard = "hard + bonus income"; super_expert =
-        // "smart brain + bonus income" (the very top). Plain expert is the smart
-        // brain with NO bonus (pure skill). Only the two "super" tiers get it.
-        const incomeModifier =
-          aiDifficulty === "super_hard" || aiDifficulty === "super_expert"
-            ? landTileCount
-            : 0;
-        const upkeep = calcTerritoryUpkeep(territory, nextEntities);
-        const current = nextBalances.get(territoryId) ?? 0;
-        const delta = income + incomeModifier - upkeep;
-        const newBalance = current + delta;
-        if (newBalance < 0) {
-          // Bankruptcy: reserves + income could not cover upkeep, so the
-          // balance is drained to 0 and units (and possibly buildings) are
-          // liquidated.
-          nextBalances.set(territoryId, 0);
-          nextEntities = new Map(nextEntities);
-          let unitUpkeepSaved = 0;
-          for (const t of territory) {
-            const e = nextEntities.get(t.key);
-            if (e && ENTITY_META[e].isUnit) {
-              unitUpkeepSaved += ENTITY_META[e].upkeep;
-              if (nextTileMap.get(t.key)?.terrain === "lake") {
-                nextEntities.set(t.key, "bridge");
-              } else {
-                nextEntities.delete(t.key);
-              }
-              nextGraveyard.add(t.key);
-            }
-          }
-          if (delta + unitUpkeepSaved < 0) {
-            for (const t of territory) {
-              const e = nextEntities.get(t.key);
-              if (e && !ENTITY_META[e].isUnit && e !== "rebel" && e !== "city") {
-                nextEntities.delete(t.key);
-                nextRuins.add(t.key);
-                if (e === "bridge") {
-                  const lt = nextTileMap.get(t.key);
-                  if (lt) nextTileMap.set(t.key, { ...lt, owner: "neutral" });
-                }
-              }
-            }
-          }
-        } else {
-          nextBalances.set(territoryId, newBalance);
-        }
-      }
-    }
-  }
+  // AI income/upkeep is no longer applied here either. Each AI owner's economy
+  // now runs at the start of its own turn, inside `runAiTurn` (aiStrategy.ts),
+  // credited from round 3 onward — the same one-round delay that keeps both
+  // sides at 10 + (R-2) income credits at the start of round R. Centralising the
+  // economy there (via `applyOwnerEconomy`) makes `runAiTurn` the single
+  // authority for both the React flow and the headless self-play harness.
 
-  // After bankruptcy, any bridges or buildings demolished mid-territory can
-  // leave single-hex remnants (especially isolated bridges that previously
-  // had a positive balance). Clean those up now so isolated bridges don't
-  // linger on the board with inherited reserves.
+  // End-of-turn single-hex remnant sweep (defensive backstop). The main sources
+  // of mid-turn isolation each sweep in their own handler now — player moves in
+  // tileTapHandler, AI captures and the per-owner economy (demolished bridges) in
+  // runAiTurn — so this pass rarely finds anything, but it's a cheap safety net
+  // so no isolated single-hex territory can linger with inherited reserves.
   if (turn !== 1) {
     applySingleHexPenalty(
       prevTileMapSnapshot,

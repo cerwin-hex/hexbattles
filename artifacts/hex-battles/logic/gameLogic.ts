@@ -45,6 +45,93 @@ export function calcTerritoryUpkeep(
   );
 }
 
+/**
+ * Apply one owner's per-turn economy to every territory they hold: credit net
+ * income (income − upkeep, plus an optional land-tile income bonus for the
+ * "super" AI tiers) and, when reserves + income cannot cover upkeep, drain the
+ * balance to 0 and liquidate units — demolishing buildings too on a deep
+ * shortfall, releasing any ruined bridge's lake tile back to neutral.
+ *
+ * This is the SINGLE source of truth for the economy step, applied exactly once
+ * per owner per round at the start of that owner's turn. It replaces four
+ * drifted inline copies (the player + AI branches of endTurnHandler, the
+ * end-of-AI-phase player re-check in aiStrategy, and self-play's creditIncome) —
+ * the drift between them caused upkeep to be charged twice and wrongly bankrupt
+ * negative-net territories whose reserves covered exactly one application.
+ *
+ * Mutates `tileMap`/`entities`/`balances`/`graveyard`/`ruins` in place; callers
+ * own those maps and publish fresh copies afterwards. Returns whether ANY of the
+ * owner's territories went bankrupt, so the caller can run the single-hex sweep.
+ */
+export function applyOwnerEconomy(o: {
+  owner: TerritoryOwner;
+  tileMap: Map<string, HexTile>;
+  entities: Map<string, EntityType>;
+  balances: Map<string, number>;
+  cities: Set<string>;
+  graveyard: Set<string>;
+  ruins: Set<string>;
+  /** Grant the land-tile income bonus (super_hard / super_expert AI tiers). */
+  incomeBonus: boolean;
+}): boolean {
+  const { owner, tileMap, entities, balances, cities, graveyard, ruins, incomeBonus } = o;
+  let bankruptcyOccurred = false;
+  const visited = new Set<string>();
+  for (const tile of Array.from(tileMap.values())) {
+    if (tile.owner !== owner || visited.has(tile.key)) continue;
+    if (tile.terrain === "mountain") continue;
+    const territory = getContiguousTerritory(tileMap, tile.key, owner, entities);
+    for (const t of territory) visited.add(t.key);
+    const territoryId = getTerritoryId(territory);
+    if (!territoryId) continue;
+    const income = calcTerritoryIncome(territory, entities, cities, tileMap);
+    const incomeModifier = incomeBonus
+      ? territory.filter((t) => t.terrain !== "lake").length
+      : 0;
+    const upkeep = calcTerritoryUpkeep(territory, entities);
+    const current = balances.get(territoryId) ?? 0;
+    const delta = income + incomeModifier - upkeep;
+    const newBalance = current + delta;
+    if (newBalance < 0) {
+      // Bankruptcy: reserves + income cannot cover upkeep, so the balance is
+      // drained to 0 (paying as much of the bill as possible) and units are
+      // liquidated; if upkeep still outstrips income, buildings are demolished.
+      bankruptcyOccurred = true;
+      balances.set(territoryId, 0);
+      let unitUpkeepSaved = 0;
+      for (const t of territory) {
+        const e = entities.get(t.key);
+        if (e && ENTITY_META[e].isUnit) {
+          unitUpkeepSaved += ENTITY_META[e].upkeep;
+          // A unit on a lake tile sat on a bridge — restore the bridge so the
+          // lake tile stays connected to the territory.
+          if (tileMap.get(t.key)?.terrain === "lake") entities.set(t.key, "bridge");
+          else entities.delete(t.key);
+          graveyard.add(t.key);
+        }
+      }
+      if (delta + unitUpkeepSaved < 0) {
+        for (const t of territory) {
+          const e = entities.get(t.key);
+          if (e && !ENTITY_META[e].isUnit && e !== "rebel" && e !== "city") {
+            entities.delete(t.key);
+            ruins.add(t.key);
+            // A demolished bridge must release its lake tile to neutral, else the
+            // owned lake keeps rendering as a bridge with a territory border.
+            if (e === "bridge") {
+              const lt = tileMap.get(t.key);
+              if (lt?.terrain === "lake") tileMap.set(t.key, { ...lt, owner: "neutral" });
+            }
+          }
+        }
+      }
+    } else {
+      balances.set(territoryId, newBalance);
+    }
+  }
+  return bankruptcyOccurred;
+}
+
 export function applySingleHexPenalty(
   prevTileMap: Map<string, HexTile>,
   tileMap: Map<string, HexTile>,

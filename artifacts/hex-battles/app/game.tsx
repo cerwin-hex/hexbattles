@@ -1159,8 +1159,6 @@ export default function GameScreen() {
       turn,
       activeTileMap,
       cities,
-      aiOwners,
-      aiDifficulty,
       graveyard,
       ruins,
       mutableTileMap,
