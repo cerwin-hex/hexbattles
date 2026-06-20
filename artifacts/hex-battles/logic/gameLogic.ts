@@ -211,8 +211,10 @@ export function applySingleHexPenalty(
  *     "still present" check — and only the normal spread chance below applies.
  *  2. Spread: every empty owned land tile may sprout a rebel — 10% beside 2+
  *     rebels, 7.5% beside 1, else a 2% background chance. Neighbour counts use a
- *     snapshot taken AFTER step 1, so grave-born rebels seed the spread but
- *     freshly-spread rebels don't chain within the same pass.
+ *     snapshot taken BEFORE step 1, so only rebels that already existed at the
+ *     start of the spawn boost their neighbours: a grave that rises this round
+ *     does not raise adjacent odds until next round, and freshly-spread rebels
+ *     likewise don't chain within the same pass.
  *
  * Mutates `entities` in place (callers own it and publish a fresh copy). The
  * caller passes the armed snapshot and, afterwards, removes the armed sites from
@@ -233,6 +235,12 @@ export function spawnRebels(o: {
 }): void {
   const { tileMap, entities, graveyard, ruins, armedGraves, armedRuins } = o;
   const rng = o.rng ?? Math.random;
+  // Snapshot BEFORE the graves rise, so only rebels that already existed at the
+  // start of this spawn count toward the spread chances below. A grave that turns
+  // into a rebel now does NOT boost its neighbours until next round — and neither
+  // does a freshly-spread rebel chain within this pass. Occupancy is checked
+  // against the LIVE `entities` so grave-born rebels are skipped, not re-rolled.
+  const preSpread = new Map(entities);
   for (const key of armedGraves) {
     if (!graveyard.has(key)) continue; // cleared before the spawn → no 75% bonus
     if (tileMap.get(key)?.terrain === "lake") continue;
@@ -251,11 +259,10 @@ export function spawnRebels(o: {
     "ai4",
     "ai5",
   ]);
-  const preSpread = new Map(entities);
   for (const tile of tileMap.values()) {
     if (!owners.has(tile.owner)) continue;
     if (tile.terrain === "mountain" || tile.terrain === "lake") continue;
-    if (preSpread.has(tile.key)) continue;
+    if (entities.has(tile.key)) continue; // occupied (incl. a grave that just rose)
     const [tq, tr] = tile.key.split(",").map(Number);
     const neighborRebelCount = HEX_EDGES.filter(({ dir: [dq, dr] }) => {
       const nk = tileKey(tq + dq, tr + dr);

@@ -898,15 +898,31 @@ describe("spawnRebels", () => {
     expect(run({ tiles: [makeTile(0, 0, "player")], rng: constRng(0.03) }).get("0,0")).toBeUndefined();
   });
 
-  it("spread: a tile beside a rebel uses the higher 7.5% chance", () => {
-    // (0,0) is a rebel; (1,0) is its empty neighbour → 7.5% chance. rng 0.05 is
-    // below 0.075 (spawns) but above the 0.02 an isolated tile would need.
+  it("spread: a tile beside a PRE-EXISTING rebel uses the higher 7.5% chance", () => {
+    // (0,0) is a rebel that existed at round start; (1,0) is its empty neighbour
+    // → 7.5% chance. rng 0.05 is below 0.075 (spawns) but above the 0.02 an
+    // isolated tile would need.
     const e = run({
       tiles: [makeTile(0, 0, "player"), makeTile(1, 0, "player")],
       entities: [["0,0", "rebel"]],
       rng: constRng(0.05),
     });
     expect(e.get("1,0")).toBe("rebel");
+  });
+
+  it("a grave that rises this round does NOT boost its neighbours (same pass)", () => {
+    // Grave (0,0) rises (rng 0.05 < 0.75). Its neighbour (1,0) must stay on the
+    // 2% background chance — NOT the 7.5% it would get if the fresh grave-rebel
+    // counted — so rng 0.05 (≥ 0.02) leaves it empty. Neighbour counts snapshot
+    // the board BEFORE the graves rise.
+    const e = run({
+      tiles: [makeTile(0, 0, "player"), makeTile(1, 0, "player")],
+      graveyard: ["0,0"],
+      armedGraves: ["0,0"],
+      rng: constRng(0.05),
+    });
+    expect(e.get("0,0")).toBe("rebel"); // grave rose
+    expect(e.get("1,0")).toBeUndefined(); // but did not boost its neighbour
   });
 
   it("spread skips neutral, mountain and lake tiles", () => {
