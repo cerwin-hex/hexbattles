@@ -200,6 +200,73 @@ export function applySingleHexPenalty(
   }
 }
 
+/**
+ * Spawn rebels once at a round boundary, after every owner has taken their turn.
+ *
+ * Two mechanisms, applied to the whole board in one pass:
+ *  1. Each ARMED grave / ruin (a site that has stood since the start of this
+ *     round — see the snapshot the callers take) on an empty, non-lake tile has a
+ *     75% chance to rise as a rebel. A site cleared before now (occupied, or the
+ *     marker removed) forfeits the bonus — `graveyard`/`ruins` membership is the
+ *     "still present" check — and only the normal spread chance below applies.
+ *  2. Spread: every empty owned land tile may sprout a rebel — 10% beside 2+
+ *     rebels, 7.5% beside 1, else a 2% background chance. Neighbour counts use a
+ *     snapshot taken AFTER step 1, so grave-born rebels seed the spread but
+ *     freshly-spread rebels don't chain within the same pass.
+ *
+ * Mutates `entities` in place (callers own it and publish a fresh copy). The
+ * caller passes the armed snapshot and, afterwards, removes the armed sites from
+ * `graveyard`/`ruins` (each site rolls once, then is consumed). `rng` defaults to
+ * Math.random; the headless self-play harness passes a seeded generator.
+ *
+ * Single source of truth shared by the React game (end of runAiTurn) and the
+ * self-play loop, mirroring how applyOwnerEconomy unifies the economy step.
+ */
+export function spawnRebels(o: {
+  tileMap: Map<string, HexTile>;
+  entities: Map<string, EntityType>;
+  graveyard: Set<string>;
+  ruins: Set<string>;
+  armedGraves: Iterable<string>;
+  armedRuins: Iterable<string>;
+  rng?: () => number;
+}): void {
+  const { tileMap, entities, graveyard, ruins, armedGraves, armedRuins } = o;
+  const rng = o.rng ?? Math.random;
+  for (const key of armedGraves) {
+    if (!graveyard.has(key)) continue; // cleared before the spawn → no 75% bonus
+    if (tileMap.get(key)?.terrain === "lake") continue;
+    if (!entities.has(key) && rng() < 0.75) entities.set(key, "rebel");
+  }
+  for (const key of armedRuins) {
+    if (!ruins.has(key)) continue;
+    if (tileMap.get(key)?.terrain === "lake") continue;
+    if (!entities.has(key) && rng() < 0.75) entities.set(key, "rebel");
+  }
+  const owners = new Set<TerritoryOwner>([
+    "player",
+    "ai1",
+    "ai2",
+    "ai3",
+    "ai4",
+    "ai5",
+  ]);
+  const preSpread = new Map(entities);
+  for (const tile of tileMap.values()) {
+    if (!owners.has(tile.owner)) continue;
+    if (tile.terrain === "mountain" || tile.terrain === "lake") continue;
+    if (preSpread.has(tile.key)) continue;
+    const [tq, tr] = tile.key.split(",").map(Number);
+    const neighborRebelCount = HEX_EDGES.filter(({ dir: [dq, dr] }) => {
+      const nk = tileKey(tq + dq, tr + dr);
+      return preSpread.get(nk) === "rebel";
+    }).length;
+    const chance =
+      neighborRebelCount >= 2 ? 0.1 : neighborRebelCount === 1 ? 0.075 : 0.02;
+    if (rng() < chance) entities.set(tile.key, "rebel");
+  }
+}
+
 export function initTerritoryBalances(
   tiles: HexTile[],
   tileMap: Map<string, HexTile>,

@@ -704,7 +704,9 @@ export default function GameScreen() {
         checkWinLoss,
       });
 
-      await runAiTurnOrchestration(ws, cbs, aiOwners, currentTurn ?? 0, aiDifficultyRef.current);
+      // The React flow runs the whole AI phase in one call, so it owns the
+      // once-per-round, after-everyone-moved rebel spawn (last arg = true).
+      await runAiTurnOrchestration(ws, cbs, aiOwners, currentTurn ?? 0, aiDifficultyRef.current, true);
     },
     [aiOwners, checkWinLoss, awaitStep, triggerUnitAnimation],
   );

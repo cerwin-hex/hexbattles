@@ -6,7 +6,6 @@ import type {
   MoveHistorySnapshot,
   GameResult,
 } from "@/types";
-import { HEX_EDGES, tileKey } from "@/utils/hexMath";
 import { applySingleHexPenalty } from "@/logic/gameLogic";
 
 export interface EndTurnParams {
@@ -94,9 +93,12 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
   const prevTileMapSnapshot = new Map(activeTileMap);
   const nextTileMap = new Map(activeTileMap);
   const nextBalances = new Map(territoryBalances);
-  let nextEntities = new Map(entities);
-  const nextGraveyard = new Set<string>();
-  const nextRuins = new Set<string>();
+  const nextEntities = new Map(entities);
+  // Carry the current graves/ruins forward (rather than starting empty) so the AI
+  // phase can ARM them: rebel spawning happens once per round at the end of the AI
+  // phase (see runAiTurn), from the sites that have stood since round start.
+  const nextGraveyard = new Set(graveyard);
+  const nextRuins = new Set(ruins);
 
   // The PLAYER's income/upkeep/bankruptcy is no longer applied here. It now runs
   // exactly once per round at the player's turn boundary — the end of the AI
@@ -127,58 +129,11 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
     );
   }
 
-  // Rebel spawning and spreading is suspended in round 1
-  if (turn !== 1) {
-    // Clone nextEntities once before the spawn loops so we can mutate in-place.
-    // Earlier this clone happened inside the loop per spawn, which made the
-    // whole pass quadratic once graveyard/ruins accumulated late in the game.
-    nextEntities = new Map(nextEntities);
-    for (const gravKey of graveyard) {
-      const gravTile = nextTileMap.get(gravKey);
-      if (gravTile?.terrain === "lake") continue;
-      if (!nextEntities.has(gravKey) && Math.random() < 0.75) {
-        nextEntities.set(gravKey, "rebel");
-      }
-    }
-    for (const ruinKey of ruins) {
-      const ruinTile = nextTileMap.get(ruinKey);
-      if (ruinTile?.terrain === "lake") continue;
-      if (!nextEntities.has(ruinKey) && Math.random() < 0.75) {
-        nextEntities.set(ruinKey, "rebel");
-      }
-    }
-
-    const allOwners: TerritoryOwner[] = [
-      "player",
-      "ai1",
-      "ai2",
-      "ai3",
-      "ai4",
-      "ai5",
-    ];
-    const preSpawnEntities = nextEntities;
-    const rebelSpawns = new Map(nextEntities);
-    for (const tile of nextTileMap.values()) {
-      if (!allOwners.includes(tile.owner)) continue;
-      if (tile.terrain === "mountain" || tile.terrain === "lake") continue;
-      if (preSpawnEntities.has(tile.key)) continue;
-      const [tq, tr] = tile.key.split(",").map(Number);
-      const neighborRebelCount = HEX_EDGES.filter(({ dir: [dq, dr] }) => {
-        const nk = tileKey(tq + dq, tr + dr);
-        return preSpawnEntities.get(nk) === "rebel";
-      }).length;
-      const chance =
-        neighborRebelCount >= 2
-          ? 0.1
-          : neighborRebelCount === 1
-            ? 0.075
-            : 0.02;
-      if (Math.random() < chance) {
-        rebelSpawns.set(tile.key, "rebel");
-      }
-    }
-    nextEntities = rebelSpawns;
-  }
+  // Rebel spawning no longer happens here. It now runs once per round at the END
+  // of the AI phase — after every owner (player + AIs) has moved — inside
+  // `runAiTurn` via the shared `spawnRebels`, from the graves/ruins armed at round
+  // start. This keeps the one-round "skull warning" delay while ensuring rebels
+  // appear only after everyone has taken their turn.
 
   setMutableTileMap(nextTileMap);
   setTerritoryBalances(nextBalances);

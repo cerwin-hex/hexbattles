@@ -19,7 +19,7 @@ import {
   improveCostFor,
   IMPROVED_TERRAINS,
 } from "@/utils/hexGrid";
-import { advanceAttacksUsed, advanceCombatSpent, applyOwnerEconomy, calcTerritoryIncome, calcTerritoryUpkeep, effectiveRemaining, isChargeAttack, mergeResult, resolveMovedUnitMoves } from "@/logic/gameLogic";
+import { advanceAttacksUsed, advanceCombatSpent, applyOwnerEconomy, calcTerritoryIncome, calcTerritoryUpkeep, effectiveRemaining, isChargeAttack, mergeResult, resolveMovedUnitMoves, spawnRebels } from "@/logic/gameLogic";
 import {
   dtSplitScore,
   dtCaptureNegatesIncome,
@@ -1039,7 +1039,19 @@ export async function runAiTurn(
   aiOwners: TerritoryOwner[],
   currentTurn: number,
   difficulty: Difficulty,
+  // True only for the React flow's single full-round AI phase (all AI owners in
+  // one call): it owns the once-per-round, after-everyone-moved rebel spawn.
+  // Self-play calls runAiTurn once PER owner, so it passes false and runs the
+  // shared spawn itself in its round loop — otherwise rebels would spawn N times.
+  spawnRebelsAtRoundEnd = false,
 ): Promise<void> {
+  // Snapshot the graves/ruins that have stood since the start of this round; they
+  // are the ones eligible to breed rebels at the end of it. Deaths created DURING
+  // this round's economy/combat are added afterwards and wait until next round —
+  // preserving the one-round "skull warning" delay.
+  const armedGraves = spawnRebelsAtRoundEnd ? new Set(ws.graveyard) : null;
+  const armedRuins = spawnRebelsAtRoundEnd ? new Set(ws.ruins) : null;
+
   cbs.initStepHistory(snapFromWs(ws));
   await cbs.awaitPreAiResume();
 
@@ -1637,6 +1649,28 @@ export async function runAiTurn(
       );
     }
     // Final-state publish below commits the credited balances / liquidations.
+  }
+
+  // ── Rebel spawn at the round boundary (after everyone has moved) ────────────
+  // Once per round, the armed graves/ruins (snapshotted at round start) breed
+  // rebels and unrest spreads across the map; then those sites are consumed.
+  // Suspended in round 1. Only the full-round React call does this (see the flag).
+  if (spawnRebelsAtRoundEnd && currentTurn !== 1 && armedGraves && armedRuins) {
+    ws.entities = new Map(ws.entities);
+    spawnRebels({
+      tileMap: ws.tileMap,
+      entities: ws.entities,
+      graveyard: ws.graveyard,
+      ruins: ws.ruins,
+      armedGraves,
+      armedRuins,
+    });
+    // Each armed site rolls once, then is consumed (whether or not it spawned),
+    // leaving only deaths created THIS round to arm the next one.
+    ws.graveyard = new Set(ws.graveyard);
+    ws.ruins = new Set(ws.ruins);
+    for (const k of armedGraves) ws.graveyard.delete(k);
+    for (const k of armedRuins) ws.ruins.delete(k);
   }
 
   // ── Win/loss check ─────────────────────────────────────────────────────────

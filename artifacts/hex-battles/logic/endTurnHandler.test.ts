@@ -104,61 +104,10 @@ describe("UI-state reset", () => {
   });
 });
 
-// ─── Rebel spawning ───────────────────────────────────────────────────────────
-
-describe("rebel spawning", () => {
-  beforeEach(() => {
-    vi.spyOn(Math, "random").mockReturnValue(0); // 0 < any positive chance → spawns
-  });
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it("spawns rebel on graveyard tile when random < 0.75 (mocked to 0)", () => {
-    vi.spyOn(Math, "random").mockReturnValue(0);
-    const tiles = [makeTile(0, 0, "player")];
-    const params = makeParams({
-      turn: 2,
-      activeTileMap: tileMap(tiles),
-      mutableTileMap: tileMap(tiles),
-      graveyard: new Set(["0,0"]),
-      entities: new Map(),
-    });
-    handleEndTurnLogic(params);
-    const newEntities = (params.setEntities as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(newEntities.get("0,0")).toBe("rebel");
-  });
-
-  it("does NOT spawn rebel on graveyard tile when random >= 0.75 (mocked)", () => {
-    vi.spyOn(Math, "random").mockReturnValue(0.8);
-    const tiles = [makeTile(0, 0, "player")];
-    const params = makeParams({
-      turn: 2,
-      activeTileMap: tileMap(tiles),
-      mutableTileMap: tileMap(tiles),
-      graveyard: new Set(["0,0"]),
-      entities: new Map(),
-    });
-    handleEndTurnLogic(params);
-    const newEntities = (params.setEntities as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(newEntities.get("0,0")).toBeUndefined();
-  });
-
-  it("does not spawn rebel in round 1", () => {
-    vi.spyOn(Math, "random").mockReturnValue(0);
-    const tiles = [makeTile(0, 0, "player")];
-    const params = makeParams({
-      turn: 1,
-      activeTileMap: tileMap(tiles),
-      mutableTileMap: tileMap(tiles),
-      graveyard: new Set(["0,0"]),
-      entities: new Map(),
-    });
-    handleEndTurnLogic(params);
-    const newEntities = (params.setEntities as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(newEntities.get("0,0")).toBeUndefined();
-  });
-});
+// Rebel spawning moved out of handleEndTurnLogic — it now runs once per round at
+// the END of the AI phase (after every owner has moved), inside runAiTurn via the
+// shared `spawnRebels`. The spawn logic is unit-tested in gameLogic.test.ts
+// (`spawnRebels`) and the round-boundary timing end-to-end in rebelSpawn.test.ts.
 
 // ─── AI turn hand-off ─────────────────────────────────────────────────────────
 

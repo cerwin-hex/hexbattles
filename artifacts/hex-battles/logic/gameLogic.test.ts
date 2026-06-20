@@ -4,6 +4,7 @@ import {
   calcTerritoryUpkeep,
   applySingleHexPenalty,
   applyOwnerEconomy,
+  spawnRebels,
   initTerritoryBalances,
   mergeResult,
   resolveMovedUnitMoves,
@@ -786,5 +787,139 @@ describe("applyOwnerEconomy", () => {
     });
     expect(r.balances.get("0,0")).toBe(2); // player credited
     expect(r.balances.get("5,5")).toBe(0); // ai1 untouched
+  });
+});
+
+// ─── spawnRebels ──────────────────────────────────────────────────────────────
+
+describe("spawnRebels", () => {
+  // Deterministic rng: always returns `v`. With a minimal board only the intended
+  // tile(s) roll, so a constant value cleanly drives each branch.
+  const constRng = (v: number) => () => v;
+
+  function run(o: {
+    tiles: HexTile[];
+    entities?: [string, EntityType][];
+    graveyard?: string[];
+    ruins?: string[];
+    armedGraves?: string[];
+    armedRuins?: string[];
+    rng: () => number;
+  }) {
+    const tileMapM = tileMap(o.tiles);
+    const entitiesM = ents(o.entities ?? []);
+    const graveyard = new Set(o.graveyard ?? []);
+    const ruins = new Set(o.ruins ?? []);
+    spawnRebels({
+      tileMap: tileMapM,
+      entities: entitiesM,
+      graveyard,
+      ruins,
+      armedGraves: o.armedGraves ?? [],
+      armedRuins: o.armedRuins ?? [],
+      rng: o.rng,
+    });
+    return entitiesM;
+  }
+
+  it("an armed grave on an empty tile rises as a rebel (rng < 0.75)", () => {
+    const e = run({
+      tiles: [makeTile(0, 0, "player")],
+      graveyard: ["0,0"],
+      armedGraves: ["0,0"],
+      rng: constRng(0), // 0 < 0.75 grave roll; 0 also < 0.02 spread, but tile now occupied
+    });
+    expect(e.get("0,0")).toBe("rebel");
+  });
+
+  it("an armed grave does NOT rise when the grave roll fails AND spread fails", () => {
+    const e = run({
+      tiles: [makeTile(0, 0, "player")],
+      graveyard: ["0,0"],
+      armedGraves: ["0,0"],
+      rng: constRng(0.8), // 0.8 ≥ 0.75 (no grave) and ≥ 0.02 (no spread)
+    });
+    expect(e.get("0,0")).toBeUndefined();
+  });
+
+  it("ruins behave like graves (75% on an empty tile)", () => {
+    const e = run({
+      tiles: [makeTile(0, 0, "player")],
+      ruins: ["0,0"],
+      armedRuins: ["0,0"],
+      rng: constRng(0),
+    });
+    expect(e.get("0,0")).toBe("rebel");
+  });
+
+  it("never spawns on a lake tile", () => {
+    const e = run({
+      tiles: [makeTile(0, 0, "player", "lake")],
+      graveyard: ["0,0"],
+      armedGraves: ["0,0"],
+      rng: constRng(0),
+    });
+    expect(e.get("0,0")).toBeUndefined();
+  });
+
+  it("an occupied armed grave is left alone (no overwrite)", () => {
+    const e = run({
+      tiles: [makeTile(0, 0, "player")],
+      entities: [["0,0", "warrior"]],
+      graveyard: ["0,0"],
+      armedGraves: ["0,0"],
+      rng: constRng(0),
+    });
+    expect(e.get("0,0")).toBe("warrior");
+  });
+
+  it("a grave cleared before the spawn forfeits the 75% bonus, falling back to normal", () => {
+    // rng 0.5: present grave (0.5 < 0.75) rises; a cleared grave gets only the
+    // normal 2% spread chance (0.5 ≥ 0.02), so it does not.
+    const present = run({
+      tiles: [makeTile(0, 0, "player")],
+      graveyard: ["0,0"],
+      armedGraves: ["0,0"],
+      rng: constRng(0.5),
+    });
+    expect(present.get("0,0")).toBe("rebel");
+
+    const cleared = run({
+      tiles: [makeTile(0, 0, "player")],
+      graveyard: [], // armed but no longer present (cleared)
+      armedGraves: ["0,0"],
+      rng: constRng(0.5),
+    });
+    expect(cleared.get("0,0")).toBeUndefined();
+  });
+
+  it("spread: an isolated empty owned tile rolls the 2% background chance", () => {
+    expect(run({ tiles: [makeTile(0, 0, "player")], rng: constRng(0.01) }).get("0,0")).toBe("rebel");
+    expect(run({ tiles: [makeTile(0, 0, "player")], rng: constRng(0.03) }).get("0,0")).toBeUndefined();
+  });
+
+  it("spread: a tile beside a rebel uses the higher 7.5% chance", () => {
+    // (0,0) is a rebel; (1,0) is its empty neighbour → 7.5% chance. rng 0.05 is
+    // below 0.075 (spawns) but above the 0.02 an isolated tile would need.
+    const e = run({
+      tiles: [makeTile(0, 0, "player"), makeTile(1, 0, "player")],
+      entities: [["0,0", "rebel"]],
+      rng: constRng(0.05),
+    });
+    expect(e.get("1,0")).toBe("rebel");
+  });
+
+  it("spread skips neutral, mountain and lake tiles", () => {
+    const e = run({
+      tiles: [
+        makeTile(0, 0, "neutral"),
+        makeTile(1, 0, "player", "mountain"),
+        makeTile(2, 0, "player", "lake"),
+      ],
+      rng: constRng(0), // would spawn everywhere eligible
+    });
+    expect(e.get("0,0")).toBeUndefined();
+    expect(e.get("1,0")).toBeUndefined();
+    expect(e.get("2,0")).toBeUndefined();
   });
 });

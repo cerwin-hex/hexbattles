@@ -12,7 +12,7 @@ import {
   getTerritoryId,
   ENTITY_META,
 } from "@/utils/hexGrid";
-import { applySingleHexPenalty } from "@/logic/gameLogic";
+import { applySingleHexPenalty, spawnRebels } from "@/logic/gameLogic";
 import { runAiTurn } from "@/logic/aiStrategy";
 import type { AiWorkingState, AiTurnCallbacks } from "@/logic/aiStrategy";
 import { __setExpertWeightsOverride, __setExpertSearchConfig, type EvalWeights } from "@/logic/aiExpert";
@@ -131,12 +131,13 @@ export async function runOneAiTurnHeadless(
   owner: TerritoryOwner,
   turn: number,
   difficulty: Difficulty,
+  spawnRebelsAtRoundEnd = false,
 ): Promise<void> {
   ws.spentUnits = new Set();
   ws.partialMoves = new Map();
   ws.attacksUsed = new Map();
   ws.combatSpentUnits = new Set();
-  await runAiTurn(ws, makeHeadlessCbs(), [owner], turn, difficulty);
+  await runAiTurn(ws, makeHeadlessCbs(), [owner], turn, difficulty, spawnRebelsAtRoundEnd);
 }
 
 export interface MatchConfig {
@@ -217,6 +218,10 @@ export async function playMatch(cfg: MatchConfig): Promise<MatchResult> {
     const t0 = Date.now();
     let turn = 1;
     for (; turn <= cfg.maxTurns; turn++) {
+      // Arm the graves/ruins standing at round start; they breed rebels at the
+      // round boundary below (mirrors the React flow, where runAiTurn does this).
+      const armedGraves = new Set(ws.graveyard);
+      const armedRuins = new Set(ws.ruins);
       for (const owner of COMPETITORS) {
         if (landTiles(ws, owner) === 0) continue;
         // Fresh per-turn movement budget, like end-of-turn reset in the game.
@@ -230,6 +235,16 @@ export async function playMatch(cfg: MatchConfig): Promise<MatchResult> {
         for (const bal of ws.balances.values()) {
           if (bal < minBalance) minBalance = bal;
         }
+      }
+      // Rebel spawn once per round, after every owner has moved (suspended round 1).
+      if (turn !== 1) {
+        spawnRebels({
+          tileMap: ws.tileMap, entities: ws.entities,
+          graveyard: ws.graveyard, ruins: ws.ruins,
+          armedGraves, armedRuins, rng,
+        });
+        for (const k of armedGraves) ws.graveyard.delete(k);
+        for (const k of armedRuins) ws.ruins.delete(k);
       }
 
       const a = landTiles(ws, "ai1");
@@ -342,6 +357,9 @@ export async function playFreeForAll(cfg: FreeForAllConfig): Promise<FreeForAllR
     let minBalance = 0;
     let turn = 1;
     for (; turn <= cfg.maxTurns; turn++) {
+      // Arm graves/ruins at round start; they breed rebels at the round boundary.
+      const armedGraves = new Set(ws.graveyard);
+      const armedRuins = new Set(ws.ruins);
       for (const owner of seats) {
         if (landTiles(ws, owner) === 0) continue;
         ws.spentUnits = new Set();
@@ -358,6 +376,16 @@ export async function playFreeForAll(cfg: FreeForAllConfig): Promise<FreeForAllR
           if (bal < minBalance) minBalance = bal;
         }
         cfg.onAfterOwnerTurn?.(owner, ws);
+      }
+      // Rebel spawn once per round, after every seat has moved (suspended round 1).
+      if (turn !== 1) {
+        spawnRebels({
+          tileMap: ws.tileMap, entities: ws.entities,
+          graveyard: ws.graveyard, ruins: ws.ruins,
+          armedGraves, armedRuins, rng,
+        });
+        for (const k of armedGraves) ws.graveyard.delete(k);
+        for (const k of armedRuins) ws.ruins.delete(k);
       }
       const alive = seats.filter((s) => landTiles(ws, s) > 0);
       if (alive.length <= 1) {
