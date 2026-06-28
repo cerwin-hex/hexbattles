@@ -18,6 +18,8 @@ export interface EndTurnParams {
   cities: Set<string>;
   graveyard: Set<string>;
   ruins: Set<string>;
+  armedGraveyard: Set<string>;
+  armedRuins: Set<string>;
   mutableTileMap: Map<string, HexTile>;
   liveOwnerMap: Map<string, TerritoryOwner>;
   aiTurnRef: { current: boolean };
@@ -44,6 +46,8 @@ export interface EndTurnParams {
     initialGraveyard?: Set<string>,
     initialRuins?: Set<string>,
     initialCities?: Set<string>,
+    armedGraves?: Set<string>,
+    armedRuins?: Set<string>,
   ) => void;
   closeRibbon: () => void;
 }
@@ -59,6 +63,8 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
     cities,
     graveyard,
     ruins,
+    armedGraveyard,
+    armedRuins,
     liveOwnerMap,
     aiTurnRef,
     setMoveHistory,
@@ -129,11 +135,9 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
     );
   }
 
-  // Rebel spawning no longer happens here. It now runs once per round at the END
-  // of the AI phase — after every owner (player + AIs) has moved — inside
-  // `runAiTurn` via the shared `spawnRebels`, from the graves/ruins armed at round
-  // start. This keeps the one-round "skull warning" delay while ensuring rebels
-  // appear only after everyone has taken their turn.
+  // Rebel spawning no longer happens here. It runs per-owner at the START of
+  // each owner's turn inside runAiTurn (territory-scoped), with the round-start
+  // armed snapshot threaded across the turn boundary via armedGraveyard/armedRuins.
 
   setMutableTileMap(nextTileMap);
   setTerritoryBalances(nextBalances);
@@ -164,6 +168,8 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
       nextGraveyard,
       nextRuins,
       cities,
+      armedGraveyard,
+      armedRuins,
     );
   }
 }

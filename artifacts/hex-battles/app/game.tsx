@@ -370,6 +370,8 @@ export default function GameScreen() {
   );
   const graveyardRef = useRef<Set<string>>(new Set());
   const ruinsRef = useRef<Set<string>>(new Set());
+  const armedGraveyardRef = useRef<Set<string>>(new Set());
+  const armedRuinsRef     = useRef<Set<string>>(new Set());
 
   const [errorTileKey, setErrorTileKey] = useState<string | null>(null);
   const errorTileTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -659,6 +661,8 @@ export default function GameScreen() {
       initialGraveyard?: Set<string>,
       initialRuins?: Set<string>,
       initialCities?: Set<string>,
+      passedArmedGraves?: Set<string>,
+      passedArmedRuins?: Set<string>,
     ) => {
       const ws: AiWorkingState = {
         tileMap: new Map(currentTileMap),
@@ -687,6 +691,10 @@ export default function GameScreen() {
         setAiStateMap,
         setIsAiTurn,
         advanceTurn: () => setTurn((t) => t + 1),
+        setArmedGraves: (graves, ruins) => {
+          armedGraveyardRef.current = graves;
+          armedRuinsRef.current     = ruins;
+        },
         setIsAiPaused,
         setIsAiTurnDone,
         setAiHistoryIndex,
@@ -704,9 +712,11 @@ export default function GameScreen() {
         checkWinLoss,
       });
 
-      // The React flow runs the whole AI phase in one call, so it owns the
-      // once-per-round, after-everyone-moved rebel spawn (last arg = true).
-      await runAiTurnOrchestration(ws, cbs, aiOwners, currentTurn ?? 0, aiDifficultyRef.current, true);
+      await runAiTurnOrchestration(
+        ws, cbs, aiOwners, currentTurn ?? 0, aiDifficultyRef.current,
+        new Set(passedArmedGraves ?? armedGraveyardRef.current),
+        new Set(passedArmedRuins  ?? armedRuinsRef.current),
+      );
     },
     [aiOwners, checkWinLoss, awaitStep, triggerUnitAnimation],
   );
@@ -1183,6 +1193,8 @@ export default function GameScreen() {
       checkWinLoss,
       runAiTurn,
       closeRibbon,
+      armedGraveyard: armedGraveyardRef.current,
+      armedRuins:     armedRuinsRef.current,
     });
   }, [
     activeTileMap,
