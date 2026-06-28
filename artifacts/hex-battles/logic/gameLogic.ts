@@ -71,7 +71,7 @@ export function applyOwnerEconomy(o: {
   cities: Set<string>;
   graveyard: Set<string>;
   ruins: Set<string>;
-  /** Grant the land-tile income bonus (super_hard / super_expert AI tiers). */
+  /** Grant the land-tile income bonus (super_expert AI tier). */
   incomeBonus: boolean;
 }): boolean {
   const { owner, tileMap, entities, balances, cities, graveyard, ruins, incomeBonus } = o;

@@ -167,7 +167,6 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
                 { name: 'Easy', desc: 'The AI plays sloppily and skips many of its available moves (about 40%), making it predictable and easy to outmanoeuvre.' },
                 { name: 'Medium', desc: 'The AI occasionally skips a move (about 20%) but still builds and expands steadily. A fair challenge for most players.' },
                 { name: 'Hard', desc: 'The AI uses a strategic decision tree and smart pathfinding to attack, defend, and expand as efficiently as possible, never skipping a move.' },
-                { name: 'Super Hard', desc: 'Plays like Hard, but also earns bonus income from every land hex it controls each round, giving it a growing economic edge over time.' },
                 { name: 'Expert', desc: 'Looks several moves ahead, weighing each action against your best reply. It concentrates force to break defences, cuts enemy territories apart to strand units on isolated hexes, and avoids leaving its own tiles open to a counterattack.' },
                 { name: 'Super Expert', desc: 'Plays like Expert, but also earns bonus income from every land hex it controls each round — the toughest opponent in the game.' },
               ].map(d => (
@@ -308,38 +307,31 @@ export default function MainMenu() {
 
           <View style={styles.section}>
             <Text style={styles.label}>AI Difficulty</Text>
-            {([
-              [
+            <View style={styles.pills}>
+              {([
                 ['easy', null, 'Easy'],
                 ['medium', null, 'Medium'],
                 ['hard', null, 'Hard'],
-                ['super_hard', 'Super', 'Hard'],
-              ],
-              [
                 ['expert', null, 'Expert'],
                 ['super_expert', 'Super', 'Expert'],
-              ],
-            ] as [Difficulty, string | null, string][][]).map((row, rowIdx) => (
-              <View key={rowIdx} style={[styles.pills, rowIdx > 0 && styles.pillsRowGap]}>
-                {row.map(([d, top, bottom]) => (
-                  <TouchableOpacity
-                    key={d}
-                    style={[styles.diffPill, difficulty === d && styles.diffPillActive]}
-                    onPress={() => { Haptics.selectionAsync(); setDifficulty(d); }}
-                    activeOpacity={0.7}
-                  >
-                    {top && (
-                      <Text style={[styles.diffText, styles.diffTextSuper, difficulty === d && styles.diffTextActive]}>
-                        {top}
-                      </Text>
-                    )}
-                    <Text style={[styles.diffText, difficulty === d && styles.diffTextActive]}>
-                      {bottom}
+              ] as [Difficulty, string | null, string][]).map(([d, top, bottom]) => (
+                <TouchableOpacity
+                  key={d}
+                  style={[styles.diffPill, difficulty === d && styles.diffPillActive]}
+                  onPress={() => { Haptics.selectionAsync(); setDifficulty(d); }}
+                  activeOpacity={0.7}
+                >
+                  {top && (
+                    <Text style={[styles.diffText, styles.diffTextSuper, difficulty === d && styles.diffTextActive]}>
+                      {top}
                     </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ))}
+                  )}
+                  <Text style={[styles.diffText, difficulty === d && styles.diffTextActive]}>
+                    {bottom}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
 
         </View>

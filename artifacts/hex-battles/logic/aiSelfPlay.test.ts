@@ -89,12 +89,11 @@ describe("playMatch (smoke)", () => {
 
 describe("no over-spend invariant", () => {
   it("never lets a territory balance go negative (regression: D2a multi-bridge)", async () => {
-    // Seeds 5005/5011 (hard) and 5034 (super_hard) previously over-spent by
-    // building several consolidation bridges on a single canAfford check.
-    const cases: Array<["hard" | "super_hard", number]> = [
+    // Seeds 5005/5011 (hard) previously over-spent by building several
+    // consolidation bridges on a single canAfford check.
+    const cases: Array<["hard", number]> = [
       ["hard", 5005],
       ["hard", 5011],
-      ["super_hard", 5034],
     ];
     for (const [diff, seed] of cases) {
       const r = await playMatch({
@@ -111,7 +110,7 @@ describe("no over-spend invariant", () => {
   fullIt(
     "stays non-negative across many games and all difficulties",
     async () => {
-      const diffs: Difficulty[] = ["easy", "medium", "hard", "super_hard", "expert", "super_expert"];
+      const diffs: Difficulty[] = ["easy", "medium", "hard", "expert", "super_expert"];
       for (const d of diffs) {
         for (let s = 5000; s < 5030; s++) {
           const r = await playMatch({ seed: s, tiles: 60, difficultyA: d, difficultyB: d, maxTurns: 40 });

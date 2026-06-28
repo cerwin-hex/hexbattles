@@ -543,7 +543,7 @@ export async function runAiTerritoryDecisionLoop(
 
     // ══ PRIORITY D2: Build a water bridge ══
     // D2a: Connect own fragmented territories via bridge (all difficulties)
-    // D2b: Aggressive expansion — bridge toward enemy/neutral territory (hard/super_hard only)
+    // D2b: Aggressive expansion — bridge toward enemy/neutral territory (hard only)
     if (!actionTaken) {
       const bridgeCost = ENTITY_META.bridge.cost; // 5
       if (canAfford(bridgeCost, 1)) {
@@ -576,7 +576,7 @@ export async function runAiTerritoryDecisionLoop(
 
         // D2b: attack bridges — build only when a unit can immediately attack across the bridge
         // this same round. Never build adjacent to an existing bridge (prevents wasteful chains).
-        if (!actionTaken && (difficulty === "hard" || difficulty === "super_hard")) {
+        if (!actionTaken && difficulty === "hard") {
           outer:
           for (const t of currTerr) {
             const [tq, tr] = t.key.split(",").map(Number);
@@ -1072,7 +1072,7 @@ export async function runAiTurn(
     // "super" tiers also get a land-tile income bonus.
     if (currentTurn > 2) {
       const incomeBonus =
-        difficulty === "super_hard" || difficulty === "super_expert";
+        difficulty === "super_expert";
       const prevSnapshot = new Map(ws.tileMap);
       ws.tileMap = new Map(ws.tileMap);
       ws.entities = new Map(ws.entities);

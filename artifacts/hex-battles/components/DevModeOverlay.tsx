@@ -7,7 +7,6 @@ import type { Difficulty } from "@/types";
 function diffLabel(d: Difficulty): string {
   if (d === "super_expert") return "S.Expert";
   if (d === "expert") return "Expert";
-  if (d === "super_hard") return "S.Hard";
   if (d === "hard") return "Hard";
   if (d === "medium") return "Med";
   return "Easy";

@@ -23,7 +23,7 @@ import { __setExpertWeightsOverride, __setExpertSearchConfig, type EvalWeights }
 // Drives the real `runAiTurn` with pure callbacks (no React, no animation) plus
 // a faithful headless income/upkeep step mirroring `endTurnHandler`'s AI rule,
 // so two difficulties can play full games against each other. Used to validate
-// that `expert` is genuinely stronger than `super_hard`.
+// relative strength across difficulties.
 // ════════════════════════════════════════════════════════════════════════════
 
 /** Deterministic PRNG so matches are reproducible from a seed. */
