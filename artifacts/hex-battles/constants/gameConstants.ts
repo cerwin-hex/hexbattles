@@ -2,7 +2,7 @@ import { ENTITY_META } from "@/utils/hexGrid";
 import type { EntityType } from "@/utils/hexGrid";
 
 export const BTN_H = 52;
-export const TOP_BTN_H = 28;
+export const TOP_BTN_H = 40;
 export const BOTTOM_BAR_H = BTN_H + 20;
 export const RIBBON_H = 130;
 export const ENTITY_PANEL_H = 72;
