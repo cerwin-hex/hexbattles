@@ -24,6 +24,67 @@ export interface EntityLayerProps {
   HEX_SIZE: number;
 }
 
+// Non-player entities (enemy units, rebels, buildings) never change visual
+// state when selectedEntityKey changes, so they live in their own memoized
+// component that skips re-renders on selection taps.
+function NonPlayerEntityLayerInner({
+  entities,
+  tileDataMap,
+  activeTileMap,
+  animatingUnit,
+  HEX_SIZE,
+}: Pick<EntityLayerProps, "entities" | "tileDataMap" | "activeTileMap" | "animatingUnit" | "HEX_SIZE">) {
+  const { borders: TERRITORY_BORDERS } = useOwnerColors();
+  return (
+    <>
+      {Array.from(entities.entries()).map(([key, entityId]) => {
+        const meta = ENTITY_META[entityId];
+        if (entityId === "city") return null;
+        if (entityId === "bridge") return null;
+        if (animatingUnit && key === animatingUnit.fromKey) return null;
+        if (animatingUnit && animatingUnit.hideDestination && key === animatingUnit.toKey) return null;
+        const liveTile = activeTileMap.get(key);
+        // Player units are handled by PlayerEntityLayer
+        if (liveTile?.owner === "player" && meta.isUnit) return null;
+        const pos = tileDataMap.get(key);
+        if (!pos) return null;
+        const isRebel = entityId === "rebel";
+        const isBuilding = !meta.isUnit && !isRebel;
+        const r = HEX_SIZE * (isBuilding ? 0.6 : isRebel ? 0.45 : 0.55);
+        const ownerColor = TERRITORY_BORDERS[liveTile?.owner ?? ""] ?? "#FFD700";
+        const borderColor = isRebel ? "#FFD700" : ownerColor;
+        const isEnemyUnit = meta.isUnit && liveTile?.owner !== "player";
+        const opacity = isEnemyUnit ? 0.9 : 1.0;
+        return (
+          <View
+            key={`entity-${key}-${entityId}`}
+            style={{ position: "absolute", left: pos.cx - r, top: pos.cy - r }}
+          >
+            <UnitToken
+              r={r}
+              entityId={entityId}
+              borderColor={borderColor}
+              borderWidth={3.0}
+              isBuilding={isBuilding}
+              opacity={opacity}
+            />
+          </View>
+        );
+      })}
+    </>
+  );
+}
+
+const NonPlayerEntityLayer = React.memo(
+  NonPlayerEntityLayerInner,
+  (prev, next) =>
+    prev.entities === next.entities &&
+    prev.activeTileMap === next.activeTileMap &&
+    prev.tileDataMap === next.tileDataMap &&
+    prev.animatingUnit === next.animatingUnit &&
+    prev.HEX_SIZE === next.HEX_SIZE,
+);
+
 function EntityLayerInner({
   entities,
   tileDataMap,
@@ -36,62 +97,32 @@ function EntityLayerInner({
   const { borders: TERRITORY_BORDERS } = useOwnerColors();
   return (
     <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+      <NonPlayerEntityLayer
+        entities={entities}
+        tileDataMap={tileDataMap}
+        activeTileMap={activeTileMap}
+        animatingUnit={animatingUnit}
+        HEX_SIZE={HEX_SIZE}
+      />
       {Array.from(entities.entries()).map(([key, entityId]) => {
+        const meta = ENTITY_META[entityId];
         if (entityId === "city") return null;
         if (entityId === "bridge") return null;
         if (animatingUnit && key === animatingUnit.fromKey) return null;
-        if (
-          animatingUnit &&
-          animatingUnit.hideDestination &&
-          key === animatingUnit.toKey
-        )
-          return null;
+        if (animatingUnit && animatingUnit.hideDestination && key === animatingUnit.toKey) return null;
+        const liveTile = activeTileMap.get(key);
+        // Only player units are rendered here; non-player entities are in NonPlayerEntityLayer
+        if (liveTile?.owner !== "player" || !meta.isUnit) return null;
         const pos = tileDataMap.get(key);
         if (!pos) return null;
-        const meta = ENTITY_META[entityId];
-        const isRebel = entityId === "rebel";
-        const isBuilding = !meta.isUnit && !isRebel;
-        // Units and rebels are slightly smaller than buildings; rebels smaller still.
-        const r = HEX_SIZE * (isBuilding ? 0.6 : isRebel ? 0.45 : 0.55);
         const isSelected = selectedEntityKey === key;
         const isSpent = spentUnits.has(key);
-        const liveTile = activeTileMap.get(key);
-        const isPlayerUnit = liveTile?.owner === "player" && meta.isUnit;
-        // Idle (non-spent, non-selected) player units bounce in IdleUnitLayer.
-        const isIdleBouncing = isPlayerUnit && !isSpent && !isSelected;
-        if (isIdleBouncing) return null;
-        // Unit/rebel tokens are a bare icon inside a coloured disc, so the disc's
-        // hue is the only owner/state cue (gold rebel / green selected / owner
-        // colour otherwise). Buildings render ring-less in UnitToken and ignore
-        // borderColor entirely — their selection is shown only by the green tile
-        // border in BorderEdgeLayer.
-        const ownerColor =
-          TERRITORY_BORDERS[liveTile?.owner ?? ""] ?? "#FFD700";
-        const borderColor = isRebel
-          ? "#FFD700"
-          : isSelected
-            ? SELECTED_UNIT_RING
-            : ownerColor;
-        // Uniform ring weight so player units match the rebel ring; the green
-        // colour carries the selection cue.
-        const borderWidth = 3.0;
-        // Per-state opacity: a spent player unit dims to 70%; enemy units sit at
-        // 90% (matching the idle-unit dimming); selected units, buildings and
-        // rebels are fully opaque.
-        const isEnemyUnit = meta.isUnit && liveTile?.owner !== "player";
-        const opacity =
-          isPlayerUnit && isSpent && !isSelected
-            ? 0.7
-            : isEnemyUnit
-              ? 0.9
-              : 1.0;
+        // Idle (non-spent, non-selected) player units bounce in IdleUnitLayer
+        if (!isSpent && !isSelected) return null;
+        const r = HEX_SIZE * 0.55;
+        const borderColor = isSelected ? SELECTED_UNIT_RING : (TERRITORY_BORDERS["player"] ?? "#FFD700");
+        const opacity = isSpent && !isSelected ? 0.7 : 1.0;
         return (
-          // Key by entity type as well as tile: when a tile's entity changes
-          // type in place (e.g. AI-step undo reverts a captured tower from the
-          // attacker's unit back to the building), a tile-only key would make
-          // React reuse the same SvgAst instance and swap its `ast` prop in
-          // place, which react-native-svg renders as a black/broken icon.
-          // Including entityId forces a clean remount on a type change.
           <View
             key={`entity-${key}-${entityId}`}
             style={{ position: "absolute", left: pos.cx - r, top: pos.cy - r }}
@@ -100,8 +131,7 @@ function EntityLayerInner({
               r={r}
               entityId={entityId}
               borderColor={borderColor}
-              borderWidth={borderWidth}
-              isBuilding={isBuilding}
+              borderWidth={3.0}
               opacity={opacity}
             />
           </View>
