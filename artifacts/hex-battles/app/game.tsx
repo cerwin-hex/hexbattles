@@ -1496,6 +1496,7 @@ export default function GameScreen() {
               top: topInset + 4,
               left: SW / 2 - 70,
               zIndex: 20,
+              paddingVertical: 9,
             },
           ]}
           onPress={handleAutoDeployTowers}
