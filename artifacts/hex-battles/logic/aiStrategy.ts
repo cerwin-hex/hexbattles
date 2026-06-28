@@ -976,6 +976,8 @@ export interface AiTurnCallbacks {
     setIsAiTurn(v: boolean): void;
     /** Advance the round counter; called once when the whole AI phase completes. */
     advanceTurn(): void;
+    /** Store the next-round armed graves/ruins snapshot (called once at round end). */
+    setArmedGraves(graves: Set<string>, ruins: Set<string>): void;
   };
   refs: {
     getAiStateMap(): Map<string, AiState>;

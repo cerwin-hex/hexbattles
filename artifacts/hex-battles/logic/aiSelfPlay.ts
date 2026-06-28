@@ -98,6 +98,7 @@ function makeHeadlessCbs(): AiTurnCallbacks {
       // The headless harness counts rounds in its own loop, so the AI-phase
       // advance is a no-op here.
       advanceTurn: noop,
+      setArmedGraves: noop,
     },
     refs: {
       getAiStateMap: () => aiStateMap,
