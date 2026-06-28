@@ -504,3 +504,67 @@ export function calcTerritoryIncome(
   }
   return income;
 }
+
+/**
+ * Auto-place the free round-1 tower for every eligible player territory,
+ * using the same scoring heuristic as the AI: prefer the tile whose 6
+ * neighbours contain the most player-owned tiles (maximises defensive coverage).
+ *
+ * Returns new Maps; the caller is responsible for committing them to React state
+ * and recording undo history before calling this.
+ */
+export function autoDeployFreeTowers(
+  activeTileMap: Map<string, HexTile>,
+  entities: Map<string, EntityType>,
+  freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>,
+  graveyard: Set<string>,
+  cities: Set<string>,
+): {
+  newEntities: Map<string, EntityType>;
+  newFreeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
+} {
+  const newEntities = new Map(entities);
+  const playerUsed = new Set(freeTowerUsedTiles.get("player") ?? []);
+  const newFreeTowerUsedTiles = new Map(freeTowerUsedTiles);
+
+  const visited = new Set<string>();
+  for (const tile of activeTileMap.values()) {
+    if (tile.owner !== "player" || visited.has(tile.key)) continue;
+    const territory = getContiguousTerritory(activeTileMap, tile.key, "player", newEntities);
+    for (const t of territory) visited.add(t.key);
+
+    if (territory.length < 2) continue;
+    if (territory.some((t) => playerUsed.has(t.key))) continue;
+
+    const candidates = territory.filter(
+      (t) =>
+        t.terrain !== "mountain" &&
+        t.terrain !== "lake" &&
+        !newEntities.has(t.key) &&
+        !cities.has(t.key) &&
+        !graveyard.has(t.key),
+    );
+    if (candidates.length === 0) continue;
+
+    const score = (key: string): number => {
+      const [cq, cr] = key.split(",").map(Number);
+      let n = 0;
+      for (const { dir: [dq, dr] } of HEX_EDGES) {
+        const nk = tileKey(cq + dq, cr + dr);
+        if (activeTileMap.get(nk)?.owner === "player") n++;
+      }
+      return n;
+    };
+
+    const best = candidates.reduce(
+      (b, c) => (score(c.key) > score(b.key) ? c : b),
+      candidates[0],
+    );
+
+    newEntities.set(best.key, "tower");
+    for (const t of territory) playerUsed.add(t.key);
+  }
+
+  newFreeTowerUsedTiles.set("player", playerUsed);
+  return { newEntities, newFreeTowerUsedTiles };
+}

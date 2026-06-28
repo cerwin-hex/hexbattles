@@ -75,6 +75,7 @@ import {
 } from "@/constants/gameConstants";
 import {
   applySingleHexPenalty,
+  autoDeployFreeTowers,
   initTerritoryBalances,
 } from "@/logic/gameLogic";
 import {
@@ -941,6 +942,22 @@ export default function GameScreen() {
     if (ribbonOpen) closeRibbon();
   }, [ribbonOpen]);
 
+  const handleAutoDeployTowers = useCallback(() => {
+    pushHistory();
+    const { newEntities, newFreeTowerUsedTiles } = autoDeployFreeTowers(
+      activeTileMap,
+      entities,
+      freeTowerUsedTiles,
+      graveyard,
+      cities,
+    );
+    setEntities(newEntities);
+    setFreeTowerUsedTiles(newFreeTowerUsedTiles);
+    setSelectedTileKey(null);
+    setSelectedEntityKey(null);
+    setArmedEntityId(null);
+  }, [activeTileMap, entities, freeTowerUsedTiles, graveyard, cities, pushHistory]);
+
   const handleDemolishBridge = useCallback(() => {
     const bridgeKey = selectedEntityKey ?? selectedTileKey;
     if (!bridgeKey) return;
@@ -1469,6 +1486,24 @@ export default function GameScreen() {
         <Text style={{ fontSize: 14, color: "#A08860" }}>←</Text>
         <Text style={styles.menuBtnText}>Menu</Text>
       </TouchableOpacity>
+
+      {turn === 1 && !isAiTurn && gameResult === null && affordableTerritoryTileKeys.size > 0 && (
+        <TouchableOpacity
+          style={[
+            styles.menuBtn,
+            {
+              position: "absolute",
+              top: topInset + 4,
+              left: SW / 2 - 70,
+              zIndex: 20,
+            },
+          ]}
+          onPress={handleAutoDeployTowers}
+        >
+          <Text style={{ fontSize: 12, color: "#A08860" }}>⚔</Text>
+          <Text style={styles.menuBtnText}>Auto-deploy towers</Text>
+        </TouchableOpacity>
+      )}
 
       {__DEV__ && isDeveloperModeActive && (
         <View
