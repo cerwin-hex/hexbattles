@@ -281,6 +281,7 @@ export default function MainMenu() {
             value={tileCount}
             min={TILE_MIN}
             max={TILE_MAX}
+            step={10}
             onChange={setTileCount}
             formatValue={(v) => `${v} Tiles`}
             leftLabel={String(TILE_MIN)}
