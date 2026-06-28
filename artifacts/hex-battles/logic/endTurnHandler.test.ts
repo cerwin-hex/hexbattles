@@ -107,9 +107,8 @@ describe("UI-state reset", () => {
 });
 
 // Rebel spawning moved out of handleEndTurnLogic — it now runs once per round at
-// the END of the AI phase (after every owner has moved), inside runAiTurn via the
-// shared `spawnRebels`. The spawn logic is unit-tested in gameLogic.test.ts
-// (`spawnRebels`) and the round-boundary timing end-to-end in rebelSpawn.test.ts.
+// the END of the AI phase (after every owner has moved), inside runAiTurn via
+// `spawnRebelsForOwner`. The spawn logic is unit-tested in rebelSpawn.test.ts.
 
 // ─── AI turn hand-off ─────────────────────────────────────────────────────────
 
