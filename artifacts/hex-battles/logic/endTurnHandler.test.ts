@@ -30,6 +30,8 @@ function makeParams(overrides: Partial<EndTurnParams> = {}): EndTurnParams {
     cities: new Set(),
     graveyard: new Set(),
     ruins: new Set(),
+    armedGraveyard: new Set(),
+    armedRuins: new Set(),
     mutableTileMap: new Map(map),
     liveOwnerMap: new Map(),
     aiTurnRef: { current: false },

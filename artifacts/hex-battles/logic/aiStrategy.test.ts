@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { runAiTurn, runAiTerritoryDecisionLoop } from "@/logic/aiStrategy";
 import { applySingleHexPenalty } from "@/logic/gameLogic";
 import type { AiWorkingState, AiTurnCallbacks, AiDecisionExec } from "@/logic/aiStrategy";
@@ -58,6 +58,7 @@ function makeCbs(overrides: CbsOverrides = {}): AiTurnCallbacks {
       setAiStateMap: vi.fn(),
       setIsAiTurn: vi.fn(),
       advanceTurn: vi.fn(),
+      setArmedGraves: vi.fn(),
       ...stateOverrides,
     },
     refs: {
@@ -100,6 +101,7 @@ describe("makeCbs helper — per-member overrides", () => {
       "setAiStateMap",
       "setIsAiTurn",
       "advanceTurn",
+      "setArmedGraves",
     ];
     for (const key of siblingKeys) {
       expect(vi.isMockFunction(cbs.state[key]), `state.${key} should be vi.fn()`).toBe(true);
@@ -198,9 +200,14 @@ describe("runAiTurn", () => {
   });
 
   describe("player bankruptcy check", () => {
+    afterEach(() => vi.restoreAllMocks());
+
     it("removes player units when the territory goes bankrupt", async () => {
       // 2 grass tiles → income = 4; 2 peasants → upkeep = 6; balance = 0
       // delta = 4 - 6 = -2 → newBalance = -2 → bankruptcy
+      // Mock random > 0.75 so the round-end rebel spawn rolls miss (no rebels
+      // placed on the vacated tiles, keeping entity assertions deterministic).
+      vi.spyOn(Math, "random").mockReturnValue(0.99);
       const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
       const ws = makeEmptyWs(makeTileMap(tiles));
       const territoryId = "0,0"; // lexicographically smallest key
@@ -217,15 +224,17 @@ describe("runAiTurn", () => {
       expect(ws.entities.has("0,0")).toBe(false);
       expect(ws.entities.has("1,0")).toBe(false);
 
-      // Both tiles should be in the graveyard
-      expect(ws.graveyard.has("0,0")).toBe(true);
-      expect(ws.graveyard.has("1,0")).toBe(true);
+      // Graveyard entries are created by bankruptcy then consumed by the
+      // round-end rebel spawn (75% roll misses at 0.99), so they are cleared.
+      expect(ws.graveyard.has("0,0")).toBe(false);
+      expect(ws.graveyard.has("1,0")).toBe(false);
     });
 
     it("drains the territory balance to 0 on bankruptcy", async () => {
       // Reserve of 5 + income 4 = 9g available, upkeep 18g → bankrupt,
       // reserves are spent paying as much of the bill as possible and the
       // balance lands at 0; units are liquidated.
+      vi.spyOn(Math, "random").mockReturnValue(0.99);
       const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
       const ws = makeEmptyWs(makeTileMap(tiles));
       const territoryId = "0,0";
@@ -314,6 +323,7 @@ describe("runAiTurn", () => {
       // argument order and the pre-demolition snapshot — is exercised end to
       // end. The bankrupt territory is liquidated; a separate, solvent two-hex
       // territory must be left untouched by the sweep.
+      vi.spyOn(Math, "random").mockReturnValue(0.99); // prevent rebel spawns
       const tiles = [
         makeTile(0, 0, "player"),
         makeTile(1, 0, "player"),

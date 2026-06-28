@@ -1,14 +1,13 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import type { HexTile, EntityType, TerritoryOwner } from "@/types";
 import { runOneAiTurnHeadless } from "@/logic/aiSelfPlay";
+import { spawnRebelsForOwner } from "@/logic/gameLogic";
 import type { AiWorkingState } from "@/logic/aiStrategy";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Rebel spawning runs ONCE per round, at the END of the AI phase (after every
-// owner has moved), from the graves/ruins armed at the start of the round. This
-// exercises that wiring end-to-end through the real `runAiTurn` (flag = true),
-// and the one-round "skull warning" delay: a grave created DURING the round is
-// not eligible until the NEXT round.
+// Rebel spawning runs per-owner at the START of each owner's turn, from a
+// global armed snapshot taken at the END of the previous round. Only tiles
+// owned by the active owner are eligible for spawn and spread.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function makeTile(
@@ -20,7 +19,7 @@ function makeTile(
   return { q, r, key: `${q},${r}`, owner, terrain, cityBuffer: false, isCity: false };
 }
 
-function ws(tiles: HexTile[], overrides: Partial<AiWorkingState> = {}): AiWorkingState {
+function makeWs(tiles: HexTile[], overrides: Partial<AiWorkingState> = {}): AiWorkingState {
   return {
     tileMap: new Map(tiles.map((t) => [t.key, t])),
     entities: new Map(),
@@ -38,52 +37,140 @@ function ws(tiles: HexTile[], overrides: Partial<AiWorkingState> = {}): AiWorkin
   };
 }
 
-describe("rebel spawn at the round boundary", () => {
+// ── Unit tests for spawnRebelsForOwner ───────────────────────────────────────
+
+describe("spawnRebelsForOwner", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("an armed grave rises at the end of the AI phase and is consumed", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0.5); // < 0.75 grave roll, ≥ 0.02 spread
-    const state = ws([makeTile(5, 5, "player")], { graveyard: new Set(["5,5"]) });
-    // "ai1" owns no tiles, so the AI does nothing — but the round-end rebel spawn
-    // (flag = true) still runs after the AI phase.
-    await runOneAiTurnHeadless(state, "ai1", 2, "medium", true);
-    expect(state.entities.get("5,5")).toBe("rebel"); // armed grave rose
-    expect(state.graveyard.has("5,5")).toBe(false); // and was consumed
+  it("armed grave in owner territory spawns rebel (75% roll hits) and is consumed", () => {
+    const tileMap = new Map([["5,5", makeTile(5, 5, "player")]]);
+    const entities = new Map<string, EntityType>();
+    const graveyard = new Set(["5,5"]);
+    const armedGraves = new Set(["5,5"]);
+
+    spawnRebelsForOwner(
+      "player", tileMap, entities, graveyard, new Set(),
+      armedGraves, new Set(), () => 0.5, // 0.5 < 0.75 → spawn
+    );
+
+    expect(entities.get("5,5")).toBe("rebel");
+    expect(armedGraves.has("5,5")).toBe(false); // consumed from armed set
+    expect(graveyard.has("5,5")).toBe(false);   // skull marker cleared
   });
 
-  it("is suspended in round 1", async () => {
+  it("armed grave in a different owner's territory is NOT consumed or spawned", () => {
+    const tileMap = new Map([["5,5", makeTile(5, 5, "ai1")]]);
+    const entities = new Map<string, EntityType>();
+    const graveyard = new Set(["5,5"]);
+    const armedGraves = new Set(["5,5"]);
+
+    spawnRebelsForOwner(
+      "player", tileMap, entities, graveyard, new Set(),
+      armedGraves, new Set(), () => 0.5,
+    );
+
+    expect(entities.get("5,5")).toBeUndefined();
+    expect(armedGraves.has("5,5")).toBe(true); // untouched
+    expect(graveyard.has("5,5")).toBe(true);   // untouched
+  });
+
+  it("grave is consumed from graveyard even when the 75% roll misses", () => {
+    const tileMap = new Map([["5,5", makeTile(5, 5, "player")]]);
+    const entities = new Map<string, EntityType>();
+    const graveyard = new Set(["5,5"]);
+    const armedGraves = new Set(["5,5"]);
+
+    spawnRebelsForOwner(
+      "player", tileMap, entities, graveyard, new Set(),
+      armedGraves, new Set(), () => 0.99, // 0.99 > 0.75 → miss
+    );
+
+    expect(entities.get("5,5")).toBeUndefined(); // no rebel
+    expect(armedGraves.has("5,5")).toBe(false);  // still consumed
+    expect(graveyard.has("5,5")).toBe(false);    // still cleared
+  });
+
+  it("background spawn (2%) fires only on owner tiles, not neighbour owner tiles", () => {
+    const tileMap = new Map([
+      ["0,0", makeTile(0, 0, "player")],
+      ["1,0", makeTile(1, 0, "ai1")],
+    ]);
+    const entities = new Map<string, EntityType>();
+
+    spawnRebelsForOwner(
+      "player", tileMap, entities, new Set(), new Set(),
+      new Set(), new Set(), () => 0.01, // 0.01 < 0.02 → background fires
+    );
+
+    expect(entities.get("0,0")).toBe("rebel");   // player tile spawned
+    expect(entities.get("1,0")).toBeUndefined(); // ai1 tile untouched
+  });
+});
+
+// ── Integration tests via runOneAiTurnHeadless ────────────────────────────────
+
+describe("rebel spawn — integration via runOneAiTurnHeadless", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("armed grave in player territory rises at end of AI phase (player sees rebel next turn)", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.5); // < 0.75 → spawn
+    // ai1 owns no tiles → does nothing. Grave at 5,5 is armed (from prev round).
+    const state = makeWs([makeTile(5, 5, "player")], {
+      graveyard: new Set(["5,5"]),
+    });
+    await runOneAiTurnHeadless(
+      state, "ai1", 2, "medium",
+      new Set(["5,5"]) /* armedGraves */, new Set(),
+    );
+
+    expect(state.entities.get("5,5")).toBe("rebel");
+    expect(state.graveyard.has("5,5")).toBe(false); // consumed
+  });
+
+  it("is suspended in round 1 — no spawn even with armed grave", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0);
-    const state = ws([makeTile(5, 5, "player")], { graveyard: new Set(["5,5"]) });
-    await runOneAiTurnHeadless(state, "ai1", 1, "medium", true);
-    expect(state.entities.get("5,5")).toBeUndefined(); // no spawn in round 1
-    expect(state.graveyard.has("5,5")).toBe(true); // grave untouched
+    const state = makeWs([makeTile(5, 5, "player")], {
+      graveyard: new Set(["5,5"]),
+    });
+    await runOneAiTurnHeadless(
+      state, "ai1", 1, "medium",
+      new Set(["5,5"]), new Set(),
+    );
+
+    expect(state.entities.get("5,5")).toBeUndefined(); // round 1 guard
+    expect(state.graveyard.has("5,5")).toBe(true);     // untouched
   });
 
-  it("one-round delay: a grave created THIS round waits until next round", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0.5);
-    // Territory {2 grass + lake/warrior}, balance 0 → player economy nets −6 →
-    // bankrupt → the warrior dies, creating a NEW grave at (0,1) during the round.
-    // Separately, (5,5) carries an armed grave from a previous round.
-    const state = ws(
+  it("grave created THIS round by player bankruptcy is in nextArmedGraves and spawns rebel immediately", async () => {
+    // Player territory: (0,0) grass + (1,0) grass. Warrior at (0,0).
+    // income = 4 (2 × grass), warrior upkeep = 9 → net −5 → bankrupt.
+    // warrior on grass → deleted from entities, graveyard.add("0,0").
+    // After player economy, nextArmedGraves = ws.graveyard = {"5,5", "0,0"}.
+    // Player spawn fires both: rebel at 5,5 (pre-armed) + rebel at 0,0 (new).
+    vi.spyOn(Math, "random").mockReturnValue(0.5); // < 0.75 → spawn for all rolls
+    const state = makeWs(
       [
         makeTile(0, 0, "player", "grass"),
         makeTile(1, 0, "player", "grass"),
-        makeTile(0, 1, "player", "lake"),
-        makeTile(5, 5, "player", "grass"),
+        makeTile(5, 5, "player", "grass"), // isolated — separate territory
       ],
       {
-        entities: new Map<string, EntityType>([["0,1", "warrior"]]),
-        balances: new Map([["0,0", 0]]),
-        graveyard: new Set(["5,5"]), // armed at round start
+        entities: new Map<string, EntityType>([["0,0", "warrior"]]),
+        balances: new Map([["0,0", 0]]), // territory ID "0,0" → balance 0 → bankrupt
+        graveyard: new Set(["5,5"]),     // pre-existing armed grave
       },
     );
-    await runOneAiTurnHeadless(state, "ai1", 2, "medium", true);
+    await runOneAiTurnHeadless(
+      state, "ai1", 2, "medium",
+      new Set(["5,5"]) /* armedGraves */, new Set(),
+    );
 
-    // The pre-existing armed grave rises and is consumed…
+    // Pre-existing grave at 5,5 rose.
     expect(state.entities.get("5,5")).toBe("rebel");
     expect(state.graveyard.has("5,5")).toBe(false);
-    // …while the grave the bankruptcy created THIS round survives, armed next round.
-    expect(state.entities.get("0,1")).toBe("bridge"); // warrior liquidated to bridge
-    expect(state.graveyard.has("0,1")).toBe(true);
+
+    // Bankruptcy grave at 0,0 also rose — same-round arming is the new behaviour.
+    expect(state.entities.get("0,0")).toBe("rebel");
+    expect(state.graveyard.has("0,0")).toBe(false);
   });
 });

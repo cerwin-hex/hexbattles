@@ -55,6 +55,8 @@ function runPlayerEndTurn(state: RoundState, turn: number): RoundState {
     cities: state.cities,
     graveyard: state.graveyard,
     ruins: state.ruins,
+    armedGraveyard: new Set(),
+    armedRuins: new Set(),
     mutableTileMap: new Map(state.tileMap),
     liveOwnerMap: new Map(),
     aiTurnRef: { current: false },
@@ -166,7 +168,10 @@ describe("player economy is charged exactly once per round", () => {
     // Now there are no reserves: 0 + (4 − 10) = −6 < 0 → genuine bankruptcy.
     expect(afterRound2.balances.get("0,0")).toBe(0);
     expect(afterRound2.entities.get("0,1")).toBe("bridge"); // warrior liquidated
-    expect(afterRound2.graveyard.has("0,1")).toBe(true);
+    // The grave at the lake tile is created by bankruptcy but immediately consumed
+    // by the round-end rebel spawn (lake tiles clear the skull without spawning a
+    // rebel), so graveyard is empty at round end.
+    expect(afterRound2.graveyard.has("0,1")).toBe(false);
   });
 });
 
