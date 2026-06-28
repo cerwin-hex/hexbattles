@@ -19,7 +19,7 @@ import {
   improveCostFor,
   IMPROVED_TERRAINS,
 } from "@/utils/hexGrid";
-import { advanceAttacksUsed, advanceCombatSpent, applyOwnerEconomy, calcTerritoryIncome, calcTerritoryUpkeep, effectiveRemaining, isChargeAttack, mergeResult, resolveMovedUnitMoves, spawnRebels } from "@/logic/gameLogic";
+import { advanceAttacksUsed, advanceCombatSpent, applyOwnerEconomy, calcTerritoryIncome, calcTerritoryUpkeep, effectiveRemaining, isChargeAttack, mergeResult, resolveMovedUnitMoves, spawnRebels, spawnRebelsForOwner } from "@/logic/gameLogic";
 import {
   dtSplitScore,
   dtCaptureNegatesIncome,
@@ -1041,18 +1041,14 @@ export async function runAiTurn(
   aiOwners: TerritoryOwner[],
   currentTurn: number,
   difficulty: Difficulty,
-  // True only for the React flow's single full-round AI phase (all AI owners in
-  // one call): it owns the once-per-round, after-everyone-moved rebel spawn.
-  // Self-play calls runAiTurn once PER owner, so it passes false and runs the
-  // shared spawn itself in its round loop — otherwise rebels would spawn N times.
-  spawnRebelsAtRoundEnd = false,
+  // The round-start armed snapshot from the previous round, passed in by the
+  // caller (game.tsx or self-play loop). Each AI owner spawns from their share
+  // at turn start; the player spawn fires at the end of this phase.
+  // Defaults to empty Sets (round 1, or self-play calls that manage arming
+  // externally).
+  armedGraves: Set<string> = new Set(),
+  armedRuins: Set<string> = new Set(),
 ): Promise<void> {
-  // Snapshot the graves/ruins that have stood since the start of this round; they
-  // are the ones eligible to breed rebels at the end of it. Deaths created DURING
-  // this round's economy/combat are added afterwards and wait until next round —
-  // preserving the one-round "skull warning" delay.
-  const armedGraves = spawnRebelsAtRoundEnd ? new Set(ws.graveyard) : null;
-  const armedRuins = spawnRebelsAtRoundEnd ? new Set(ws.ruins) : null;
 
   cbs.initStepHistory(snapFromWs(ws));
   await cbs.awaitPreAiResume();
@@ -1065,6 +1061,27 @@ export async function runAiTurn(
       (t) => t.owner === aiOwner,
     );
     if (aiTiles.length === 0) continue;
+
+    // Rebel spawn for this AI owner at the start of their turn.
+    // Suspended in round 1 (armedGraves is empty by default, but guard
+    // explicitly). Clone ws state first since spawnRebelsForOwner mutates.
+    if (currentTurn !== 1 && armedGraves.size > 0) {
+      ws.entities = new Map(ws.entities);
+      ws.graveyard = new Set(ws.graveyard);
+      ws.ruins = new Set(ws.ruins);
+      spawnRebelsForOwner(
+        aiOwner,
+        ws.tileMap,
+        ws.entities,
+        ws.graveyard,
+        ws.ruins,
+        armedGraves,
+        armedRuins,
+      );
+      cbs.state.setEntities(new Map(ws.entities));
+      cbs.state.setGraveyard(new Set(ws.graveyard));
+      cbs.state.setRuins(new Set(ws.ruins));
+    }
 
     // AI income/upkeep at the start of this owner's turn — the single place it
     // happens each round, mirroring the player (whose economy runs at the end of
@@ -1653,26 +1670,28 @@ export async function runAiTurn(
     // Final-state publish below commits the credited balances / liquidations.
   }
 
-  // ── Rebel spawn at the round boundary (after everyone has moved) ────────────
-  // Once per round, the armed graves/ruins (snapshotted at round start) breed
-  // rebels and unrest spreads across the map; then those sites are consumed.
-  // Suspended in round 1. Only the full-round React call does this (see the flag).
-  if (spawnRebelsAtRoundEnd && currentTurn !== 1 && armedGraves && armedRuins) {
+  // ── Rebel spawn for the player at round end ─────────────────────────────────
+  // Snapshot all graves/ruins present at the end of this AI phase (after all AI
+  // moves and player economy). These arm the next round: AI owners spawn from
+  // them at the start of their turns (passed in as armedGraves next call), and
+  // the player spawn below makes rebels visible at the start of the player's
+  // next turn. Suspended in round 1.
+  if (currentTurn !== 1) {
+    const nextArmedGraves = new Set(ws.graveyard);
+    const nextArmedRuins  = new Set(ws.ruins);
     ws.entities = new Map(ws.entities);
-    spawnRebels({
-      tileMap: ws.tileMap,
-      entities: ws.entities,
-      graveyard: ws.graveyard,
-      ruins: ws.ruins,
-      armedGraves,
-      armedRuins,
-    });
-    // Each armed site rolls once, then is consumed (whether or not it spawned),
-    // leaving only deaths created THIS round to arm the next one.
-    ws.graveyard = new Set(ws.graveyard);
-    ws.ruins = new Set(ws.ruins);
-    for (const k of armedGraves) ws.graveyard.delete(k);
-    for (const k of armedRuins) ws.ruins.delete(k);
+    // ws.graveyard / ws.ruins are already clones from the player economy block
+    // above, so mutations inside spawnRebelsForOwner are safe.
+    spawnRebelsForOwner(
+      "player",
+      ws.tileMap,
+      ws.entities,
+      ws.graveyard,
+      ws.ruins,
+      nextArmedGraves,
+      nextArmedRuins,
+    );
+    cbs.state.setArmedGraves(nextArmedGraves, nextArmedRuins);
   }
 
   // ── Win/loss check ─────────────────────────────────────────────────────────
