@@ -1,5 +1,5 @@
 import { Platform, StyleSheet } from "react-native";
-import { BTN_H, BOTTOM_BAR_H, RIBBON_H, ENTITY_PANEL_H } from "@/constants/gameConstants";
+import { BTN_H, BOTTOM_BAR_H, RIBBON_H, ENTITY_PANEL_H, TOP_BTN_H } from "@/constants/gameConstants";
 
 const styles = StyleSheet.create({
   root: {
@@ -119,11 +119,11 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   menuBtn: {
+    height: TOP_BTN_H,
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
     paddingHorizontal: 8,
-    paddingVertical: 6,
     borderRadius: 5,
     borderWidth: 1,
     borderColor: "#7A6030",
@@ -554,10 +554,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   devBtn: {
+    height: TOP_BTN_H,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 8,
-    paddingVertical: 9,
     borderRadius: 5,
     borderWidth: 1,
     borderColor: "#7A6030",
