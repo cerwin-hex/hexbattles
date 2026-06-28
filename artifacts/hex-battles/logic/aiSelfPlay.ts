@@ -12,7 +12,7 @@ import {
   getTerritoryId,
   ENTITY_META,
 } from "@/utils/hexGrid";
-import { applySingleHexPenalty, spawnRebels } from "@/logic/gameLogic";
+import { applySingleHexPenalty, spawnRebelsForOwner } from "@/logic/gameLogic";
 import { runAiTurn } from "@/logic/aiStrategy";
 import type { AiWorkingState, AiTurnCallbacks } from "@/logic/aiStrategy";
 import { __setExpertWeightsOverride, __setExpertSearchConfig, type EvalWeights } from "@/logic/aiExpert";
@@ -132,13 +132,14 @@ export async function runOneAiTurnHeadless(
   owner: TerritoryOwner,
   turn: number,
   difficulty: Difficulty,
-  spawnRebelsAtRoundEnd = false,
+  armedGraves: Set<string> = new Set(),
+  armedRuins: Set<string> = new Set(),
 ): Promise<void> {
   ws.spentUnits = new Set();
   ws.partialMoves = new Map();
   ws.attacksUsed = new Map();
   ws.combatSpentUnits = new Set();
-  await runAiTurn(ws, makeHeadlessCbs(), [owner], turn, difficulty, spawnRebelsAtRoundEnd);
+  await runAiTurn(ws, makeHeadlessCbs(), [owner], turn, difficulty, armedGraves, armedRuins);
 }
 
 export interface MatchConfig {
@@ -230,6 +231,16 @@ export async function playMatch(cfg: MatchConfig): Promise<MatchResult> {
         ws.partialMoves = new Map();
         ws.attacksUsed = new Map();
         ws.combatSpentUnits = new Set();
+        // Per-owner spawn at start of turn (suspended round 1).
+        if (turn !== 1) {
+          ws.entities = new Map(ws.entities);
+          ws.graveyard = new Set(ws.graveyard);
+          ws.ruins = new Set(ws.ruins);
+          spawnRebelsForOwner(
+            owner, ws.tileMap, ws.entities, ws.graveyard, ws.ruins,
+            armedGraves, armedRuins, rng,
+          );
+        }
         cfg.onBeforeOwnerTurn?.(owner);
         await runAiTurn(ws, cbs, [owner], turn, diffByOwner[owner]);
         // Invariant: no territory may ever hold a negative balance (over-spend).
@@ -237,16 +248,8 @@ export async function playMatch(cfg: MatchConfig): Promise<MatchResult> {
           if (bal < minBalance) minBalance = bal;
         }
       }
-      // Rebel spawn once per round, after every owner has moved (suspended round 1).
-      if (turn !== 1) {
-        spawnRebels({
-          tileMap: ws.tileMap, entities: ws.entities,
-          graveyard: ws.graveyard, ruins: ws.ruins,
-          armedGraves, armedRuins, rng,
-        });
-        for (const k of armedGraves) ws.graveyard.delete(k);
-        for (const k of armedRuins) ws.ruins.delete(k);
-      }
+      // armedGraves/armedRuins are now fully consumed. Next round's snapshot is
+      // taken at the top of the next iteration.
 
       const a = landTiles(ws, "ai1");
       const b = landTiles(ws, "ai2");
@@ -367,6 +370,15 @@ export async function playFreeForAll(cfg: FreeForAllConfig): Promise<FreeForAllR
         ws.partialMoves = new Map();
         ws.attacksUsed = new Map();
         ws.combatSpentUnits = new Set();
+        if (turn !== 1) {
+          ws.entities = new Map(ws.entities);
+          ws.graveyard = new Set(ws.graveyard);
+          ws.ruins = new Set(ws.ruins);
+          spawnRebelsForOwner(
+            owner, ws.tileMap, ws.entities, ws.graveyard, ws.ruins,
+            armedGraves, armedRuins, rng,
+          );
+        }
         cfg.onBeforeOwnerTurn?.(owner);
         const t0 = performance.now();
         await runAiTurn(ws, cbs, [owner], turn, diffByOwner[owner]);
@@ -377,16 +389,6 @@ export async function playFreeForAll(cfg: FreeForAllConfig): Promise<FreeForAllR
           if (bal < minBalance) minBalance = bal;
         }
         cfg.onAfterOwnerTurn?.(owner, ws);
-      }
-      // Rebel spawn once per round, after every seat has moved (suspended round 1).
-      if (turn !== 1) {
-        spawnRebels({
-          tileMap: ws.tileMap, entities: ws.entities,
-          graveyard: ws.graveyard, ruins: ws.ruins,
-          armedGraves, armedRuins, rng,
-        });
-        for (const k of armedGraves) ws.graveyard.delete(k);
-        for (const k of armedRuins) ws.ruins.delete(k);
       }
       const alive = seats.filter((s) => landTiles(ws, s) > 0);
       if (alive.length <= 1) {
