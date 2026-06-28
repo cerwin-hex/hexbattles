@@ -296,6 +296,11 @@ export function handleTileTapLogic(params: TileTapParams): void {
         // (i.e. during the slide) would compute an empty territory and the
         // selection highlight would briefly vanish ("deselect") until landing.
         setSelectedTileKey(key);
+        // Re-select the entity at the destination if it still has moves left;
+        // the early setSelectedEntityKey(null) at tap-time is unconditional, so
+        // non-spent units (e.g. cavalry after a non-combat move) would otherwise
+        // land without being selected.
+        if (!moved.spent) setSelectedEntityKey(key);
         setEntities(new Map(newEntities));
         setSpentUnits(newSpentUnits);
         setCombatSpentUnits(newCombatSpentUnits);
