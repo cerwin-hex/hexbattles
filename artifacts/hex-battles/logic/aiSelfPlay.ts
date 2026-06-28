@@ -12,7 +12,7 @@ import {
   getTerritoryId,
   ENTITY_META,
 } from "@/utils/hexGrid";
-import { applySingleHexPenalty, spawnRebelsForOwner } from "@/logic/gameLogic";
+import { applySingleHexPenalty } from "@/logic/gameLogic";
 import { runAiTurn } from "@/logic/aiStrategy";
 import type { AiWorkingState, AiTurnCallbacks } from "@/logic/aiStrategy";
 import { __setExpertWeightsOverride, __setExpertSearchConfig, type EvalWeights } from "@/logic/aiExpert";
@@ -231,18 +231,8 @@ export async function playMatch(cfg: MatchConfig): Promise<MatchResult> {
         ws.partialMoves = new Map();
         ws.attacksUsed = new Map();
         ws.combatSpentUnits = new Set();
-        // Per-owner spawn at start of turn (suspended round 1).
-        if (turn !== 1) {
-          ws.entities = new Map(ws.entities);
-          ws.graveyard = new Set(ws.graveyard);
-          ws.ruins = new Set(ws.ruins);
-          spawnRebelsForOwner(
-            owner, ws.tileMap, ws.entities, ws.graveyard, ws.ruins,
-            armedGraves, armedRuins, rng,
-          );
-        }
         cfg.onBeforeOwnerTurn?.(owner);
-        await runAiTurn(ws, cbs, [owner], turn, diffByOwner[owner]);
+        await runAiTurn(ws, cbs, [owner], turn, diffByOwner[owner], armedGraves, armedRuins);
         // Invariant: no territory may ever hold a negative balance (over-spend).
         for (const bal of ws.balances.values()) {
           if (bal < minBalance) minBalance = bal;
@@ -370,18 +360,9 @@ export async function playFreeForAll(cfg: FreeForAllConfig): Promise<FreeForAllR
         ws.partialMoves = new Map();
         ws.attacksUsed = new Map();
         ws.combatSpentUnits = new Set();
-        if (turn !== 1) {
-          ws.entities = new Map(ws.entities);
-          ws.graveyard = new Set(ws.graveyard);
-          ws.ruins = new Set(ws.ruins);
-          spawnRebelsForOwner(
-            owner, ws.tileMap, ws.entities, ws.graveyard, ws.ruins,
-            armedGraves, armedRuins, rng,
-          );
-        }
         cfg.onBeforeOwnerTurn?.(owner);
         const t0 = performance.now();
-        await runAiTurn(ws, cbs, [owner], turn, diffByOwner[owner]);
+        await runAiTurn(ws, cbs, [owner], turn, diffByOwner[owner], armedGraves, armedRuins);
         computeMs += performance.now() - t0;
         ownerTurns++;
         // Invariant: no territory may ever hold a negative balance (over-spend).
