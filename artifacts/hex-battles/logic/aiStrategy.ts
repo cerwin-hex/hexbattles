@@ -1063,9 +1063,10 @@ export async function runAiTurn(
     if (aiTiles.length === 0) continue;
 
     // Rebel spawn for this AI owner at the start of their turn.
-    // Suspended in round 1 (armedGraves is empty by default, but guard
-    // explicitly). Clone ws state first since spawnRebelsForOwner mutates.
-    if (currentTurn !== 1 && armedGraves.size > 0) {
+    // Suspended in round 1 only — spawnRebelsForOwner contains both the
+    // armed-grave resurrection path AND the unconditional background/spread
+    // loop (2%/7.5%/10%), so the guard must not depend on armedGraves.size.
+    if (currentTurn !== 1) {
       ws.entities = new Map(ws.entities);
       ws.graveyard = new Set(ws.graveyard);
       ws.ruins = new Set(ws.ruins);

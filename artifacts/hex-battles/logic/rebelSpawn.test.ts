@@ -141,6 +141,18 @@ describe("rebel spawn — integration via runOneAiTurnHeadless", () => {
     expect(state.graveyard.has("5,5")).toBe(true);     // untouched
   });
 
+  it("background spread fires for AI owner even with no armed graves", async () => {
+    // ai1 owns one tile; no deaths → armedGraves is empty.
+    // Background spawn (2%) should still fire from round 2 onward.
+    vi.spyOn(Math, "random").mockReturnValue(0.01); // 0.01 < 0.02 → background fires
+    const state = makeWs([makeTile(0, 0, "ai1")]);
+    await runOneAiTurnHeadless(
+      state, "ai1", 2, "medium",
+      new Set() /* armedGraves */, new Set(),
+    );
+    expect(state.entities.get("0,0")).toBe("rebel");
+  });
+
   it("grave created THIS round by player bankruptcy is in nextArmedGraves and spawns rebel immediately", async () => {
     // Player territory: (0,0) grass + (1,0) grass. Warrior at (0,0).
     // income = 4 (2 × grass), warrior upkeep = 9 → net −5 → bankrupt.
