@@ -274,6 +274,65 @@ export function spawnRebels(o: {
   }
 }
 
+/**
+ * Per-owner variant of rebel spawning. Fires at the start of each owner's
+ * turn. Both grave/ruin spawn (75%) and background/spread (2/7.5/10%) are
+ * restricted to tiles where tile.owner === owner. Neighbour-rebel counts for
+ * spread still read the full global entities map (enemy rebels count).
+ *
+ * armedGraves / armedRuins are the shared round-start armed sets; this
+ * function consumes (deletes) the owner's entries — both from the armed sets
+ * and from graveyard/ruins — so each site rolls exactly once and skull markers
+ * are cleared after processing.
+ *
+ * Callers must clone entities/graveyard/ruins before passing.
+ */
+export function spawnRebelsForOwner(
+  owner: TerritoryOwner,
+  tileMap: Map<string, HexTile>,
+  entities: Map<string, EntityType>,
+  graveyard: Set<string>,
+  ruins: Set<string>,
+  armedGraves: Set<string>,
+  armedRuins: Set<string>,
+  rng: () => number = Math.random,
+): void {
+  const preSpread = new Map(entities);
+
+  for (const key of [...armedGraves]) {
+    if (tileMap.get(key)?.owner !== owner) continue;
+    armedGraves.delete(key);
+    if (!graveyard.has(key)) continue;
+    graveyard.delete(key);
+    if (tileMap.get(key)?.terrain === "lake") continue;
+    if (entities.has(key)) continue;
+    if (rng() < 0.75) entities.set(key, "rebel");
+  }
+  for (const key of [...armedRuins]) {
+    if (tileMap.get(key)?.owner !== owner) continue;
+    armedRuins.delete(key);
+    if (!ruins.has(key)) continue;
+    ruins.delete(key);
+    if (tileMap.get(key)?.terrain === "lake") continue;
+    if (entities.has(key)) continue;
+    if (rng() < 0.75) entities.set(key, "rebel");
+  }
+
+  for (const tile of tileMap.values()) {
+    if (tile.owner !== owner) continue;
+    if (tile.terrain === "mountain" || tile.terrain === "lake") continue;
+    if (entities.has(tile.key)) continue;
+    const [tq, tr] = tile.key.split(",").map(Number);
+    const neighborRebelCount = HEX_EDGES.filter(({ dir: [dq, dr] }) => {
+      const nk = tileKey(tq + dq, tr + dr);
+      return preSpread.get(nk) === "rebel";
+    }).length;
+    const chance =
+      neighborRebelCount >= 2 ? 0.1 : neighborRebelCount === 1 ? 0.075 : 0.02;
+    if (rng() < chance) entities.set(tile.key, "rebel");
+  }
+}
+
 export function initTerritoryBalances(
   tiles: HexTile[],
   tileMap: Map<string, HexTile>,
