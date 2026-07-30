@@ -1262,14 +1262,14 @@ export async function runExpertTerritoryDecisionLoop(
 
     if (!best) {
       // LAST RESORT: no action strictly improves the evaluated position. Before
-      // ending the territory's turn, improve an idle peasant's tile if there is
-      // one and the reserve can pay for it. This mirrors the heuristic loop's
-      // final improve priority (aiStrategy.ts) and is intentionally placed AFTER
-      // the eval-driven selection so it never preempts a real combat / expansion
-      // / economy action — it only ever spends a peasant that had nothing better
-      // to do. `ctx.spentUnits` is the live set `exec.improve` mutates, so a
-      // improved peasant is not re-picked on the next iteration.
-      const dev = dtFindImproveMove(territory, ctx, ctx.spentUnits, bal);
+      // ending the territory's turn, improve a tile if there is spare gold —
+      // an improvement is always income-positive. Mirrors the decision tree's
+      // final improve priority (aiStrategy.ts) and is intentionally placed
+      // AFTER the eval-driven selection so it never preempts a real combat /
+      // expansion / economy action. The improved tile cannot be re-picked:
+      // exec.improve rewrites the live tile map, after which its terrain no
+      // longer matches.
+      const dev = dtFindImproveMove(territory, ctx, bal);
       if (dev && (await exec.improve(dev.key, dev.terrain, improveCostFor(dev.terrain))))
         continue;
       break;

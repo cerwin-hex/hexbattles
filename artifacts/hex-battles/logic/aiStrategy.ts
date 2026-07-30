@@ -929,13 +929,14 @@ export async function runAiTerritoryDecisionLoop(
       }
     }
 
-    // ══ PRIORITY J (LAST RESORT): Improve an idle peasant's tile with spare gold ══
-    // Only when nothing better happened this iteration, so the AI never skips
-    // combat or expansion to farm. dtFindImproveMove prefers city-adjacent
-    // peasants and skips already-spent units (aiCtx.spentUnits is the live set
-    // the loop filters availUnits against and that exec.improve mutates).
+    // ══ PRIORITY J (LAST RESORT): Improve a tile with spare gold ═════════════
+    // Only reached when nothing else this iteration was worth doing. Improving
+    // is income-positive (field/sawmill +1, mine +2 per turn) so spare gold is
+    // better spent here than held. dtFindImproveMove prefers city-adjacent
+    // tiles. The loop cannot re-pick a tile: exec.improve rewrites the live
+    // tile map, after which the tile's terrain no longer matches.
     if (!actionTaken) {
-      const dev = dtFindImproveMove(currTerr, aiCtx, aiCtx.spentUnits, currBal);
+      const dev = dtFindImproveMove(currTerr, aiCtx, currBal);
       if (dev) actionTaken = await exec.improve(dev.key, dev.terrain, improveCostFor(dev.terrain));
     }
 
@@ -1609,8 +1610,9 @@ export async function runAiTurn(
         const tid = getTerritoryId(terr);
         ws.balances = new Map(ws.balances);
         if (tid) ws.balances.set(tid, (ws.balances.get(tid) ?? 0) - cost);
-        ws.spentUnits = new Set(ws.spentUnits);
-        ws.spentUnits.add(target);
+        // Deliberately does NOT mark the tile spent. Improvements are purchases,
+        // not unit actions, and may be built under a friendly unit — marking the
+        // tile would freeze that unit for the rest of the turn.
         cbs.state.setMutableTileMap(new Map(ws.tileMap));
         cbs.state.setTerritoryBalances(new Map(ws.balances));
         await dtAwait();

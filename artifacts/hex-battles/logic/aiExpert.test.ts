@@ -1206,14 +1206,14 @@ describe("two-ply best-response", () => {
 // ─── improve as a last-resort action ─────────────────────────────────────────
 
 describe("expert improve (last-resort)", () => {
-  it("improves an idle peasant's grass tile when no better action exists", async () => {
+  it("spends spare gold improving tiles when no better action exists", async () => {
     // A fully interior, all-grass territory surrounded by void: no enemies, no
-    // border tiles, nothing to capture. One idle peasant sits on grass. The
-    // balance (5) covers the field cost (2) but is too little for any unit/building
-    // buy (cheapest unit is 10), so the candidate generator emits no score-improving
-    // action and the expert loop's `best` is null. With nothing better to do, the
-    // expert should fall back to improving the peasant's tile (grass→field).
-    // Improving requires a city in the territory (here at 1,1).
+    // border tiles, nothing to capture. The balance (5) covers field costs (2)
+    // but is too little for any unit/building buy (cheapest unit is 10), so the
+    // candidate generator emits no score-improving action and the expert loop's
+    // `best` is null. With nothing better to do, the expert falls back to
+    // improving tiles. Improving requires a city in the territory (here at 1,1).
+    // No peasant is needed — the unit on 0,0 is incidental.
     const tileMap = makeTileMap([
       makeTile(0, 0, "ai1"),
       makeTile(1, 0, "ai1"),
@@ -1223,7 +1223,8 @@ describe("expert improve (last-resort)", () => {
     const entities = new Map<string, EntityType>([["0,0", "peasant"]]);
     const balances = new Map<string, number>();
     const terr = getContiguousTerritory(tileMap, "0,0", "ai1", entities);
-    balances.set(getTerritoryId(terr)!, 5);
+    const tid = getTerritoryId(terr)!;
+    balances.set(tid, 5);
     const ctx = makeCtx(tileMap, entities, "ai1", balances);
     ctx.cities = new Set(["1,1"]);
 
@@ -1235,10 +1236,15 @@ describe("expert improve (last-resort)", () => {
       upgrade: async () => false,
       remove: async () => false,
       improve: async (target, terrain, cost) => {
+        const bal = ctx.balances.get(tid) ?? 0;
+        if (bal < cost) return false;
         calls.push({ target, terrain, cost });
-        // Mirror production: mark the peasant spent so the loop never re-picks it
-        // (otherwise it would re-improve the same tile until iter<100 ends).
-        ctx.spentUnits.add(target);
+        // Mirror production (dtExecImprove): rewrite the tile map so the
+        // improved tile no longer matches improveTargetFor, and debit the
+        // balance. Those two together are what terminates the loop.
+        const tile = ctx.tileMap.get(target)!;
+        ctx.tileMap.set(target, { ...tile, terrain });
+        ctx.balances.set(tid, bal - cost);
         return true;
       },
       markSpent: () => {},
@@ -1247,8 +1253,14 @@ describe("expert improve (last-resort)", () => {
 
     await runExpertTerritoryDecisionLoop("0,0", ctx, exec, () => true);
 
-    expect(calls.length).toBe(1);
-    expect(calls[0]).toEqual({ target: "0,0", terrain: "field", cost: 2 });
+    // 5 gold buys exactly two fields (2 each); the third is unaffordable.
+    expect(calls.length).toBe(2);
+    for (const c of calls) expect(c).toMatchObject({ terrain: "field", cost: 2 });
+    // City-adjacent tiles are preferred — the field bonus stacks next to a city.
+    // 1,0 and 0,1 neighbour the city at 1,1; 0,0 does not.
+    expect(calls.map((c) => c.target).sort()).toEqual(["0,1", "1,0"]);
+    // A unit standing on an improved tile is never spent by the improvement.
+    expect(ctx.spentUnits.size).toBe(0);
   });
 
   it("prefers a capture over improving (improve is strictly last-resort)", async () => {

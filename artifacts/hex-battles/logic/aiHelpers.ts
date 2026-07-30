@@ -1,7 +1,6 @@
 import type { EntityType, HexTile, TerrainType, TerritoryOwner } from "@/types";
 import { HEX_EDGES, hexDistance, tileKey } from "@/utils/hexMath";
 import {
-  improveCostFor,
   improveTargetFor,
   ENTITY_META,
   getContiguousTerritory,
@@ -10,7 +9,12 @@ import {
   getMoveCost,
   TerritoryCache,
 } from "@/utils/hexGrid";
-import { calcTerritoryIncome, calcTerritoryUpkeep, mergeResult } from "@/logic/gameLogic";
+import {
+  calcTerritoryIncome,
+  calcTerritoryUpkeep,
+  canImproveTile,
+  mergeResult,
+} from "@/logic/gameLogic";
 
 export interface AiContext {
   tileMap: Map<string, HexTile>;
@@ -215,29 +219,41 @@ export function dtFindMergeMove(
 }
 
 /**
- * Finds the best in-place tile improvement for the AI: a non-spent peasant
- * standing on improvable terrain (grass→field, forest→sawmill, desert→mine).
- * Requires a city in the territory (same rule the player follows). Prefers a
- * peasant adjacent to one of the AI's own cities (the field bonus stacks there).
- * v1 scope: improves ONLY peasants already on a improvable tile — it does not
- * reposition peasants.
+ * Finds the best tile improvement for the AI: any tile of its territory whose
+ * terrain can be improved (grass→field, forest→sawmill, desert→mine) and that
+ * the territory can afford. Requires a city in the territory — the same rule
+ * the player follows, via the shared `canImproveTile` predicate.
+ *
+ * Prefers a tile adjacent to one of the AI's own cities, where the Field's
+ * city-adjacency bonus stacks on top of the terrain income.
+ *
+ * No `spentUnits` filter: improvements are purchases, not unit actions. The
+ * decision loop cannot re-pick a tile because the executor rewrites the live
+ * tile map, after which `improveTargetFor` no longer matches.
  */
 export function dtFindImproveMove(
   territory: HexTile[],
   ctx: AiContext,
-  spentUnits: Set<string>,
   balance: number,
 ): { key: string; terrain: TerrainType } | null {
-  if (!territory.some((t) => ctx.cities.has(t.key))) return null;
+  const territoryHasCity = territory.some((t) => ctx.cities.has(t.key));
+  if (!territoryHasCity) return null;
   let best: { key: string; terrain: TerrainType } | null = null;
   let bestPrio = -1;
   for (const t of territory) {
     const target = improveTargetFor(t.terrain);
     if (!target) continue;
-    if (balance < improveCostFor(target)) continue;
-    if (ctx.entities.get(t.key) !== "peasant") continue;
-    if (ctx.cities.has(t.key)) continue;
-    if (spentUnits.has(t.key)) continue;
+    if (
+      !canImproveTile({
+        terrain: t.terrain,
+        targetTerrain: target,
+        balance,
+        territoryHasCity,
+        isCity: ctx.cities.has(t.key),
+        occupantEntity: ctx.entities.get(t.key),
+      })
+    )
+      continue;
     let prio = 1;
     const [q, r] = t.key.split(",").map(Number);
     for (const { dir: [dq, dr] } of HEX_EDGES) {
