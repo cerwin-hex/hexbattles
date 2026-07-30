@@ -1,14 +1,12 @@
 import { useMemo } from "react";
 import type { EntityType, HexTile, TerritoryOwner, AiState } from "@/types";
 import {
-  CITY_BONUS,
-  TERRAIN_INCOME,
   findCentralTile,
   getContiguousTerritory,
   getTerritoryId,
 } from "@/utils/hexGrid";
 import { hexDistance } from "@/utils/hexMath";
-import { calcTerritoryUpkeep } from "@/logic/gameLogic";
+import { calcTerritoryIncome, calcTerritoryUpkeep } from "@/logic/gameLogic";
 
 export interface DevEconomicOverlay {
   cx: number;
@@ -55,14 +53,15 @@ export function useDevEconomicOverlays({
         const territoryId = getTerritoryId(territory);
         if (!territoryId) continue;
         const balance = territoryBalances.get(territoryId) ?? 0;
-        const income = territory.reduce((s, t) => {
-          if (entities.get(t.key) === "rebel") return s;
-          return (
-            s +
-            TERRAIN_INCOME[t.terrain] +
-            (cities.has(t.key) ? CITY_BONUS : 0)
-          );
-        }, 0);
+        // Use the same helpers as applyOwnerEconomy, never an inlined formula:
+        // the previous local copy omitted the city-adjacency bonus that Field
+        // tiles earn, so the overlay understated the AI's real net income.
+        const income = calcTerritoryIncome(
+          territory,
+          entities,
+          cities,
+          activeTileMap,
+        );
         const upkeep = calcTerritoryUpkeep(territory, entities);
         const net = income - upkeep;
         const money = net >= 0 ? `${balance}(+${net})` : `${balance}(${net})`;
