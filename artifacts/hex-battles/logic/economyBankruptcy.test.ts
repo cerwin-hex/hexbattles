@@ -284,6 +284,46 @@ describe("bankruptcy markers on a demolished bridge", () => {
     expect(ws.ruins.has("0,1")).toBe(false);
   });
 
+  it("an AI's bankrupt bridge leaves a ruin with the same one-turn lifetime", async () => {
+    // The AI variant of the case above, and the likelier one in a real game: the
+    // ruin is created mid-phase at the AI's turn start, while the sweep that
+    // expires it runs at the phase end. It must still last exactly one turn.
+    vi.spyOn(Math, "random").mockReturnValue(0.99);
+    const ws: AiWorkingState = {
+      tileMap: new Map([
+        ["10,10", makeTile(10, 10, "ai1", "grass")],
+        ["11,10", makeTile(11, 10, "ai1", "grass")],
+        ["10,11", makeTile(10, 11, "ai1", "lake")],
+      ]),
+      entities: new Map<string, EntityType>([
+        ["11,10", "castle"],
+        ["10,11", "bridge"],
+      ]),
+      balances: new Map([["10,10", 0]]),
+      liveOwnerMap: new Map(),
+      graveyard: new Set(),
+      ruins: new Set(),
+      cities: new Set(),
+      spentUnits: new Set(),
+      partialMoves: new Map(),
+      attacksUsed: new Map(),
+      combatSpentUnits: new Set(),
+      freeTowerUsed: new Map(),
+    };
+    const armedGraves: ArmedSites = new Map();
+    const armedRuins: ArmedSites = new Map();
+
+    // Round 3 — the first round the AI economy is credited, so the first it can
+    // go bankrupt.
+    await runOneAiTurnHeadless(ws, "ai1", 3, "medium", armedGraves, armedRuins);
+    expect(ws.ruins.has("10,11")).toBe(true);
+    expect(ws.tileMap.get("10,11")?.owner).toBe("neutral");
+    expect(armedRuins.get("neutral")?.has("10,11")).toBe(true);
+
+    await runOneAiTurnHeadless(ws, "ai1", 4, "medium", armedGraves, armedRuins);
+    expect(ws.ruins.has("10,11")).toBe(false);
+  });
+
   it("a stale grave from an earlier round does not suppress a new ruin", () => {
     // Regression: keying the skull-wins rule off `graveyard.has` instead of the
     // deaths recorded by THIS pass would drop the ruin and render the old skull.

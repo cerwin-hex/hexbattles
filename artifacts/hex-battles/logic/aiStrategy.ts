@@ -1714,14 +1714,19 @@ export async function runAiTurn(
     );
     armedGraves.set("player", armedSitesForOwner("player", ws.tileMap, ws.graveyard));
     armedRuins.set("player", armedSitesForOwner("player", ws.tileMap, ws.ruins));
-
-    // Expire orphaned markers on bridgeless water. They have no owner to sweep
-    // them, so this single fixed point is what bounds their life to one player
-    // turn — wherever in the round they were created.
-    sweepNeutralMarkers(ws.tileMap, ws.graveyard, ws.ruins, armedGraves, armedRuins);
-
-    cbs.state.setArmedGraves(armedGraves, armedRuins);
   }
+
+  // ── Expire orphaned markers on bridgeless water ─────────────────────────────
+  // No owner sweep reaches a neutral tile, so this single fixed point is the
+  // whole of these markers' lifetime. Deliberately NOT gated on round 1: unlike
+  // rebel spawning there is nothing to suspend — a marker that cannot breed is
+  // only being cleaned up — and gating it would give round-1 markers (a bridge
+  // isolated by `applySingleHexPenalty` during the first turn) two turns instead
+  // of one, contradicting the guarantee.
+  ws.graveyard = new Set(ws.graveyard);
+  ws.ruins = new Set(ws.ruins);
+  sweepNeutralMarkers(ws.tileMap, ws.graveyard, ws.ruins, armedGraves, armedRuins);
+  cbs.state.setArmedGraves(armedGraves, armedRuins);
 
   // ── Win/loss check ─────────────────────────────────────────────────────────
   cbs.checkWinLoss(ws.tileMap);

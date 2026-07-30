@@ -87,6 +87,12 @@ Placing the neutral sweep at this single point — after the player economy, not
 before — gives markers created by AI bankruptcy earlier in the phase and by the
 player economy moments earlier the same one-player-turn lifetime.
 
+The neutral sweep is **not** gated on round 1, unlike the spawn and the per-owner
+re-arm. There is nothing to suspend: it only cleans up markers that can never
+breed. Gating it would give a round-1 marker — a bridge isolated by
+`applySingleHexPenalty` during the first turn — two turns instead of one,
+contradicting the guarantee.
+
 ### Marker creation (gameLogic.ts)
 
 `applyOwnerEconomy` bankruptcy, restructured:
@@ -159,4 +165,7 @@ timing, unchanged.
 - new: a marker on a tile that changes hands is armed by the new owner.
 - new: bankruptcy destroying bridge + unit yields a skull and no ruin; bridge
   alone yields a ruin; surviving bridge yields neither.
-- new: a water ruin disappears after exactly one player turn.
+- new: a water ruin disappears after exactly one player turn, driven end-to-end
+  through `runAiTurn` for both a player bankruptcy and an AI bankruptcy (the AI
+  case matters because the marker is created mid-phase while the sweep runs at
+  the phase end).
