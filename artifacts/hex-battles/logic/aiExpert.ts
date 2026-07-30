@@ -55,26 +55,46 @@ export function __setExpertCandidateMode(m: CandidateMode | null): void {
  *  fort or fresh unit deeper than this defends nothing and is never picked. */
 const FRONT_BUILD_REACH = 2;
 
+// When true (shipping), an *inert* isolated single-hex enemy tile — empty or
+// holding only a strength-0 rebel — does not count as "front" for the
+// `borderBonus`, `frontline` and `frontier` terms. See the rationale at the
+// call site in `evaluatePosition`. Toggleable for the self-play A/B (off ⇒
+// original behaviour: any non-owned neighbour is a front).
+let INERT_POCKET_FRONT = true;
+export function __setExpertInertPocketFront(on: boolean | null): void {
+  INERT_POCKET_FRONT = on ?? true;
+}
+
 /**
- * Enemy land tiles the `advance` gradient should pull idle units toward — the
- * substantial enemy mass (the real front), NOT stray single-hex pockets. A lone
- * 1-hex enemy tile is excluded because it would otherwise hijack the gradient:
- * being the *nearest* enemy, it drags the main army off the contested front to
- * chase a trivial tile (and, when the pocket is unreachable across own land,
- * freezes the unit entirely — advancing toward the real front would *increase*
- * the nearest-enemy distance). Falls back to all enemy land tiles when every
- * enemy territory is a lone hex (late-game mop-up), so the gradient never blinds.
+ * One pass over the board yielding the two things the eval and the candidate
+ * generator need to know about the enemy's shape.
+ *
+ * `advanceTargets` — enemy land tiles the `advance` gradient should pull idle
+ * units toward: the substantial enemy mass (the real front), NOT stray
+ * single-hex pockets. A lone 1-hex enemy tile is excluded because it would
+ * otherwise hijack the gradient: being the *nearest* enemy, it drags the main
+ * army off the contested front to chase a trivial tile (and, when the pocket is
+ * unreachable across own land, freezes the unit entirely — advancing toward the
+ * real front would *increase* the nearest-enemy distance). Falls back to all
+ * enemy land tiles when every enemy territory is a lone hex (late-game mop-up),
+ * so the gradient never blinds.
+ *
+ * `inertPockets` — isolated single-hex enemy tiles that cannot strike back
+ * (empty, or holding only a strength-0 rebel/bridge). These must not count as
+ * "front" for `borderBonus` / `frontline` / `frontier`; see INERT_POCKET_FRONT.
  *
  * "Single-hex" is detected cheaply as "no adjacent same-owner land tile" — an
  * isolated enemy tile, exactly the pocket case — avoiding a full territory sweep
  * inside the hot eval path.
  */
-function enemyAdvanceTargets(
+function enemyFrontInfo(
   tileMap: Map<string, HexTile>,
+  entities: Map<string, EntityType>,
   owner: TerritoryOwner,
-): Array<[number, number]> {
+): { advanceTargets: Array<[number, number]>; inertPockets: Set<string> } {
   const all: Array<[number, number]> = [];
   const substantial: Array<[number, number]> = [];
+  const inertPockets = new Set<string>();
   for (const t of tileMap.values()) {
     if (t.owner === owner || t.owner === "neutral" || t.terrain === "mountain") continue;
     all.push([t.q, t.r]);
@@ -82,9 +102,18 @@ function enemyAdvanceTargets(
       const nt = tileMap.get(tileKey(t.q + dq, t.r + dr));
       return !!nt && nt.owner === t.owner && nt.terrain !== "mountain" && nt.terrain !== "lake";
     });
-    if (connected) substantial.push([t.q, t.r]);
+    if (connected) {
+      substantial.push([t.q, t.r]);
+    } else if (t.terrain !== "lake") {
+      // Isolated. It is an INERT pocket only if nothing on it can strike back:
+      // empty, or a strength-0 occupant (rebel / bridge). A pocket holding a real
+      // unit or a fort keeps its front status — it defends itself and can attack
+      // out, and `threat` / `enemyMilitary` already drive killing it.
+      const e = entities.get(t.key);
+      if (!e || ENTITY_META[e].strength === 0) inertPockets.add(t.key);
+    }
   }
-  return substantial.length > 0 ? substantial : all;
+  return { advanceTargets: substantial.length > 0 ? substantial : all, inertPockets };
 }
 
 export interface EvalWeights {
@@ -308,8 +337,20 @@ export function evaluatePosition(
   let advance = 0;
   let mobility = 0;
   // Substantial enemy land tiles (targets the advance gradient pulls units
-  // toward) — stray single-hex pockets excluded so they never hijack the pull.
-  const enemyCoords = enemyAdvanceTargets(tileMap, owner);
+  // toward) — stray single-hex pockets excluded so they never hijack the pull —
+  // plus the inert pockets that must not be mistaken for a front.
+  const { advanceTargets: enemyCoords, inertPockets } = enemyFrontInfo(tileMap, entities, owner);
+  // An inert pocket is a mop-up chore, not a front. Crediting the units and
+  // edges facing one made the eval PAY to keep it alive: `borderBonus` and
+  // `frontline` are per-unit sums (unlike breakthrough/assault, which are
+  // de-duplicated per target), so every extra unit parked beside a lone enemy
+  // hex added 2.5 × strength that capturing it would destroy. Past ~4 units the
+  // capture scored NEGATIVE and the AI ringed the pocket forever instead of
+  // taking it — the more it stalled, the worse taking it looked. Ignoring inert
+  // pockets here makes the capture delta positive AND independent of how many
+  // units happen to stand next to it. (Toggle off ⇒ original behaviour.)
+  const isPhantomFront = (nt: HexTile): boolean =>
+    INERT_POCKET_FRONT && inertPockets.has(nt.key);
   for (const [k, e] of entities) {
     const t = tileMap.get(k);
     if (!t) continue;
@@ -333,13 +374,14 @@ export function evaluatePosition(
         !!nt &&
         nt.owner !== owner &&
         nt.terrain !== "lake" &&
-        nt.terrain !== "mountain"
+        nt.terrain !== "mountain" &&
+        !isPhantomFront(nt)
       );
     });
     // Enemy-facing (the actual front) vs merely non-owned (incl. neutral/void).
     const enemyAdjacent = HEX_EDGES.some(({ dir: [dq, dr] }) => {
       const nt = tileMap.get(tileKey(kq + dq, kr + dr));
-      return !!nt && nt.owner !== owner && nt.owner !== "neutral";
+      return !!nt && nt.owner !== owner && nt.owner !== "neutral" && !isPhantomFront(nt);
     });
     if (meta.isUnit) {
       unitStrength += meta.strength;
@@ -412,7 +454,7 @@ export function evaluatePosition(
       const nt = tileMap.get(tileKey(q + dq, r + dr));
       if (!nt || nt.terrain === "mountain") {
         secured += 1; // void or impassable mountain — safe back
-      } else if (nt.owner !== owner && nt.owner !== "neutral") {
+      } else if (nt.owner !== owner && nt.owner !== "neutral" && !isPhantomFront(nt)) {
         frontier += 1; // edge against enemy territory — the contested front
       }
     }
@@ -770,7 +812,7 @@ export function generateCandidateActions(
   // repositioning of idle rear units (the `advance` gradient's candidate side).
   // Must match the eval's target set (stray single-hex pockets excluded) so the
   // generated forward move and the term that rewards it agree on the front.
-  const enemyCoords = enemyAdvanceTargets(ctx.tileMap, owner);
+  const enemyCoords = enemyFrontInfo(ctx.tileMap, ctx.entities, owner).advanceTargets;
   const distToEnemy = (key: string): number => {
     const [q, r] = key.split(",").map(Number);
     let m = Infinity;
@@ -1185,7 +1227,16 @@ export async function runExpertTerritoryDecisionLoop(
           if (added >= SAFE_CAPTURE_AUGMENT_CAP) break;
           if (inSet.has(sc.cand) || sc.cand.kind !== "move") continue;
           const dest = ctx.tileMap.get(sc.cand.to);
-          if (!dest || dest.owner === owner || ctx.entities.get(sc.cand.to)) continue;
+          if (!dest || dest.owner === owner) continue;
+          // Gate on whether the occupant actually DEFENDS the tile, not on mere
+          // presence. A strength-0 occupant (rebel, bridge) contributes no ZoC,
+          // so taking its tile is exactly as safe as taking an empty one — and
+          // candidate-gen already proved the mover beats the tile's ZoC. Gating
+          // on presence hid precisely the "clear the rebel off an interior
+          // pocket" capture that the top-K crowds out (measured 1-ply rank 17-75
+          // of 100-120), so it never reached the 2-ply pass at all.
+          const occupant = ctx.entities.get(sc.cand.to);
+          if (occupant && ENTITY_META[occupant].strength > 0) continue;
           if (seenTargets.has(sc.cand.to)) continue;
           seenTargets.add(sc.cand.to);
           evalSet.push(sc);

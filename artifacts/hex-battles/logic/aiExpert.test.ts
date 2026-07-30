@@ -162,7 +162,13 @@ describe("evaluatePosition", () => {
 
   it("values an edge facing the enemy (frontier term)", () => {
     // ai1 tile adjacent to an (empty) enemy tile. Frontier weight should add value.
-    const map = makeTileMap([makeTile(0, 0, "ai1"), makeTile(1, 0, "ai2")]);
+    // The enemy needs TWO connected tiles: a lone enemy hex is an inert pocket,
+    // which deliberately earns no frontier credit (see __setExpertInertPocketFront).
+    const map = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai2"),
+      makeTile(2, 0, "ai2"),
+    ]);
     const withFrontier = evaluatePosition("ai1", map, new Map(), new Map(), new Set(), {
       ...DEFAULT_WEIGHTS,
       frontier: 5,
@@ -292,7 +298,13 @@ describe("evaluatePosition", () => {
   });
 
   it("rewards an enemy-facing unit but not a neutral-facing one (frontline term)", () => {
-    const enemyMap = makeTileMap([makeTile(0, 0, "ai1"), makeTile(1, 0, "ai2")]);
+    // Two connected enemy tiles: a lone enemy hex is an inert pocket and earns no
+    // frontline credit by design (see __setExpertInertPocketFront).
+    const enemyMap = makeTileMap([
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai2"),
+      makeTile(2, 0, "ai2"),
+    ]);
     const entities = new Map<string, EntityType>([["0,0", "warrior"]]);
     const enemyWith = evaluatePosition("ai1", enemyMap, entities, new Map(), new Set(), {
       ...DEFAULT_WEIGHTS,

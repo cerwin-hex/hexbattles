@@ -7,6 +7,7 @@ import {
 } from "@/logic/aiSelfPlay";
 import {
   __setExpertSearchConfig, __setExpertCandidateMode, __setExpertMaxIters,
+  __setExpertInertPocketFront, __setExpertSafeCaptureAugment,
   evaluatePosition, simulateAction, opponentBestResponse, DEFAULT_WEIGHTS,
   type SimState,
 } from "@/logic/aiExpert";
@@ -22,10 +23,14 @@ import {
   unitMovement,
 } from "@/utils/hexGrid";
 
-// Count this owner's genuinely-IDLE units that are sitting next to an EMPTY
-// enemy/neutral tile they could freely take, where — looking one move ahead (the
-// same 2-ply scoring the decision loop uses) — the capture is a net gain. That
-// is free value left on the table: the loop should have taken it. Excludes:
+// Count this owner's genuinely-IDLE units that are sitting next to an
+// UNDEFENDED enemy/neutral tile they could freely take, where — looking one move
+// ahead (the same 2-ply scoring the decision loop uses) — the capture is a net
+// gain. That is free value left on the table: the loop should have taken it.
+// "Undefended" means empty OR holding only a strength-0 occupant (a rebel or a
+// bridge), which contributes no ZoC and so is exactly as free to take as bare
+// ground — the interior-pocket-with-a-rebel case the Expert used to ring for
+// many turns instead of clearing. Excludes:
 //   - units that already acted this turn (a partial-move entry) — they are not
 //     standing still, and may simply lack the movement left to reach the tile;
 //   - captures the 2-ply search DECLINES (delta <= 0) — those are correct holds
@@ -51,7 +56,10 @@ function countTwoPlyPositiveIdleCaptures(owner: TerritoryOwner, ws: AiWorkingSta
       const nk = `${q + dq},${r + dr}`;
       const nt = tileMap.get(nk);
       if (!nt || nt.owner === owner || nt.terrain === "mountain" || nt.terrain === "lake") continue;
-      if (entities.get(nk)) continue; // EMPTY targets only — a free, uncontested grab
+      // Undefended targets only — a free, uncontested grab. A strength-0
+      // occupant (rebel / bridge) does not defend its tile, so it still counts.
+      const occ = entities.get(nk);
+      if (occ && ENTITY_META[occ].strength > 0) continue;
       if (!vm.has(nk) || ustr <= getMaxEnemyZoC(nk, owner, entities, tileMap)) continue;
       const after = simulateAction(base, { kind: "move", from: tile.key, to: nk }, owner);
       const d2 = score(opponentBestResponse(owner, after, W).state) - baseScore2;
@@ -299,6 +307,58 @@ describe("expert strength (self-play)", () => {
       // meaningfully worse (observed ~even). Guards against a prune that silently
       // removes a winning line.
       expect(optWins).toBeGreaterThanOrEqual(oldWins - 4);
+    },
+    600000,
+  );
+
+  fullIt(
+    "inert-pocket front exclusion + strength-aware capture augment cost no wins",
+    async () => {
+      // New-vs-old A/B for the interior-pocket fix. The old brain treated a lone
+      // enemy hex as a front, so `borderBonus`/`frontline`/`frontier` paid it to
+      // ring the pocket forever instead of taking it (capture delta fell 2.5 per
+      // adjacent unit and went negative past ~4). The new brain ignores such inert
+      // pockets and lets a strength-0 occupant through the safe-capture augment.
+      //
+      // The fix is provably right on the isolated position (see aiExpertPocket
+      // .test.ts), but it removes reward from real front terms, so it must also not
+      // cost strength in whole games. Mirrored seats, new brain vs old brain.
+      // (vs-hard is saturated and cannot detect a small loss here; this A/B can.)
+      let newWins = 0, oldWins = 0;
+      const N = 24;
+      for (let i = 0; i < N; i++) {
+        const newOwner: TerritoryOwner = i % 2 === 0 ? "ai1" : "ai2";
+        const r = await playMatch({
+          seed: 9700 + i, tiles: 50, difficultyA: "expert", difficultyB: "expert", maxTurns: 45,
+          onBeforeOwnerTurn: (owner) => {
+            if (owner === newOwner) {
+              __setExpertInertPocketFront(null);
+              __setExpertSafeCaptureAugment(null);
+            } else {
+              __setExpertInertPocketFront(false);
+              __setExpertSafeCaptureAugment(false);
+            }
+          },
+        });
+        __setExpertInertPocketFront(null);
+        __setExpertSafeCaptureAugment(null);
+        if (r.winner === newOwner) newWins++;
+        else if (r.winner !== "draw") oldWins++;
+      }
+      // Must be at least a wash. Guards against the exclusion stripping reward the
+      // front terms genuinely needed.
+      //
+      // Observed when this landed (so a future failure on this loose bound is
+      // interpretable): 1v1 mirrored 18-22 over 40 games on seeds 9700+, and
+      // 48-52 over 100 games on seeds 20000+ — pooled 66-74 of 140, z = -0.68,
+      // p ~ 0.5, i.e. no detectable difference. A 3-seat FFA mirror over 30 seeds
+      // gave 11 wins against a neutral baseline of 10. Note the resolution limit:
+      // sd is 5 at N=100, so this A/B can only exclude a LARGE regression —
+      // detecting a true 5-point loss at 80% power would need ~400 games. The
+      // positive evidence for the change is behavioural, not win rate: idle
+      // undefended positive-delta captures across 7 seeds of 100-tile 4-Expert
+      // games went from 367 (fix off) to 0 (fix on).
+      expect(newWins).toBeGreaterThanOrEqual(oldWins - 4);
     },
     600000,
   );
