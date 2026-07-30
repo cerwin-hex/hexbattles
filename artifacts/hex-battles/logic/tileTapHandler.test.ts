@@ -946,3 +946,56 @@ describe("improvement placement", () => {
     expect(params.setMutableTileMap).not.toHaveBeenCalled();
   });
 });
+
+// ─── Founding a building on an improved tile ──────────────────────────────────
+// Improvements are now bought from the Build ribbon rather than made by a
+// peasant, so this pre-existing rule is far easier to hit: it guards the
+// interaction between the two.
+
+describe("building on an improved tile", () => {
+  function buildParams(
+    terrain: HexTile["terrain"],
+    overrides: Partial<TileTapParams> = {},
+  ): TileTapParams {
+    const tiles = [makeTile(0, 0, "player", terrain), makeTile(1, 0, "player", "grass")];
+    const map = tileMap(tiles);
+    return makeParams({
+      key: "0,0",
+      activeTileMap: map,
+      selectedTerritory: tiles,
+      selectedTileKeys: new Set(["0,0", "1,0"]),
+      selectedTerritoryId: "0,0",
+      territoryBalances: new Map([["0,0", 50]]),
+      armedEntityId: "tower",
+      ...overrides,
+    });
+  }
+
+  it("reverts a field to grass when a tower is founded on it", () => {
+    const params = buildParams("field");
+    handleTileTapLogic(params);
+    const written = vi.mocked(params.setMutableTileMap).mock.calls[0][0];
+    expect(written.get("0,0")?.terrain).toBe("grass");
+  });
+
+  it("reverts a sawmill to forest and a mine to desert", () => {
+    const sawmill = buildParams("sawmill");
+    handleTileTapLogic(sawmill);
+    expect(
+      vi.mocked(sawmill.setMutableTileMap).mock.calls[0][0].get("0,0")?.terrain,
+    ).toBe("forest");
+
+    const mine = buildParams("mine");
+    handleTileTapLogic(mine);
+    expect(
+      vi.mocked(mine.setMutableTileMap).mock.calls[0][0].get("0,0")?.terrain,
+    ).toBe("desert");
+  });
+
+  it("leaves unimproved terrain alone", () => {
+    const params = buildParams("grass");
+    handleTileTapLogic(params);
+    // No terrain rewrite is needed, so the tile map is not republished at all.
+    expect(params.setMutableTileMap).not.toHaveBeenCalled();
+  });
+});
