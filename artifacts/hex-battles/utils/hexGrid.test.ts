@@ -17,6 +17,8 @@ import {
   generateHexGrid,
   improveCostFor,
   improveTargetFor,
+  improvementFor,
+  IMPROVEMENTS,
   baseTerrainFor,
   IMPROVED_TERRAINS,
   calcAdminBurden,
@@ -599,5 +601,51 @@ describe("getPlacementAttackTiles", () => {
     expect(
       getPlacementAttackTiles("scout", terr, keys, lakeOnly, entities([])).has("2,0"),
     ).toBe(false);
+  });
+});
+
+// ─── IMPROVEMENTS catalogue ───────────────────────────────────────────────────
+
+describe("IMPROVEMENTS catalogue", () => {
+  it("lists field, sawmill and mine with their source terrain, cost and income delta", () => {
+    expect(IMPROVEMENTS).toEqual([
+      { source: "grass", target: "field", name: "Field", cost: 2, incomeDelta: 1 },
+      { source: "forest", target: "sawmill", name: "Sawmill", cost: 3, incomeDelta: 1 },
+      { source: "desert", target: "mine", name: "Mine", cost: 4, incomeDelta: 2 },
+    ]);
+  });
+
+  it("agrees with improveTargetFor for every source terrain", () => {
+    for (const imp of IMPROVEMENTS) {
+      expect(improveTargetFor(imp.source)).toBe(imp.target);
+    }
+  });
+
+  it("agrees with improveCostFor for every target terrain", () => {
+    for (const imp of IMPROVEMENTS) {
+      expect(improveCostFor(imp.target)).toBe(imp.cost);
+    }
+  });
+
+  it("round-trips target back to source via baseTerrainFor", () => {
+    for (const imp of IMPROVEMENTS) {
+      expect(baseTerrainFor(imp.target)).toBe(imp.source);
+    }
+  });
+
+  it("lists exactly the improved terrains in IMPROVED_TERRAINS", () => {
+    expect(new Set(IMPROVEMENTS.map((i) => i.target))).toEqual(IMPROVED_TERRAINS);
+  });
+
+  it("returns undefined from improvementFor for non-improved terrain", () => {
+    expect(improvementFor("grass")).toBeUndefined();
+    expect(improvementFor("mountain")).toBeUndefined();
+    expect(improvementFor("field")?.cost).toBe(2);
+  });
+
+  it("returns null from improveTargetFor for terrain that cannot be improved", () => {
+    expect(improveTargetFor("mountain")).toBeNull();
+    expect(improveTargetFor("lake")).toBeNull();
+    expect(improveTargetFor("field")).toBeNull();
   });
 });

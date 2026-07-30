@@ -1,5 +1,5 @@
-import { ENTITY_META } from "@/utils/hexGrid";
-import type { EntityType } from "@/utils/hexGrid";
+import { ENTITY_META, IMPROVEMENTS } from "@/utils/hexGrid";
+import type { EntityType, ImprovementMeta } from "@/utils/hexGrid";
 
 export const BTN_H = 52;
 export const TOP_BTN_H = 40;
@@ -44,6 +44,14 @@ export const PURCHASABLES = (Object.keys(ENTITY_META) as EntityType[])
 
 export const UNIT_PURCHASABLES = PURCHASABLES.filter((p) => p.isUnit);
 export const BUILDING_PURCHASABLES = PURCHASABLES.filter((p) => !p.isUnit);
+
+/**
+ * Improvements shown in the Build ribbon after the buildings. Improvements are
+ * deliberately absent from ENTITY_META (they are terrain, not entities), so
+ * they get their own purchasable list rather than being derived from
+ * PURCHASABLES.
+ */
+export const IMPROVEMENT_PURCHASABLES: readonly ImprovementMeta[] = IMPROVEMENTS;
 
 /**
  * Rows shown in the "Units & Buildings" reference tables (welcome + rules modals).

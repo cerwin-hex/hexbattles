@@ -105,47 +105,60 @@ export const TERRAIN_MOVE_COST: Record<TerrainType, number> = {
 export const CITY_BONUS = 1;
 
 /**
- * Gold a peasant pays to build each improvement, keyed by the TARGET terrain
- * (field 2, sawmill 3, mine 4). Use `improveCostFor` rather than reading this
- * map directly.
+ * A terrain improvement: the base terrain it is built on, the terrain it
+ * produces, its gold cost, and how much per-turn income the tile gains.
+ * (The Field's extra +1 per adjacent owned city is applied separately in
+ * `tileEconomicIncome` and is not part of `incomeDelta`.)
  */
-const IMPROVE_COST_BY_TARGET: Partial<Record<TerrainType, number>> = {
-  field:   2,
-  sawmill: 3,
-  mine:    4,
-};
+export interface ImprovementMeta {
+  source: TerrainType;
+  target: TerrainType;
+  name: string;
+  cost: number;
+  incomeDelta: number;
+}
 
-/** Gold cost for a peasant to build the given improvement terrain. */
+/**
+ * Single source of truth for the three improvements. Every helper below is
+ * derived from this table so source, target and cost cannot drift apart.
+ * Order is the display order used by the Build ribbon.
+ */
+export const IMPROVEMENTS: readonly ImprovementMeta[] = [
+  { source: 'grass',  target: 'field',   name: 'Field',   cost: 2, incomeDelta: 1 },
+  { source: 'forest', target: 'sawmill', name: 'Sawmill', cost: 3, incomeDelta: 1 },
+  { source: 'desert', target: 'mine',    name: 'Mine',    cost: 4, incomeDelta: 2 },
+];
+
+const IMPROVEMENT_BY_TARGET = new Map<TerrainType, ImprovementMeta>(
+  IMPROVEMENTS.map((i) => [i.target, i]),
+);
+
+const IMPROVEMENT_BY_SOURCE = new Map<TerrainType, ImprovementMeta>(
+  IMPROVEMENTS.map((i) => [i.source, i]),
+);
+
+/** The improvement that produces `targetTerrain`, or undefined. */
+export function improvementFor(targetTerrain: TerrainType): ImprovementMeta | undefined {
+  return IMPROVEMENT_BY_TARGET.get(targetTerrain);
+}
+
+/** Gold cost to build the given improvement terrain. */
 export function improveCostFor(targetTerrain: TerrainType): number {
-  return IMPROVE_COST_BY_TARGET[targetTerrain] ?? 0;
+  return IMPROVEMENT_BY_TARGET.get(targetTerrain)?.cost ?? 0;
 }
 
 /** Tile-count above which a single territory pays administrative burden. */
 export const ADMIN_BURDEN_THRESHOLD = 20;
 
 /** Terrain types produced by improvement (cannot be improved further). */
-export const IMPROVED_TERRAINS: ReadonlySet<TerrainType> = new Set<TerrainType>([
-  "field",
-  "sawmill",
-  "mine",
-]);
+export const IMPROVED_TERRAINS: ReadonlySet<TerrainType> = new Set<TerrainType>(
+  IMPROVEMENTS.map((i) => i.target),
+);
 
-const IMPROVE_TARGET: Partial<Record<TerrainType, TerrainType>> = {
-  grass: "field",
-  forest: "sawmill",
-  desert: "mine",
-};
-
-/** The terrain a peasant would produce by improving `terrain`, or null. */
+/** The terrain an improvement on `terrain` would produce, or null. */
 export function improveTargetFor(terrain: TerrainType): TerrainType | null {
-  return IMPROVE_TARGET[terrain] ?? null;
+  return IMPROVEMENT_BY_SOURCE.get(terrain)?.target ?? null;
 }
-
-const IMPROVEMENT_BASE: Partial<Record<TerrainType, TerrainType>> = {
-  field: "grass",
-  sawmill: "forest",
-  mine: "desert",
-};
 
 /**
  * The base terrain an improved tile reverts to (field→grass, sawmill→forest).
@@ -153,7 +166,7 @@ const IMPROVEMENT_BASE: Partial<Record<TerrainType, TerrainType>> = {
  * founded on an improved tile, which destroys the improvement.
  */
 export function baseTerrainFor(terrain: TerrainType): TerrainType {
-  return IMPROVEMENT_BASE[terrain] ?? terrain;
+  return IMPROVEMENT_BY_TARGET.get(terrain)?.source ?? terrain;
 }
 
 /**
