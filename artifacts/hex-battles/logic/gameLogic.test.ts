@@ -613,38 +613,68 @@ describe("calcTerritoryUpkeep admin burden", () => {
 
 describe("canImproveTile", () => {
   const base = {
-    entityId: "peasant" as const,
     terrain: "grass" as const,
-    isSpent: false,
+    targetTerrain: "field" as const,
     balance: 5,
-    isCity: false,
     territoryHasCity: true,
+    isCity: false,
+    occupantEntity: undefined as EntityType | undefined,
   };
-  it("allows a non-spent peasant on grass(2)/forest(3)/desert(5) with enough gold", () => {
-    expect(canImproveTile({ ...base, terrain: "grass", balance: 2 })).toBe(true);
-    expect(canImproveTile({ ...base, terrain: "forest", balance: 3 })).toBe(true);
-    expect(canImproveTile({ ...base, terrain: "desert", balance: 5 })).toBe(true);
+
+  it("allows an empty tile whose terrain matches the improvement", () => {
+    expect(canImproveTile(base)).toBe(true);
+    expect(
+      canImproveTile({ ...base, terrain: "forest", targetTerrain: "sawmill", balance: 3 }),
+    ).toBe(true);
+    expect(
+      canImproveTile({ ...base, terrain: "desert", targetTerrain: "mine", balance: 4 }),
+    ).toBe(true);
   });
-  it("rejects non-peasants", () => {
-    expect(canImproveTile({ ...base, entityId: "warrior" })).toBe(false);
+
+  it("rejects a terrain that does not match the chosen improvement", () => {
+    expect(canImproveTile({ ...base, terrain: "forest" })).toBe(false);
+    expect(canImproveTile({ ...base, terrain: "desert" })).toBe(false);
   });
-  it("rejects a peasant standing on a city tile", () => {
-    expect(canImproveTile({ ...base, isCity: true })).toBe(false);
+
+  it("rejects non-improvable and already-improved terrain", () => {
+    expect(canImproveTile({ ...base, terrain: "mountain" })).toBe(false);
+    expect(canImproveTile({ ...base, terrain: "lake" })).toBe(false);
+    expect(canImproveTile({ ...base, terrain: "field" })).toBe(false);
+    expect(canImproveTile({ ...base, terrain: "mine", targetTerrain: "mine" })).toBe(false);
   });
-  it("rejects spent peasants", () => {
-    expect(canImproveTile({ ...base, isSpent: true })).toBe(false);
-  });
+
   it("requires a city in the territory", () => {
     expect(canImproveTile({ ...base, territoryHasCity: false })).toBe(false);
   });
-  it("rejects insufficient gold (field costs 2, mine costs 4)", () => {
-    expect(canImproveTile({ ...base, terrain: "grass", balance: 1 })).toBe(false);
-    expect(canImproveTile({ ...base, terrain: "desert", balance: 3 })).toBe(false);
+
+  it("rejects a city tile", () => {
+    expect(canImproveTile({ ...base, isCity: true })).toBe(false);
   });
-  it("rejects non-improvable terrain (mountain) and already-improved terrain", () => {
-    expect(canImproveTile({ ...base, terrain: "mountain" })).toBe(false);
-    expect(canImproveTile({ ...base, terrain: "field" })).toBe(false);
-    expect(canImproveTile({ ...base, terrain: "mine" })).toBe(false);
+
+  it("rejects insufficient gold (field 2, sawmill 3, mine 4)", () => {
+    expect(canImproveTile({ ...base, balance: 1 })).toBe(false);
+    expect(
+      canImproveTile({ ...base, terrain: "forest", targetTerrain: "sawmill", balance: 2 }),
+    ).toBe(false);
+    expect(
+      canImproveTile({ ...base, terrain: "desert", targetTerrain: "mine", balance: 3 }),
+    ).toBe(false);
+  });
+
+  it("allows building under a friendly unit", () => {
+    expect(canImproveTile({ ...base, occupantEntity: "peasant" })).toBe(true);
+    expect(canImproveTile({ ...base, occupantEntity: "swordsman" })).toBe(true);
+    expect(canImproveTile({ ...base, occupantEntity: "knight" })).toBe(true);
+  });
+
+  it("rejects a tile occupied by a building", () => {
+    expect(canImproveTile({ ...base, occupantEntity: "tower" })).toBe(false);
+    expect(canImproveTile({ ...base, occupantEntity: "castle" })).toBe(false);
+    expect(canImproveTile({ ...base, occupantEntity: "bridge" })).toBe(false);
+  });
+
+  it("rejects a tile occupied by a rebel", () => {
+    expect(canImproveTile({ ...base, occupantEntity: "rebel" })).toBe(false);
   });
 });
 

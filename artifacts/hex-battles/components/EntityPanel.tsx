@@ -84,12 +84,12 @@ export default function EntityPanel({
     !!entityTile &&
     !!improveTarget &&
     canImproveTile({
-      entityId,
       terrain: entityTile.terrain,
-      isSpent,
+      targetTerrain: improveTarget,
       balance: entityTerritoryBalance,
-      isCity: cities.has(selectedEntityKey),
       territoryHasCity,
+      isCity: cities.has(selectedEntityKey),
+      occupantEntity: entityId,
     });
 
   return (

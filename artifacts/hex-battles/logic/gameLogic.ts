@@ -498,27 +498,37 @@ export function resolveMovedUnitMoves(o: {
 }
 
 /**
- * Whether a selected unit may improve the tile it stands on: a non-spent peasant
- * on improvable terrain (grass→field, forest→sawmill, desert→mine) whose
- * territory holds a city and at least the improvement's cost in gold. Shared by
- * the player UI (EntityPanel) and the AI.
+ * The single rule for whether an improvement may be built on a tile. Consumed
+ * by the Build ribbon, the tile-tap handler and the AI's improve helper, so all
+ * three agree: the ribbon can never offer something the tap handler refuses.
+ *
+ * Not covered here: the round-1 lock (a ribbon-level gate, like every other
+ * buildable) and territory ownership (callers pass tiles from their own
+ * territory).
  */
 export function canImproveTile(o: {
-  entityId: EntityType | undefined;
+  /** The tile's current terrain. */
   terrain: TerrainType;
-  isSpent: boolean;
+  /** The improvement being built, identified by the terrain it produces. */
+  targetTerrain: TerrainType;
+  /** The territory's gold balance. */
   balance: number;
-  isCity: boolean;
-  /** Whether the peasant's territory contains a city (required to improve). */
+  /** Improvements require a city in the same territory. */
   territoryHasCity: boolean;
+  /** Whether the tile itself is a city. */
+  isCity: boolean;
+  /** The entity standing on the tile, if any. */
+  occupantEntity: EntityType | undefined;
 }): boolean {
-  if (o.entityId !== "peasant") return false;
-  if (o.isCity) return false;
-  if (o.isSpent) return false;
   if (!o.territoryHasCity) return false;
-  const target = improveTargetFor(o.terrain);
-  if (target === null) return false;
-  return o.balance >= improveCostFor(target);
+  if (o.isCity) return false;
+  // A friendly unit occupies the terrain, it does not consume it — improving
+  // under a unit is allowed and does not spend that unit. Buildings and rebels
+  // block.
+  if (o.occupantEntity && !ENTITY_META[o.occupantEntity].isUnit) return false;
+  if (o.occupantEntity === "rebel") return false;
+  if (improveTargetFor(o.terrain) !== o.targetTerrain) return false;
+  return o.balance >= improveCostFor(o.targetTerrain);
 }
 
 /**
