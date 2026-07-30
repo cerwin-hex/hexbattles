@@ -390,9 +390,11 @@ Expected: PASS.
 Run (from `/home/jo/Hex-Battles`): `pnpm run typecheck`
 Expected: FAIL, with errors only in `components/EntityPanel.tsx` (the old call site). That file is removed in Task 7. Do not fix it here and do not commit a broken typecheck — proceed straight to Step 6, which stubs it out.
 
-- [ ] **Step 6: Temporarily neutralise the EntityPanel call site**
+- [ ] **Step 6: Temporarily adapt the EntityPanel call site**
 
-The Improve button is deleted entirely in Task 7, but the tree must typecheck between commits. In `components/EntityPanel.tsx`, change the `improveEnabled` expression (lines 83–93) to:
+**This code is deleted in Task 7. It exists only so Task 2 can commit with a green typecheck — do not skip it as dead work, or Task 2's commit lands red.**
+
+In `components/EntityPanel.tsx`, change the `improveEnabled` expression (lines 83–93) to:
 
 ```ts
   const improveEnabled =
@@ -706,7 +708,7 @@ Insert immediately after the `hasBridgePlacementAvailable` memo (after line 211)
   // built. Empty when no improvement is armed, so arming Field lights up only
   // grass tiles rather than the whole territory.
   const validImprovementTiles = useMemo<Set<string>>(() => {
-    if (!armedImprovement) return new Set();
+    if (!armedImprovement) return EMPTY_TILE_SET;
     const result = new Set<string>();
     for (const tile of selectedTerritory) {
       if (
@@ -761,13 +763,25 @@ Note the deliberate `balance: imp.cost` in the availability memo: passing exactl
 
 `territoryHasCity` is declared at line 238, **below** this insertion point. `const` declarations in the same function body are hoisted into scope but are in the temporal dead zone until evaluated — referencing `territoryHasCity` inside a `useMemo` callback is fine (the callback runs after all declarations), but the dependency array is evaluated immediately and would throw. Move the `territoryHasCity` memo (lines 238–241) up so it sits **before** `validImprovementTiles`.
 
-- [ ] **Step 3: Add the imports**
+- [ ] **Step 3: Add the imports and the shared empty set**
 
 Add `IMPROVEMENTS` to the existing `@/utils/hexGrid` import block, and `canImproveTile` to the existing `@/logic/gameLogic` import (currently `import { mergeResult } from "@/logic/gameLogic";`):
 
 ```ts
 import { canImproveTile, mergeResult } from "@/logic/gameLogic";
 ```
+
+Add a module-level constant below the imports:
+
+```ts
+// One shared instance for the "nothing armed" case. MovementHighlightLayer is
+// React.memo'd with an identity-based equality function, so returning a fresh
+// `new Set()` on every render would defeat its memoization and redraw the SVG
+// layer on every state change.
+const EMPTY_TILE_SET: Set<string> = new Set();
+```
+
+(`validBridgePlacementTiles` at line 182 has the same latent issue. Leave it — it is out of scope for this change — but do not copy the `return new Set()` pattern into the new code.)
 
 - [ ] **Step 4: Export the new values**
 
@@ -1222,7 +1236,7 @@ Insert this block inside the `<ScrollView>`, immediately after the closing `})}`
         )}
 ```
 
-Also make selecting a building clear any armed improvement and vice versa — this is already guaranteed by the wrapper setters from Task 5, so no extra code is needed here.
+Selecting a building clears any armed improvement and vice versa. This is already guaranteed by the wrapper setters from Task 5 and needs no code here: `setArmedEntityId` clears `armedImprovement`, `setArmedImprovement` clears `armedEntityId`, and both directions fire on every existing `setArmedEntityId(null)` call site in `tileTapHandler` and `BottomActionMenu`. The redundant cross-clears are intentional, not accidental coupling.
 
 - [ ] **Step 4: Pass the props from `game.tsx`**
 
@@ -1313,11 +1327,31 @@ Start a game, play to round 2, select a territory that contains a city, and conf
 
 - [ ] **Step 3: Run the AI A/B**
 
-The AI now spends spare gold on improvements with no per-turn cap. Validate strength with the **new-vs-old self-play A/B**, not against Hard — the vs-Hard measurement is saturated and will not show a regression.
+The AI now spends spare gold on improvements with no per-turn cap. Validate with a **new-vs-old** run of the headless self-play harness, `artifacts/hex-battles/logic/aiSelfPlay.test.ts`. Its heavy suites are gated behind the `AI_SELFPLAY` env var (`const FULL = !!process.env.AI_SELFPLAY;`), so they do not run in `pnpm test`.
 
-Locate the self-play harness (check `scripts/` and any `*.bench.ts` / env-gated suites under `artifacts/hex-battles/logic/`) and run new-vs-old at the Expert difficulty. Report the win rate in the summary.
+Baseline (old code) — run from a detached worktree at the commit before Task 1 so the working tree is untouched:
+
+```bash
+cd /home/jo/Hex-Battles
+git worktree add /tmp/hexbattles-baseline <sha-of-commit-before-task-1>
+cd /tmp/hexbattles-baseline && pnpm install --frozen-lockfile
+AI_SELFPLAY=1 pnpm --filter @workspace/hex-battles exec vitest run logic/aiSelfPlay.test.ts 2>&1 | tee /tmp/selfplay-old.txt
+```
+
+New code:
+
+```bash
+cd /home/jo/Hex-Battles
+AI_SELFPLAY=1 pnpm --filter @workspace/hex-battles exec vitest run logic/aiSelfPlay.test.ts 2>&1 | tee /tmp/selfplay-new.txt
+```
+
+Compare the two outputs. The suite prints per-scenario results; report the Expert win rates from both runs side by side in the summary, not just pass/fail — a suite that passes both times can still hide a several-point drop.
+
+Clean up afterwards: `git worktree remove /tmp/hexbattles-baseline`.
 
 If Expert regresses materially, do **not** patch it in this plan. Record the result and propose the follow-up named in the spec: an AI-side gold reserve that only improves above the cheapest useful unit cost — a heuristic, not a game rule.
+
+If the harness cannot be run (install failure in the worktree, or the suite exceeds a workable runtime), say so explicitly in the summary — "the gold-only AI change ships unvalidated" is a legitimate outcome the user needs to see, not a gap to paper over.
 
 - [ ] **Step 4: Commit any fixes**
 
