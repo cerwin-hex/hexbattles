@@ -1,22 +1,30 @@
 import { useMemo, useRef } from "react";
-import type { BorderEdge, EntityType, HexTile, TerritoryOwner } from "@/types";
+import type { BorderEdge, EntityType, HexTile, TerrainType, TerritoryOwner } from "@/types";
 import { HEX_EDGES, tileKey } from "@/utils/hexMath";
 import {
   ENTITY_META,
+  IMPROVEMENTS,
   getContiguousTerritory,
   getTerritoryId,
   getValidMoves,
   getPlacementAttackTiles,
   unitMovement,
 } from "@/utils/hexGrid";
-import { mergeResult } from "@/logic/gameLogic";
+import { canImproveTile, mergeResult } from "@/logic/gameLogic";
 import { computeSelectionBorderEdges } from "@/utils/borderEdges";
 import { SELECTED_UNIT_RING } from "@/constants/colors";
+
+// One shared instance for the "nothing armed" case. MovementHighlightLayer is
+// React.memo'd with an identity-based equality function, so returning a fresh
+// `new Set()` on every render would defeat its memoization and redraw the SVG
+// layer on every state change.
+const EMPTY_TILE_SET: Set<string> = new Set();
 
 interface SelectionStateParams {
   selectedTileKey: string | null;
   selectedEntityKey: string | null;
   armedEntityId: EntityType | null;
+  armedImprovement: TerrainType | null;
   activeTileMap: Map<string, HexTile>;
   entities: Map<string, EntityType>;
   spentUnits: Set<string>;
@@ -38,6 +46,7 @@ export function useSelectionState({
   selectedTileKey,
   selectedEntityKey,
   armedEntityId,
+  armedImprovement,
   activeTileMap,
   entities,
   spentUnits,
@@ -210,6 +219,67 @@ export function useSelectionState({
     return false;
   }, [selectedTerritory, selectedTileKeys, activeTileMap, entities]);
 
+  const territoryHasCity = useMemo(
+    () => selectedTerritory.some((t) => cities.has(t.key)),
+    [selectedTerritory, cities],
+  );
+
+  // Every tile of the selected territory where the armed improvement may be
+  // built. Empty when no improvement is armed, so arming Field lights up only
+  // grass tiles rather than the whole territory.
+  const validImprovementTiles = useMemo<Set<string>>(() => {
+    if (!armedImprovement) return EMPTY_TILE_SET;
+    const result = new Set<string>();
+    for (const tile of selectedTerritory) {
+      if (
+        canImproveTile({
+          terrain: tile.terrain,
+          targetTerrain: armedImprovement,
+          balance: selectedTerritoryBalance,
+          territoryHasCity,
+          isCity: cities.has(tile.key),
+          occupantEntity: entities.get(tile.key),
+        })
+      )
+        result.add(tile.key);
+    }
+    return result;
+  }, [
+    armedImprovement,
+    selectedTerritory,
+    selectedTerritoryBalance,
+    territoryHasCity,
+    cities,
+    entities,
+  ]);
+
+  // Whether the territory holds at least one tile each improvement could be
+  // built on, ignoring gold — an unaffordable item dims with its price showing,
+  // which is the ribbon's existing convention, but an item with no possible
+  // target says so instead ("No grass"). Passing `balance: imp.cost` makes the
+  // affordability clause vacuously true so this reports terrain availability
+  // only. Computed for all three at once because the ribbon renders all three
+  // regardless of what is armed.
+  const improvementAvailability = useMemo<Map<TerrainType, boolean>>(() => {
+    const result = new Map<TerrainType, boolean>();
+    for (const imp of IMPROVEMENTS) {
+      result.set(
+        imp.target,
+        selectedTerritory.some((tile) =>
+          canImproveTile({
+            terrain: tile.terrain,
+            targetTerrain: imp.target,
+            balance: imp.cost,
+            territoryHasCity,
+            isCity: cities.has(tile.key),
+            occupantEntity: entities.get(tile.key),
+          }),
+        ),
+      );
+    }
+    return result;
+  }, [selectedTerritory, territoryHasCity, cities, entities]);
+
   const validPlacementAttackTiles = useMemo<Set<string>>(() => {
     if (!armedEntityId) return new Set();
     return getPlacementAttackTiles(
@@ -234,11 +304,6 @@ export function useSelectionState({
         .map((m) => m.cost),
     );
   }, []);
-
-  const territoryHasCity = useMemo(
-    () => selectedTerritory.some((t) => cities.has(t.key)),
-    [selectedTerritory, cities],
-  );
 
   const selectionBorderEdges = useMemo<BorderEdge[]>(
     () => computeSelectionBorderEdges(selectedTileKeys, tileDataMap, tileMap, INNER_SIZE, BORDER_W),
@@ -344,6 +409,8 @@ export function useSelectionState({
     fortificationDots,
     validBridgePlacementTiles,
     hasBridgePlacementAvailable,
+    validImprovementTiles,
+    improvementAvailability,
     validPlacementAttackTiles,
     minUnitCost,
     territoryHasCity,

@@ -1,11 +1,12 @@
 import type { Dispatch, SetStateAction } from "react";
 // React 18 auto-batches; this shim keeps call sites unchanged
 const unstable_batchedUpdates = (fn: () => void) => fn();
-import type { EntityType, HexTile, TerritoryOwner } from "@/types";
+import type { EntityType, HexTile, TerrainType, TerritoryOwner } from "@/types";
 import {
   ENTITY_META,
   IMPROVED_TERRAINS,
   baseTerrainFor,
+  improveCostFor,
   getContiguousTerritory,
   getTerritoryId,
   getMoveCost,
@@ -19,6 +20,7 @@ import {
   advanceAttacksUsed,
   advanceCombatSpent,
   applySingleHexPenalty,
+  canImproveTile,
   isChargeAttack,
   mergeResult,
   resolveMovedUnitMoves,
@@ -46,6 +48,7 @@ export interface TileTapParams {
   selectedEntityKey: string | null;
   validMoveTiles: Set<string>;
   armedEntityId: EntityType | null;
+  armedImprovement: TerrainType | null;
   selectedTileKeys: Set<string>;
   selectedTerritoryId: string | null;
   selectedTerritory: HexTile[];
@@ -61,6 +64,7 @@ export interface TileTapParams {
   partialMoves: Map<string, number>;
   attacksUsed: Map<string, number>;
   validBridgePlacementTiles: Set<string>;
+  validImprovementTiles: Set<string>;
   validPlacementAttackTiles: Set<string>;
   ribbonOpen: boolean;
   cities: Set<string>;
@@ -77,6 +81,7 @@ export interface TileTapParams {
   setGraveyard: (s: Set<string>) => void;
   setRuins: (s: Set<string>) => void;
   setArmedEntityId: (id: EntityType | null) => void;
+  setArmedImprovement: (t: TerrainType | null) => void;
   setFreeTowerUsedTiles: Dispatch<SetStateAction<Map<TerritoryOwner, Set<string>>>>;
   setCities: Dispatch<SetStateAction<Set<string>>>;
   checkWinLoss: (map: Map<string, HexTile>) => void;
@@ -103,6 +108,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
     selectedEntityKey,
     validMoveTiles,
     armedEntityId,
+    armedImprovement,
     selectedTileKeys,
     selectedTerritoryId,
     selectedTerritory,
@@ -118,6 +124,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
     partialMoves,
     attacksUsed,
     validBridgePlacementTiles,
+    validImprovementTiles,
     validPlacementAttackTiles,
     ribbonOpen,
     cities,
@@ -134,6 +141,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
     setGraveyard,
     setRuins,
     setArmedEntityId,
+    setArmedImprovement,
     setFreeTowerUsedTiles,
     setCities,
     checkWinLoss,
@@ -374,6 +382,48 @@ export function handleTileTapLogic(params: TileTapParams): void {
       setLiveOwnerMap(newLiveOwnerMap);
       setArmedEntityId(null);
       setSelectedEntityKey(null);
+      closeRibbon();
+    });
+    return;
+  }
+
+  // ─── Improvement placement on own territory ───────────────────────────────────
+  // Improvements are purchases, not unit actions: no unit is spent, no entity is
+  // created, and the terrain change alters neither ownership nor passability, so
+  // no territory recalculation is needed.
+  if (armedImprovement && validImprovementTiles.has(key)) {
+    if (!selectedTerritoryId) return;
+    const targetTile = activeTileMap.get(key);
+    const balance = territoryBalances.get(selectedTerritoryId) ?? 0;
+    const territoryHasCity = selectedTerritory.some((t) => cities.has(t.key));
+    // Re-check the rule rather than trusting the highlight set, which is
+    // computed from a render-time snapshot.
+    if (
+      !targetTile ||
+      !canImproveTile({
+        terrain: targetTile.terrain,
+        targetTerrain: armedImprovement,
+        balance,
+        territoryHasCity,
+        isCity: cities.has(key),
+        occupantEntity: entities.get(key),
+      })
+    ) {
+      triggerErrorFlash(key);
+      return;
+    }
+    const cost = improveCostFor(armedImprovement);
+    pushHistory();
+    const newTileMap = new Map(activeTileMap);
+    newTileMap.set(key, { ...targetTile, terrain: armedImprovement });
+    unstable_batchedUpdates(() => {
+      setMutableTileMap(newTileMap);
+      setTerritoryBalances((prev) => {
+        const next = new Map(prev);
+        next.set(selectedTerritoryId, (next.get(selectedTerritoryId) ?? 0) - cost);
+        return next;
+      });
+      setArmedImprovement(null);
       closeRibbon();
     });
     return;

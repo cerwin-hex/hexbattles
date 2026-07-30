@@ -2,14 +2,16 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { ENTITY_META } from "@/utils/hexGrid";
-import type { EntityType, HexTile } from "@/types";
+import type { EntityType, HexTile, TerrainType } from "@/types";
 
 export interface MovementHighlightLayerProps {
   validMoveTiles: Set<string>;
   validBridgePlacementTiles: Set<string>;
+  validImprovementTiles: Set<string>;
   validPlacementAttackTiles: Set<string>;
   selectedTileKeys: Set<string>;
   armedEntityId: EntityType | null;
+  armedImprovement: TerrainType | null;
   entities: Map<string, EntityType>;
   activeTileMap: Map<string, HexTile>;
   graveyard: Set<string>;
@@ -23,9 +25,11 @@ export interface MovementHighlightLayerProps {
 function MovementHighlightLayerInner({
   validMoveTiles,
   validBridgePlacementTiles,
+  validImprovementTiles,
   validPlacementAttackTiles,
   selectedTileKeys,
   armedEntityId,
+  armedImprovement,
   entities,
   activeTileMap,
   graveyard,
@@ -63,6 +67,21 @@ function MovementHighlightLayerInner({
             return (
               <Circle
                 key={`bridge-dot-${key}`}
+                cx={pos.cx}
+                cy={pos.cy}
+                r={HEX_SIZE * 0.18}
+                fill="rgba(255,220,0,0.85)"
+              />
+            );
+          })}
+
+        {armedImprovement &&
+          Array.from(validImprovementTiles).map((key) => {
+            const pos = tileDataMap.get(key);
+            if (!pos) return null;
+            return (
+              <Circle
+                key={`improve-dot-${key}`}
                 cx={pos.cx}
                 cy={pos.cy}
                 r={HEX_SIZE * 0.18}
@@ -130,9 +149,11 @@ function areMovementHighlightLayerEqual(
   return (
     prev.validMoveTiles === next.validMoveTiles &&
     prev.validBridgePlacementTiles === next.validBridgePlacementTiles &&
+    prev.validImprovementTiles === next.validImprovementTiles &&
     prev.validPlacementAttackTiles === next.validPlacementAttackTiles &&
     prev.selectedTileKeys === next.selectedTileKeys &&
     prev.armedEntityId === next.armedEntityId &&
+    prev.armedImprovement === next.armedImprovement &&
     prev.entities === next.entities &&
     prev.activeTileMap === next.activeTileMap &&
     prev.graveyard === next.graveyard &&

@@ -3,13 +3,10 @@ import { Text, TouchableOpacity, View } from "react-native";
 import {
   ENTITY_META,
   UNIT_UPGRADE,
-  improveCostFor,
-  improveTargetFor,
   getContiguousTerritory,
   getTerritoryId,
 } from "@/utils/hexGrid";
-import { canImproveTile } from "@/logic/gameLogic";
-import type { EntityType, HexTile, TerrainType } from "@/types";
+import type { EntityType, HexTile } from "@/types";
 import { BOTTOM_BAR_H } from "@/constants/gameConstants";
 import styles from "@/app/gameStyles";
 
@@ -19,7 +16,6 @@ interface EntityPanelProps {
   activeTileMap: Map<string, HexTile>;
   spentUnits: Set<string>;
   territoryBalances: Map<string, number>;
-  cities: Set<string>;
   isAiTurn: boolean;
   gameResult: "victory" | "defeat" | null;
   botInset: number;
@@ -28,7 +24,6 @@ interface EntityPanelProps {
   setTerritoryBalances: (updater: (prev: Map<string, number>) => Map<string, number>) => void;
   setSelectedEntityKey: (key: string | null) => void;
   onRemoveOverride?: () => void;
-  onImprove?: (targetTerrain: TerrainType) => void;
 }
 
 export default function EntityPanel({
@@ -37,7 +32,6 @@ export default function EntityPanel({
   activeTileMap,
   spentUnits,
   territoryBalances,
-  cities,
   isAiTurn,
   gameResult,
   botInset,
@@ -46,7 +40,6 @@ export default function EntityPanel({
   setTerritoryBalances,
   setSelectedEntityKey,
   onRemoveOverride,
-  onImprove,
 }: EntityPanelProps) {
   const entityId = entities.get(selectedEntityKey);
   const isUnit = entityId ? ENTITY_META[entityId].isUnit : false;
@@ -62,7 +55,6 @@ export default function EntityPanel({
     ? getContiguousTerritory(activeTileMap, selectedEntityKey, "player", entities)
     : [];
   const entityTerritoryId = entityTile ? getTerritoryId(entityTerritory) : null;
-  const territoryHasCity = entityTerritory.some((t) => cities.has(t.key));
   const entityTerritoryBalance = entityTerritoryId
     ? (territoryBalances.get(entityTerritoryId) ?? 0)
     : 0;
@@ -74,23 +66,6 @@ export default function EntityPanel({
   const removeEnabled = isUnit
     ? !isSpent
     : !!entityTerritoryId && entityTerritoryBalance >= removeCost;
-
-  const improveTarget = entityTile ? improveTargetFor(entityTile.terrain) : null;
-  const improveCost = improveTarget ? improveCostFor(improveTarget) : 0;
-  const improveLabel = improveTarget
-    ? `Build ${improveTarget.charAt(0).toUpperCase()}${improveTarget.slice(1)}`
-    : "Build";
-  const improveEnabled =
-    !!entityTile &&
-    !!improveTarget &&
-    canImproveTile({
-      terrain: entityTile.terrain,
-      targetTerrain: improveTarget,
-      balance: entityTerritoryBalance,
-      territoryHasCity,
-      isCity: cities.has(selectedEntityKey),
-      occupantEntity: entityId,
-    });
 
   return (
     <View style={[styles.entityPanel, { bottom: BOTTOM_BAR_H + botInset }]}>
@@ -171,26 +146,6 @@ export default function EntityPanel({
           ⬆ Upgrade {canUpgrade ? `(${upgradeCost})` : "(Max)"}
         </Text>
       </TouchableOpacity>
-      {improveTarget && (
-        <TouchableOpacity
-          style={[styles.buildBtn, !improveEnabled && styles.buildBtnDisabled]}
-          activeOpacity={improveEnabled ? 0.75 : 1}
-          onPress={() => {
-            if (isAiTurn || gameResult !== null) return;
-            if (!improveEnabled || !improveTarget) return;
-            onImprove?.(improveTarget);
-          }}
-        >
-          <Text
-            style={[
-              styles.buildBtnText,
-              !improveEnabled && styles.buildBtnTextDisabled,
-            ]}
-          >
-            ⚒ {improveLabel} ({improveCost})
-          </Text>
-        </TouchableOpacity>
-      )}
     </View>
   );
 }

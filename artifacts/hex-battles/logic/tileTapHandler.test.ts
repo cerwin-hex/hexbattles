@@ -48,6 +48,9 @@ function makeParams(overrides: Partial<TileTapParams> = {}): TileTapParams {
     partialMoves: new Map(),
     attacksUsed: new Map(),
     validBridgePlacementTiles: new Set(),
+    validImprovementTiles: new Set(),
+    armedImprovement: null,
+    setArmedImprovement: vi.fn(),
     validPlacementAttackTiles: new Set(),
     ribbonOpen: false,
     cities: new Set(),
@@ -870,5 +873,76 @@ describe("tile selection", () => {
     });
     handleTileTapLogic(params);
     expect(params.setSelectedTileKey).toHaveBeenCalledWith(null);
+  });
+});
+
+// ─── Improvement placement ────────────────────────────────────────────────────
+
+describe("improvement placement", () => {
+  function improveParams(overrides: Partial<TileTapParams> = {}): TileTapParams {
+    const tiles = [makeTile(0, 0, "player", "grass"), makeTile(1, 0, "player", "grass")];
+    const map = tileMap(tiles);
+    return makeParams({
+      key: "0,0",
+      activeTileMap: map,
+      selectedTerritory: tiles,
+      selectedTileKeys: new Set(["0,0", "1,0"]),
+      selectedTerritoryId: "0,0",
+      territoryBalances: new Map([["0,0", 10]]),
+      cities: new Set(["1,0"]),
+      armedImprovement: "field",
+      validImprovementTiles: new Set(["0,0"]),
+      ...overrides,
+    });
+  }
+
+  it("changes the terrain and debits the cost", () => {
+    const params = improveParams();
+    handleTileTapLogic(params);
+    const written = vi.mocked(params.setMutableTileMap).mock.calls[0][0];
+    expect(written.get("0,0")?.terrain).toBe("field");
+    const balanceUpdater = vi.mocked(params.setTerritoryBalances).mock.calls[0][0];
+    const nextBalances =
+      typeof balanceUpdater === "function"
+        ? balanceUpdater(params.territoryBalances)
+        : balanceUpdater;
+    expect(nextBalances.get("0,0")).toBe(8); // 10 − field cost 2
+  });
+
+  it("pushes history, clears the armed improvement and closes the ribbon", () => {
+    const params = improveParams();
+    handleTileTapLogic(params);
+    expect(params.pushHistory).toHaveBeenCalled();
+    expect(params.setArmedImprovement).toHaveBeenCalledWith(null);
+    expect(params.closeRibbon).toHaveBeenCalled();
+  });
+
+  it("leaves units and spent units untouched when building under a unit", () => {
+    const params = improveParams({ entities: ents([["0,0", "swordsman"]]) });
+    handleTileTapLogic(params);
+    expect(params.setEntities).not.toHaveBeenCalled();
+    expect(params.setSpentUnits).not.toHaveBeenCalled();
+    const written = vi.mocked(params.setMutableTileMap).mock.calls[0][0];
+    expect(written.get("0,0")?.terrain).toBe("field");
+  });
+
+  it("flashes an error and builds nothing when the territory cannot afford it", () => {
+    const params = improveParams({ territoryBalances: new Map([["0,0", 1]]) });
+    handleTileTapLogic(params);
+    expect(params.setMutableTileMap).not.toHaveBeenCalled();
+    expect(params.triggerErrorFlash).toHaveBeenCalledWith("0,0");
+  });
+
+  it("flashes an error when the territory has no city", () => {
+    const params = improveParams({ cities: new Set() });
+    handleTileTapLogic(params);
+    expect(params.setMutableTileMap).not.toHaveBeenCalled();
+    expect(params.triggerErrorFlash).toHaveBeenCalledWith("0,0");
+  });
+
+  it("does not build on a tile outside validImprovementTiles", () => {
+    const params = improveParams({ key: "1,0", validImprovementTiles: new Set(["0,0"]) });
+    handleTileTapLogic(params);
+    expect(params.setMutableTileMap).not.toHaveBeenCalled();
   });
 });

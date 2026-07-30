@@ -70,6 +70,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 3,
   },
+  ribbonDivider: {
+    width: 1,
+    alignSelf: "stretch",
+    marginVertical: 12,
+    backgroundColor: "#7A6030",
+    opacity: 0.6,
+  },
   ribbonItemDisabled: {
     borderColor: "#4A3A1A",
     backgroundColor: "#2A200A",

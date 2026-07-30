@@ -1,16 +1,18 @@
 import React from "react";
-import { ScrollView, StyleProp, Text, TouchableOpacity, ViewStyle } from "react-native";
+import { ScrollView, StyleProp, Text, TouchableOpacity, View, ViewStyle } from "react-native";
 import Animated from "react-native-reanimated";
 import { nextDefenseUpkeep, ENTITY_META, CITY_BONUS } from "@/utils/hexGrid";
-import type { HexTile, TerritoryOwner, EntityType } from "@/types";
+import type { HexTile, TerritoryOwner, EntityType, TerrainType } from "@/types";
 import {
   UNIT_PURCHASABLES,
   BUILDING_PURCHASABLES,
+  IMPROVEMENT_PURCHASABLES,
   ENTITY_PANEL_H,
   BOTTOM_BAR_H,
 } from "@/constants/gameConstants";
 import styles from "@/app/gameStyles";
 import { UnitIcon, CoinValue } from "@/components/UnitIcon";
+import { ImprovementIcon } from "@/components/ImprovementIcon";
 
 interface PurchaseRibbonProps {
   ribbonStyle: StyleProp<ViewStyle>;
@@ -26,6 +28,9 @@ interface PurchaseRibbonProps {
   freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
   armedEntityId: EntityType | null;
   setArmedEntityId: (id: EntityType | null) => void;
+  armedImprovement: TerrainType | null;
+  setArmedImprovement: (t: TerrainType | null) => void;
+  improvementAvailability: Map<TerrainType, boolean>;
   hasBridgePlacementAvailable: boolean;
 }
 
@@ -43,6 +48,9 @@ export default function PurchaseRibbon({
   freeTowerUsedTiles,
   armedEntityId,
   setArmedEntityId,
+  armedImprovement,
+  setArmedImprovement,
+  improvementAvailability,
   hasBridgePlacementAvailable,
 }: PurchaseRibbonProps) {
   return (
@@ -188,6 +196,86 @@ export default function PurchaseRibbon({
             </TouchableOpacity>
           );
         })}
+
+        {ribbonMode === "buildings" && (
+          <>
+            <View style={styles.ribbonDivider} />
+            {IMPROVEMENT_PURCHASABLES.map((imp) => {
+              const isArmed = armedImprovement === imp.target;
+              const round1Locked = turn === 1;
+              const noCity = !territoryHasCity;
+              const noTarget = !improvementAvailability.get(imp.target);
+              const affordable = imp.cost <= selectedTerritoryBalance;
+              const enabled = affordable && !round1Locked && !noCity && !noTarget;
+              const statusLabel = round1Locked
+                ? "Round 2+"
+                : noCity
+                  ? "Needs city"
+                  : noTarget
+                    ? `No ${imp.source}`
+                    : null;
+              return (
+                <TouchableOpacity
+                  key={imp.target}
+                  style={[
+                    styles.ribbonItem,
+                    !enabled && styles.ribbonItemDisabled,
+                    isArmed && styles.ribbonItemArmed,
+                  ]}
+                  activeOpacity={enabled ? 0.75 : 1}
+                  onPress={() => {
+                    if (!enabled) return;
+                    setArmedImprovement(isArmed ? null : imp.target);
+                  }}
+                >
+                  <ImprovementIcon terrain={imp.target} size={28} />
+                  <Text
+                    style={[
+                      styles.ribbonName,
+                      !enabled && styles.ribbonDim,
+                      isArmed && styles.ribbonNameArmed,
+                    ]}
+                  >
+                    {imp.name}
+                  </Text>
+                  {statusLabel ? (
+                    <Text
+                      style={[
+                        styles.ribbonCost,
+                        !enabled && styles.ribbonDim,
+                        isArmed && styles.ribbonNameArmed,
+                      ]}
+                    >
+                      {statusLabel}
+                    </Text>
+                  ) : (
+                    <CoinValue
+                      value={`${imp.cost}`}
+                      size={13}
+                      textStyle={[
+                        styles.ribbonCost,
+                        !enabled && styles.ribbonDim,
+                        isArmed && styles.ribbonNameArmed,
+                      ]}
+                    />
+                  )}
+                  <CoinValue
+                    value={`+${imp.incomeDelta}`}
+                    suffix="/turn"
+                    size={11}
+                    style={{ marginTop: 1 }}
+                    textStyle={[
+                      styles.ribbonCost,
+                      !enabled && styles.ribbonDim,
+                      { fontSize: 10 },
+                      enabled && { color: "#70C870" },
+                    ]}
+                  />
+                </TouchableOpacity>
+              );
+            })}
+          </>
+        )}
       </ScrollView>
     </Animated.View>
   );

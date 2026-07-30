@@ -61,7 +61,6 @@ import {
 } from "@/utils/hexMath";
 import {
   ENTITY_META,
-  improveCostFor,
   generateHexGrid,
   getContiguousTerritory,
   getTerritoryId,
@@ -320,7 +319,22 @@ export default function GameScreen() {
   }
 
   const [selectedTileKey, setSelectedTileKey] = useState<string | null>(null);
-  const [armedEntityId, setArmedEntityId] = useState<EntityType | null>(null);
+  const [armedEntityId, setArmedEntityIdState] = useState<EntityType | null>(null);
+  const [armedImprovement, setArmedImprovementState] = useState<TerrainType | null>(
+    null,
+  );
+
+  // At most one thing is armed at a time. Every arming path in the app goes
+  // through these two setters, so the invariant lives in exactly one place and
+  // children keep their existing `setArmedEntityId(null)` call shape.
+  const setArmedEntityId = useCallback((id: EntityType | null) => {
+    setArmedEntityIdState(id);
+    setArmedImprovementState(null);
+  }, []);
+  const setArmedImprovement = useCallback((t: TerrainType | null) => {
+    setArmedImprovementState(t);
+    setArmedEntityIdState(null);
+  }, []);
   const lastTileTapMs = useRef(0);
   const [entities, setEntities] = useState<Map<string, EntityType>>(new Map());
   const [territoryBalances, setTerritoryBalances] = useState<
@@ -802,6 +816,8 @@ export default function GameScreen() {
     validMoveTiles,
     validBridgePlacementTiles,
     hasBridgePlacementAvailable,
+    validImprovementTiles,
+    improvementAvailability,
     fortificationDots,
     validPlacementAttackTiles,
     minUnitCost,
@@ -813,6 +829,7 @@ export default function GameScreen() {
     selectedTileKey,
     selectedEntityKey,
     armedEntityId,
+    armedImprovement,
     activeTileMap,
     entities,
     spentUnits,
@@ -1057,50 +1074,6 @@ export default function GameScreen() {
     pushHistory,
   ]);
 
-  const handleImproveTile = useCallback(
-    (targetTerrain: TerrainType) => {
-      if (isAiTurn || gameResult !== null || !selectedEntityKey) return;
-      if (cities.has(selectedEntityKey)) return;
-      const tile = activeTileMap.get(selectedEntityKey);
-      if (!tile) return;
-      const territory = getContiguousTerritory(
-        activeTileMap,
-        selectedEntityKey,
-        "player",
-        entities,
-      );
-      const tid = getTerritoryId(territory);
-      if (!tid) return;
-      // Improvements require a city in the same territory.
-      if (!territory.some((t) => cities.has(t.key))) return;
-      const cost = improveCostFor(targetTerrain);
-      const bal = territoryBalances.get(tid) ?? 0;
-      if (bal < cost) return;
-      pushHistory();
-      setMutableTileMap((prev) => {
-        const next = new Map(prev);
-        const tt = next.get(selectedEntityKey);
-        if (tt) next.set(selectedEntityKey, { ...tt, terrain: targetTerrain });
-        return next;
-      });
-      setTerritoryBalances((prev) => {
-        const next = new Map(prev);
-        next.set(tid, bal - cost);
-        return next;
-      });
-      setSpentUnits((prev) => new Set(prev).add(selectedEntityKey));
-    },
-    [
-      isAiTurn,
-      gameResult,
-      selectedEntityKey,
-      activeTileMap,
-      entities,
-      territoryBalances,
-      cities,
-      pushHistory,
-    ],
-  );
 
   const handleTileTap = useCallback(
     (key: string) => {
@@ -1116,6 +1089,7 @@ export default function GameScreen() {
         selectedEntityKey,
         validMoveTiles,
         armedEntityId,
+        armedImprovement,
         selectedTileKeys,
         selectedTerritoryId,
         selectedTerritory,
@@ -1131,6 +1105,7 @@ export default function GameScreen() {
         partialMoves,
         attacksUsed,
         validBridgePlacementTiles,
+        validImprovementTiles,
         validPlacementAttackTiles,
         ribbonOpen,
         cities,
@@ -1147,6 +1122,7 @@ export default function GameScreen() {
         setGraveyard,
         setRuins,
         setArmedEntityId,
+        setArmedImprovement,
         setFreeTowerUsedTiles,
         setCities,
         checkWinLoss,
@@ -1160,6 +1136,7 @@ export default function GameScreen() {
       activeTileMap,
       selectedTileKeys,
       armedEntityId,
+      armedImprovement,
       entities,
       selectedTerritoryId,
       selectedTerritory,
@@ -1168,6 +1145,7 @@ export default function GameScreen() {
       selectedEntityKey,
       validMoveTiles,
       validBridgePlacementTiles,
+      validImprovementTiles,
       validPlacementAttackTiles,
       spentUnits,
       combatSpentUnits,
@@ -1447,9 +1425,11 @@ export default function GameScreen() {
             <MovementHighlightLayer
               validMoveTiles={validMoveTiles}
               validBridgePlacementTiles={validBridgePlacementTiles}
+              validImprovementTiles={validImprovementTiles}
               validPlacementAttackTiles={validPlacementAttackTiles}
               selectedTileKeys={selectedTileKeys}
               armedEntityId={armedEntityId}
+              armedImprovement={armedImprovement}
               entities={entities}
               activeTileMap={activeTileMap}
               graveyard={graveyard}
@@ -1487,6 +1467,9 @@ export default function GameScreen() {
         freeTowerUsedTiles={freeTowerUsedTiles}
         armedEntityId={armedEntityId}
         setArmedEntityId={setArmedEntityId}
+        armedImprovement={armedImprovement}
+        setArmedImprovement={setArmedImprovement}
+        improvementAvailability={improvementAvailability}
         hasBridgePlacementAvailable={hasBridgePlacementAvailable}
       />
 
@@ -1605,7 +1588,6 @@ export default function GameScreen() {
           activeTileMap={activeTileMap}
           spentUnits={spentUnits}
           territoryBalances={territoryBalances}
-          cities={cities}
           isAiTurn={isAiTurn}
           gameResult={gameResult}
           botInset={botInset}
@@ -1618,8 +1600,7 @@ export default function GameScreen() {
               ? handleDemolishBridge
               : undefined
           }
-          onImprove={handleImproveTile}
-        />
+          />
       )}
 
       <BottomActionMenu
