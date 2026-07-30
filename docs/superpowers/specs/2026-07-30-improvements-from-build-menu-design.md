@@ -117,17 +117,22 @@ export function canImproveTile(o: {
   territoryHasCity: boolean;
   isCity: boolean;
   occupantEntity: EntityType | undefined;  // undefined = empty tile
-  turn: number;
 }): boolean
 ```
 
 It checks: source terrain matches `targetTerrain`, not a city, occupant (if any)
-is a unit rather than a building, territory has a city, `turn > 1`, and
+is a unit rather than a building, territory has a city, and
 `balance >= improveCostFor(targetTerrain)`. Three callers, one rule — this is
 what prevents the ribbon showing an item as affordable while the tap handler
 silently refuses it.
 
 The `entityId`/`isSpent` parameters are removed.
+
+The round-1 lock is deliberately **not** part of this predicate. In the existing
+codebase `round1Locked` is a ribbon-level gate only — `tileTapHandler` never
+checks `turn` for buildings either — and `AiContext` carries no turn number.
+Improvements follow the same pattern: `PurchaseRibbon` applies `round1Locked`,
+nothing else needs to know.
 
 ### Placement path
 
@@ -251,8 +256,8 @@ is only taken if the A/B shows a regression.
 Rewritten, not deleted — coverage is preserved and re-aimed:
 
 - **`gameLogic.test.ts`** — `canImproveTile` cases move from peasant/spent
-  assertions to terrain-match, city-requirement, round-1, affordability, and
-  occupancy (allowed under a unit, blocked on city/tower/castle/bridge).
+  assertions to terrain-match, city-requirement, affordability, and occupancy
+  (allowed under a unit, blocked on city/tower/castle/bridge).
 - **`aiHelpers.test.ts`** — `dtFindImproveMove` cases drop the peasant fixtures;
   add: picks an empty grass tile, picks a tile under a friendly unit, skips a
   tile under a tower, still prefers a city-adjacent tile, still returns null
