@@ -1,4 +1,4 @@
-import type { HexTile, TerritoryOwner, EntityType, AiStepSnapshot, TerrainType } from "@/types";
+import type { HexTile, TerritoryOwner, EntityType, AiStepSnapshot, TerrainType, ArmedSites } from "@/types";
 import { hexDistance, tileKey, HEX_EDGES } from "@/utils/hexMath";
 import {
   getContiguousTerritory,
@@ -19,7 +19,7 @@ import {
   improveCostFor,
   IMPROVED_TERRAINS,
 } from "@/utils/hexGrid";
-import { advanceAttacksUsed, advanceCombatSpent, applyOwnerEconomy, calcTerritoryIncome, calcTerritoryUpkeep, effectiveRemaining, isChargeAttack, mergeResult, resolveMovedUnitMoves, spawnRebelsForOwner } from "@/logic/gameLogic";
+import { advanceAttacksUsed, advanceCombatSpent, applyOwnerEconomy, armedSitesForOwner, calcTerritoryIncome, calcTerritoryUpkeep, effectiveRemaining, isChargeAttack, mergeResult, resolveMovedUnitMoves, spawnRebelsForOwner, sweepNeutralMarkers } from "@/logic/gameLogic";
 import {
   dtSplitScore,
   dtCaptureNegatesIncome,
@@ -977,7 +977,7 @@ export interface AiTurnCallbacks {
     /** Advance the round counter; called once when the whole AI phase completes. */
     advanceTurn(): void;
     /** Store the next-round armed graves/ruins snapshot (called once at round end). */
-    setArmedGraves(graves: Set<string>, ruins: Set<string>): void;
+    setArmedGraves(graves: ArmedSites, ruins: ArmedSites): void;
   };
   refs: {
     getAiStateMap(): Map<string, AiState>;
@@ -1020,7 +1020,16 @@ export interface AiTurnCallbacks {
   checkWinLoss(map: Map<string, HexTile>): void;
 }
 
-function snapFromWs(ws: AiWorkingState): AiStepSnapshot {
+/** Deep copy, so a snapshot can't be mutated by later arming. */
+export function cloneArmedSites(sites: ArmedSites): ArmedSites {
+  return new Map([...sites.entries()].map(([k, v]) => [k, new Set(v)]));
+}
+
+function snapFromWs(
+  ws: AiWorkingState,
+  armedGraves: ArmedSites,
+  armedRuins: ArmedSites,
+): AiStepSnapshot {
   return {
     entities: new Map(ws.entities),
     mutableTileMap: new Map(ws.tileMap),
@@ -1032,6 +1041,8 @@ function snapFromWs(ws: AiWorkingState): AiStepSnapshot {
     freeTowerUsedTiles: new Map(
       [...ws.freeTowerUsed.entries()].map(([k, v]) => [k, new Set(v)]),
     ),
+    armedGraveyard: cloneArmedSites(armedGraves),
+    armedRuins: cloneArmedSites(armedRuins),
   };
 }
 
@@ -1046,11 +1057,11 @@ export async function runAiTurn(
   // at turn start; the player spawn fires at the end of this phase.
   // Defaults to empty Sets (round 1, or self-play calls that manage arming
   // externally).
-  armedGraves: Set<string> = new Set(),
-  armedRuins: Set<string> = new Set(),
+  armedGraves: ArmedSites = new Map(),
+  armedRuins: ArmedSites = new Map(),
 ): Promise<void> {
 
-  cbs.initStepHistory(snapFromWs(ws));
+  cbs.initStepHistory(snapFromWs(ws, armedGraves, armedRuins));
   await cbs.awaitPreAiResume();
 
   for (const aiOwner of aiOwners) {
@@ -1070,14 +1081,16 @@ export async function runAiTurn(
       ws.entities = new Map(ws.entities);
       ws.graveyard = new Set(ws.graveyard);
       ws.ruins = new Set(ws.ruins);
+      // Consume only this owner's bucket — the sites that stood at the start of
+      // their PREVIOUS turn. Anything newer is left to be armed further below.
       spawnRebelsForOwner(
         aiOwner,
         ws.tileMap,
         ws.entities,
         ws.graveyard,
         ws.ruins,
-        armedGraves,
-        armedRuins,
+        armedGraves.get(aiOwner) ?? new Set(),
+        armedRuins.get(aiOwner) ?? new Set(),
       );
       cbs.state.setEntities(new Map(ws.entities));
       cbs.state.setGraveyard(new Set(ws.graveyard));
@@ -1119,6 +1132,14 @@ export async function runAiTurn(
       cbs.state.setGraveyard(new Set(ws.graveyard));
       cbs.state.setRuins(new Set(ws.ruins));
       cbs.state.setMutableTileMap(new Map(ws.tileMap));
+    }
+
+    // Re-arm this owner's bucket from what stands now — AFTER the economy, so a
+    // grave left by bankruptcy waits exactly as long as one left by combat. The
+    // player path below arms after its economy too, keeping the two symmetric.
+    if (currentTurn !== 1) {
+      armedGraves.set(aiOwner, armedSitesForOwner(aiOwner, ws.tileMap, ws.graveyard));
+      armedRuins.set(aiOwner, armedSitesForOwner(aiOwner, ws.tileMap, ws.ruins));
     }
 
     const cache = new TerritoryCache();
@@ -1168,7 +1189,7 @@ export async function runAiTurn(
             cbs.state.setFreeTowerUsedTiles(new Map(ws.freeTowerUsed));
             cbs.state.setEntities(new Map(ws.entities));
             cbs.state.setAiStateMap(new Map(cbs.refs.getAiStateMap()));
-            await cbs.awaitStep(snapFromWs(ws));
+            await cbs.awaitStep(snapFromWs(ws, armedGraves, armedRuins));
             if (!cbs.refs.isTurnActive()) return;
           }
         }
@@ -1189,7 +1210,7 @@ export async function runAiTurn(
       };
 
       const dtAwait = async (): Promise<void> => {
-        await cbs.awaitStep(snapFromWs(ws));
+        await cbs.awaitStep(snapFromWs(ws, armedGraves, armedRuins));
       };
 
       // Defense-in-depth: an AI can NEVER spend more than the paying territory
@@ -1672,14 +1693,13 @@ export async function runAiTurn(
   }
 
   // ── Rebel spawn for the player at round end ─────────────────────────────────
-  // Snapshot all graves/ruins present at the end of this AI phase (after all AI
-  // moves and player economy). These arm the next round: AI owners spawn from
-  // them at the start of their turns (passed in as armedGraves next call), and
-  // the player spawn below makes rebels visible at the start of the player's
-  // next turn. Suspended in round 1.
+  // The AI phase is over and control returns to the player, so this instant IS
+  // the start of the player's next turn — the player's counterpart to the
+  // per-owner block above. Consume the bucket armed at the previous boundary,
+  // then re-arm from what stands now. Arming and consuming used to happen off
+  // the same fresh snapshot here, which let a grave rise the moment it was
+  // created; the two steps must stay one boundary apart. Suspended in round 1.
   if (currentTurn !== 1) {
-    const nextArmedGraves = new Set(ws.graveyard);
-    const nextArmedRuins  = new Set(ws.ruins);
     ws.entities = new Map(ws.entities);
     // ws.graveyard / ws.ruins are already clones from the player economy block
     // above, so mutations inside spawnRebelsForOwner are safe.
@@ -1689,10 +1709,18 @@ export async function runAiTurn(
       ws.entities,
       ws.graveyard,
       ws.ruins,
-      nextArmedGraves,
-      nextArmedRuins,
+      armedGraves.get("player") ?? new Set(),
+      armedRuins.get("player") ?? new Set(),
     );
-    cbs.state.setArmedGraves(nextArmedGraves, nextArmedRuins);
+    armedGraves.set("player", armedSitesForOwner("player", ws.tileMap, ws.graveyard));
+    armedRuins.set("player", armedSitesForOwner("player", ws.tileMap, ws.ruins));
+
+    // Expire orphaned markers on bridgeless water. They have no owner to sweep
+    // them, so this single fixed point is what bounds their life to one player
+    // turn — wherever in the round they were created.
+    sweepNeutralMarkers(ws.tileMap, ws.graveyard, ws.ruins, armedGraves, armedRuins);
+
+    cbs.state.setArmedGraves(armedGraves, armedRuins);
   }
 
   // ── Win/loss check ─────────────────────────────────────────────────────────

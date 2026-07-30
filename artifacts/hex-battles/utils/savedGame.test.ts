@@ -69,6 +69,8 @@ function makeSnapshot(): SavedGame {
       cities: new Set([tile1.key]),
       graveyard: new Set([tile2.key]),
       ruins: new Set([tile1.key]),
+      armedGraveyard: new Map([["ai1", new Set([tile2.key])]]),
+      armedRuins: new Map([["player", new Set([tile1.key])]]),
       freeTowerUsedTiles: new Map([
         ["player", new Set([tile1.key, tile2.key])],
         ["ai1", new Set<string>()],

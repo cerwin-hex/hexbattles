@@ -4,6 +4,7 @@ import type {
   EntityType,
   HexTile,
   TerritoryOwner,
+  ArmedSites,
 } from "@/types";
 
 const STORAGE_KEY = "hex_battles_saved_game_v1";
@@ -20,6 +21,8 @@ export interface SavedGameState {
   cities: Set<string>;
   graveyard: Set<string>;
   ruins: Set<string>;
+  armedGraveyard: ArmedSites;
+  armedRuins: ArmedSites;
   freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
   turn: number;
 }
@@ -52,6 +55,10 @@ interface Serialized {
     cities: string[];
     graveyard: string[];
     ruins: string[];
+    // Added after v1 shipped; absent in older saves. Loading them empty simply
+    // grants every standing marker one extra turn before it can rise or expire.
+    armedGraveyard?: [TerritoryOwner, string[]][];
+    armedRuins?: [TerritoryOwner, string[]][];
     freeTowerUsedTiles: [TerritoryOwner, string[]][];
     turn: number;
   };
@@ -74,6 +81,10 @@ export function serializeSavedGame(g: SavedGame): string {
       cities: [...g.state.cities],
       graveyard: [...g.state.graveyard],
       ruins: [...g.state.ruins],
+      armedGraveyard: [...g.state.armedGraveyard.entries()].map(
+        ([k, v]) => [k, [...v]],
+      ),
+      armedRuins: [...g.state.armedRuins.entries()].map(([k, v]) => [k, [...v]]),
       freeTowerUsedTiles: [...g.state.freeTowerUsedTiles.entries()].map(
         ([k, v]) => [k, [...v]],
       ),
@@ -102,6 +113,12 @@ export function deserializeSavedGame(json: string): SavedGame | null {
         cities: new Set(parsed.state.cities),
         graveyard: new Set(parsed.state.graveyard),
         ruins: new Set(parsed.state.ruins),
+        armedGraveyard: new Map(
+          (parsed.state.armedGraveyard ?? []).map(([k, v]) => [k, new Set(v)]),
+        ),
+        armedRuins: new Map(
+          (parsed.state.armedRuins ?? []).map(([k, v]) => [k, new Set(v)]),
+        ),
         freeTowerUsedTiles: new Map(
           parsed.state.freeTowerUsedTiles.map(([k, v]) => [k, new Set(v)]),
         ),

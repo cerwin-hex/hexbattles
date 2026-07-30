@@ -51,6 +51,7 @@ import type {
   Difficulty,
   AiState,
   GameResult,
+  ArmedSites,
 } from "@/types";
 import {
   getBoardBounds,
@@ -80,6 +81,7 @@ import {
 } from "@/logic/gameLogic";
 import {
   runAiTurn as runAiTurnOrchestration,
+  cloneArmedSites,
   type AiWorkingState,
 } from "@/logic/aiStrategy";
 import styles from "@/app/gameStyles";
@@ -371,8 +373,8 @@ export default function GameScreen() {
   );
   const graveyardRef = useRef<Set<string>>(new Set());
   const ruinsRef = useRef<Set<string>>(new Set());
-  const armedGraveyardRef = useRef<Set<string>>(new Set());
-  const armedRuinsRef     = useRef<Set<string>>(new Set());
+  const armedGraveyardRef = useRef<ArmedSites>(new Map());
+  const armedRuinsRef     = useRef<ArmedSites>(new Map());
 
   const [errorTileKey, setErrorTileKey] = useState<string | null>(null);
   const errorTileTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -520,6 +522,10 @@ export default function GameScreen() {
     setRuins(snap.ruins);
     setCities(snap.cities);
     setFreeTowerUsedTiles(snap.freeTowerUsedTiles);
+    // Rewind the arming bookkeeping too, else replaying the step could spawn a
+    // second rebel from a grave that has already been consumed.
+    armedGraveyardRef.current = cloneArmedSites(snap.armedGraveyard);
+    armedRuinsRef.current     = cloneArmedSites(snap.armedRuins);
   }, []);
 
   const handleAiStepNext = useCallback(() => {
@@ -563,6 +569,10 @@ export default function GameScreen() {
       setRuins(s.ruins);
       setCities(s.cities);
       setFreeTowerUsedTiles(s.freeTowerUsedTiles);
+      // Absent in saves written before arming was persisted; empty is safe and
+      // just delays every standing marker by one turn.
+      armedGraveyardRef.current = s.armedGraveyard ?? new Map();
+      armedRuinsRef.current     = s.armedRuins ?? new Map();
       setTurn(s.turn);
       setSelectedTileKey(null);
       setArmedEntityId(null);
@@ -662,8 +672,8 @@ export default function GameScreen() {
       initialGraveyard?: Set<string>,
       initialRuins?: Set<string>,
       initialCities?: Set<string>,
-      passedArmedGraves?: Set<string>,
-      passedArmedRuins?: Set<string>,
+      passedArmedGraves?: ArmedSites,
+      passedArmedRuins?: ArmedSites,
     ) => {
       const ws: AiWorkingState = {
         tileMap: new Map(currentTileMap),
@@ -715,8 +725,8 @@ export default function GameScreen() {
 
       await runAiTurnOrchestration(
         ws, cbs, aiOwners, currentTurn ?? 0, aiDifficultyRef.current,
-        new Set(passedArmedGraves ?? armedGraveyardRef.current),
-        new Set(passedArmedRuins  ?? armedRuinsRef.current),
+        cloneArmedSites(passedArmedGraves ?? armedGraveyardRef.current),
+        cloneArmedSites(passedArmedRuins  ?? armedRuinsRef.current),
       );
     },
     [aiOwners, checkWinLoss, awaitStep, triggerUnitAnimation],
@@ -753,6 +763,10 @@ export default function GameScreen() {
         cities,
         graveyard,
         ruins,
+        // Refs, not state: this effect only runs on the player's turn, by which
+        // point runAiTurn has already published the freshly armed buckets.
+        armedGraveyard: armedGraveyardRef.current,
+        armedRuins: armedRuinsRef.current,
         freeTowerUsedTiles,
         turn,
       },

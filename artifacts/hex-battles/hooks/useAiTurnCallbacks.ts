@@ -6,6 +6,7 @@ import type {
   TerritoryOwner,
   AiStepSnapshot,
   AiState,
+  ArmedSites,
 } from "@/types";
 
 export interface AiTurnCallbacksParams {
@@ -20,7 +21,7 @@ export interface AiTurnCallbacksParams {
   setAiStateMap: (v: Map<string, AiState>) => void;
   setIsAiTurn: (v: boolean) => void;
   advanceTurn: () => void;
-  setArmedGraves: (graves: Set<string>, ruins: Set<string>) => void;
+  setArmedGraves: (graves: ArmedSites, ruins: ArmedSites) => void;
   setIsAiPaused: (v: boolean) => void;
 
   setIsAiTurnDone: (v: boolean) => void;

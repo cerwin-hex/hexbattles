@@ -2,6 +2,18 @@ export type TerrainType = 'grass' | 'desert' | 'mountain' | 'lake' | 'forest' | 
 export type TerritoryOwner = 'neutral' | 'player' | 'ai1' | 'ai2' | 'ai3' | 'ai4' | 'ai5';
 export type EntityType = 'peasant' | 'warrior' | 'swordsman' | 'scout' | 'knight' | 'tower' | 'castle' | 'city' | 'rebel' | 'bridge';
 
+/**
+ * Grave/ruin sites that have stood since the start of an owner's previous turn,
+ * bucketed by the owner whose sweep will consume them. A site only breeds a
+ * rebel once it appears here, which is what guarantees every marker at least one
+ * full player turn on screen.
+ *
+ * The `neutral` bucket is not a player: it holds orphaned markers on water tiles
+ * whose bridge is gone. Nobody owns those tiles, so no owner sweep would ever
+ * reach them; they are expired by `sweepNeutralMarkers` instead and never spawn.
+ */
+export type ArmedSites = Map<TerritoryOwner, Set<string>>;
+
 export interface HexTile {
   q: number;
   r: number;
@@ -72,4 +84,9 @@ export type AiStepSnapshot = {
   ruins: Set<string>;
   cities: Set<string>;
   freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
+  // Captured so rewinding a step also rewinds which sites have already been
+  // consumed. Without these, replaying a step could spawn a second rebel from a
+  // grave that is already gone, or resurrect an expired water marker.
+  armedGraveyard: ArmedSites;
+  armedRuins: ArmedSites;
 };

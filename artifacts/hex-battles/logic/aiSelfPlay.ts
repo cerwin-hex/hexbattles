@@ -4,6 +4,7 @@ import type {
   TerritoryOwner,
   Difficulty,
   AiState,
+  ArmedSites,
 } from "@/types";
 import {
   generateHexGrid,
@@ -132,8 +133,8 @@ export async function runOneAiTurnHeadless(
   owner: TerritoryOwner,
   turn: number,
   difficulty: Difficulty,
-  armedGraves: Set<string> = new Set(),
-  armedRuins: Set<string> = new Set(),
+  armedGraves: ArmedSites = new Map(),
+  armedRuins: ArmedSites = new Map(),
 ): Promise<void> {
   ws.spentUnits = new Set();
   ws.partialMoves = new Map();
@@ -219,11 +220,12 @@ export async function playMatch(cfg: MatchConfig): Promise<MatchResult> {
     let minBalance = 0;
     const t0 = Date.now();
     let turn = 1;
+    // Long-lived across rounds: runAiTurn re-arms each owner's bucket at that
+    // owner's turn start, so self-play follows the same rule as the React flow
+    // instead of re-snapshotting everything every round.
+    const armedGraves: ArmedSites = new Map();
+    const armedRuins: ArmedSites = new Map();
     for (; turn <= cfg.maxTurns; turn++) {
-      // Arm the graves/ruins standing at round start; they breed rebels at the
-      // round boundary below (mirrors the React flow, where runAiTurn does this).
-      const armedGraves = new Set(ws.graveyard);
-      const armedRuins = new Set(ws.ruins);
       for (const owner of COMPETITORS) {
         if (landTiles(ws, owner) === 0) continue;
         // Fresh per-turn movement budget, like end-of-turn reset in the game.
@@ -238,8 +240,6 @@ export async function playMatch(cfg: MatchConfig): Promise<MatchResult> {
           if (bal < minBalance) minBalance = bal;
         }
       }
-      // armedGraves/armedRuins are now fully consumed. Next round's snapshot is
-      // taken at the top of the next iteration.
 
       const a = landTiles(ws, "ai1");
       const b = landTiles(ws, "ai2");
@@ -350,10 +350,10 @@ export async function playFreeForAll(cfg: FreeForAllConfig): Promise<FreeForAllR
     let ownerTurns = 0;
     let minBalance = 0;
     let turn = 1;
+    // See playMatch: armed buckets live across rounds, re-armed per owner turn.
+    const armedGraves: ArmedSites = new Map();
+    const armedRuins: ArmedSites = new Map();
     for (; turn <= cfg.maxTurns; turn++) {
-      // Arm graves/ruins at round start; they breed rebels at the round boundary.
-      const armedGraves = new Set(ws.graveyard);
-      const armedRuins = new Set(ws.ruins);
       for (const owner of seats) {
         if (landTiles(ws, owner) === 0) continue;
         ws.spentUnits = new Set();

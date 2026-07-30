@@ -224,10 +224,11 @@ describe("runAiTurn", () => {
       expect(ws.entities.has("0,0")).toBe(false);
       expect(ws.entities.has("1,0")).toBe(false);
 
-      // Graveyard entries are created by bankruptcy then consumed by the
-      // round-end rebel spawn (75% roll misses at 0.99), so they are cleared.
-      expect(ws.graveyard.has("0,0")).toBe(false);
-      expect(ws.graveyard.has("1,0")).toBe(false);
+      // The graves bankruptcy just created are only ARMED this round, never
+      // consumed in the same breath, so both markers are still standing — that
+      // is what gives the player a full turn to see them.
+      expect(ws.graveyard.has("0,0")).toBe(true);
+      expect(ws.graveyard.has("1,0")).toBe(true);
     });
 
     it("drains the territory balance to 0 on bankruptcy", async () => {

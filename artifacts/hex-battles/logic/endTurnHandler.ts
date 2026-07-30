@@ -5,6 +5,7 @@ import type {
   TerritoryOwner,
   MoveHistorySnapshot,
   GameResult,
+  ArmedSites,
 } from "@/types";
 import { applySingleHexPenalty } from "@/logic/gameLogic";
 
@@ -18,8 +19,8 @@ export interface EndTurnParams {
   cities: Set<string>;
   graveyard: Set<string>;
   ruins: Set<string>;
-  armedGraveyard: Set<string>;
-  armedRuins: Set<string>;
+  armedGraveyard: ArmedSites;
+  armedRuins: ArmedSites;
   mutableTileMap: Map<string, HexTile>;
   liveOwnerMap: Map<string, TerritoryOwner>;
   aiTurnRef: { current: boolean };
@@ -46,8 +47,8 @@ export interface EndTurnParams {
     initialGraveyard?: Set<string>,
     initialRuins?: Set<string>,
     initialCities?: Set<string>,
-    armedGraves?: Set<string>,
-    armedRuins?: Set<string>,
+    armedGraves?: ArmedSites,
+    armedRuins?: ArmedSites,
   ) => void;
   closeRibbon: () => void;
 }

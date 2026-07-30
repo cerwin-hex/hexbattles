@@ -17,6 +17,7 @@ import {
   improveCostFor,
   improveTargetFor,
 } from "@/utils/hexGrid";
+import type { ArmedSites } from "@/types";
 import { STRENGTH_TO_UNIT, STRENGTH_TO_CAVALRY } from "@/constants/gameConstants";
 
 export function calcTerritoryUpkeep(
@@ -99,15 +100,26 @@ export function applyOwnerEconomy(o: {
       bankruptcyOccurred = true;
       balances.set(territoryId, 0);
       let unitUpkeepSaved = 0;
+      // Water tiles where a unit died in THIS bankruptcy. Deliberately pass-local
+      // rather than testing `graveyard.has`: a stale grave left over from an
+      // earlier round must not suppress a legitimate new ruin below.
+      const lakeUnitDeaths = new Set<string>();
       for (const t of territory) {
         const e = entities.get(t.key);
         if (e && ENTITY_META[e].isUnit) {
           unitUpkeepSaved += ENTITY_META[e].upkeep;
           // A unit on a lake tile sat on a bridge — restore the bridge so the
-          // lake tile stays connected to the territory.
-          if (tileMap.get(t.key)?.terrain === "lake") entities.set(t.key, "bridge");
-          else entities.delete(t.key);
-          graveyard.add(t.key);
+          // lake tile stays connected to the territory. Any marker here is
+          // deferred to the demolition pass: if the bridge survives it would
+          // render underneath the bridge (i.e. not at all), so there is nothing
+          // worth recording.
+          if (tileMap.get(t.key)?.terrain === "lake") {
+            entities.set(t.key, "bridge");
+            lakeUnitDeaths.add(t.key);
+          } else {
+            entities.delete(t.key);
+            graveyard.add(t.key);
+          }
         }
       }
       if (delta + unitUpkeepSaved < 0) {
@@ -115,12 +127,17 @@ export function applyOwnerEconomy(o: {
           const e = entities.get(t.key);
           if (e && !ENTITY_META[e].isUnit && e !== "rebel" && e !== "city") {
             entities.delete(t.key);
-            ruins.add(t.key);
             // A demolished bridge must release its lake tile to neutral, else the
             // owned lake keeps rendering as a bridge with a territory border.
-            if (e === "bridge") {
-              const lt = tileMap.get(t.key);
-              if (lt?.terrain === "lake") tileMap.set(t.key, { ...lt, owner: "neutral" });
+            const lt = e === "bridge" ? tileMap.get(t.key) : undefined;
+            if (lt?.terrain === "lake") {
+              tileMap.set(t.key, { ...lt, owner: "neutral" });
+              // Bridge and unit both lost on the same tile: show the skull, not
+              // the ruin, and never both.
+              if (lakeUnitDeaths.has(t.key)) graveyard.add(t.key);
+              else ruins.add(t.key);
+            } else {
+              ruins.add(t.key);
             }
           }
         }
@@ -198,6 +215,51 @@ export function applySingleHexPenalty(
       tileMap.set(singleKey, { ...lt, owner: "neutral" });
     }
   }
+}
+
+/**
+ * The sites in `sites` that currently sit on a tile owned by `owner` — i.e. the
+ * set to arm for that owner's next turn. Passing `"neutral"` collects the
+ * orphaned markers on bridgeless water tiles.
+ *
+ * Ownership is read fresh, so a site whose tile changed hands is armed by its
+ * new owner and silently dropped from the old one's bucket on the next re-arm.
+ */
+export function armedSitesForOwner(
+  owner: TerritoryOwner,
+  tileMap: Map<string, HexTile>,
+  sites: Set<string>,
+): Set<string> {
+  const armed = new Set<string>();
+  for (const key of sites) {
+    if (tileMap.get(key)?.owner === owner) armed.add(key);
+  }
+  return armed;
+}
+
+/**
+ * Expire the orphaned markers on neutral water tiles, then arm the ones standing
+ * now. Consume-then-arm in a single pass, so each marker survives exactly one
+ * call — one full player turn, since the only caller runs at the player's turn
+ * boundary.
+ *
+ * These markers can never breed a rebel (lake tiles are excluded from spawning),
+ * so this only clears them; it is the counterpart to `spawnRebelsForOwner` for
+ * tiles that have no owner to sweep them.
+ *
+ * Callers must clone graveyard/ruins before passing.
+ */
+export function sweepNeutralMarkers(
+  tileMap: Map<string, HexTile>,
+  graveyard: Set<string>,
+  ruins: Set<string>,
+  armedGraveyard: ArmedSites,
+  armedRuins: ArmedSites,
+): void {
+  for (const key of armedGraveyard.get("neutral") ?? []) graveyard.delete(key);
+  for (const key of armedRuins.get("neutral") ?? []) ruins.delete(key);
+  armedGraveyard.set("neutral", armedSitesForOwner("neutral", tileMap, graveyard));
+  armedRuins.set("neutral", armedSitesForOwner("neutral", tileMap, ruins));
 }
 
 /**

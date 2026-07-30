@@ -1,13 +1,18 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import type { HexTile, EntityType, TerritoryOwner } from "@/types";
+import type { HexTile, EntityType, TerritoryOwner, ArmedSites } from "@/types";
 import { runOneAiTurnHeadless } from "@/logic/aiSelfPlay";
-import { spawnRebelsForOwner } from "@/logic/gameLogic";
+import {
+  armedSitesForOwner,
+  spawnRebelsForOwner,
+  sweepNeutralMarkers,
+} from "@/logic/gameLogic";
 import type { AiWorkingState } from "@/logic/aiStrategy";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Rebel spawning runs per-owner at the START of each owner's turn, from a
-// global armed snapshot taken at the END of the previous round. Only tiles
-// owned by the active owner are eligible for spawn and spread.
+// Rebel spawning runs per-owner at the START of each owner's turn. Each owner
+// consumes its OWN armed bucket, filled at the start of that owner's previous
+// turn — which is what guarantees every marker at least one full player turn on
+// screen. Only tiles owned by the active owner are eligible for spawn and spread.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function makeTile(
@@ -35,6 +40,11 @@ function makeWs(tiles: HexTile[], overrides: Partial<AiWorkingState> = {}): AiWo
     freeTowerUsed: new Map(),
     ...overrides,
   };
+}
+
+/** One owner's armed bucket, as `runAiTurn` expects it. */
+function armedFor(owner: TerritoryOwner, ...keys: string[]): ArmedSites {
+  return new Map([[owner, new Set(keys)]]);
 }
 
 // ── Unit tests for spawnRebelsForOwner ───────────────────────────────────────
@@ -120,7 +130,7 @@ describe("rebel spawn — integration via runOneAiTurnHeadless", () => {
     });
     await runOneAiTurnHeadless(
       state, "ai1", 2, "medium",
-      new Set(["5,5"]) /* armedGraves */, new Set(),
+      armedFor("player", "5,5"), new Map(),
     );
 
     expect(state.entities.get("5,5")).toBe("rebel");
@@ -134,7 +144,7 @@ describe("rebel spawn — integration via runOneAiTurnHeadless", () => {
     });
     await runOneAiTurnHeadless(
       state, "ai1", 1, "medium",
-      new Set(["5,5"]), new Set(),
+      armedFor("player", "5,5"), new Map(),
     );
 
     expect(state.entities.get("5,5")).toBeUndefined(); // round 1 guard
@@ -148,17 +158,17 @@ describe("rebel spawn — integration via runOneAiTurnHeadless", () => {
     const state = makeWs([makeTile(0, 0, "ai1")]);
     await runOneAiTurnHeadless(
       state, "ai1", 2, "medium",
-      new Set() /* armedGraves */, new Set(),
+      new Map() /* armedGraves */, new Map(),
     );
     expect(state.entities.get("0,0")).toBe("rebel");
   });
 
-  it("grave created THIS round by player bankruptcy is in nextArmedGraves and spawns rebel immediately", async () => {
+  it("grave created THIS round by player bankruptcy waits a full turn before rising", async () => {
     // Player territory: (0,0) grass + (1,0) grass. Warrior at (0,0).
     // income = 4 (2 × grass), warrior upkeep = 9 → net −5 → bankrupt.
     // warrior on grass → deleted from entities, graveyard.add("0,0").
-    // After player economy, nextArmedGraves = ws.graveyard = {"5,5", "0,0"}.
-    // Player spawn fires both: rebel at 5,5 (pre-armed) + rebel at 0,0 (new).
+    // Arming and consuming are one boundary apart, so the fresh grave at 0,0 is
+    // only ARMED this round; it cannot rise until the next one.
     vi.spyOn(Math, "random").mockReturnValue(0.5); // < 0.75 → spawn for all rolls
     const state = makeWs(
       [
@@ -172,17 +182,94 @@ describe("rebel spawn — integration via runOneAiTurnHeadless", () => {
         graveyard: new Set(["5,5"]),     // pre-existing armed grave
       },
     );
-    await runOneAiTurnHeadless(
-      state, "ai1", 2, "medium",
-      new Set(["5,5"]) /* armedGraves */, new Set(),
-    );
+    const armedGraves = armedFor("player", "5,5");
+    await runOneAiTurnHeadless(state, "ai1", 2, "medium", armedGraves, new Map());
 
-    // Pre-existing grave at 5,5 rose.
+    // Pre-existing grave at 5,5 was armed a boundary ago → it rose.
     expect(state.entities.get("5,5")).toBe("rebel");
     expect(state.graveyard.has("5,5")).toBe(false);
 
-    // Bankruptcy grave at 0,0 also rose — same-round arming is the new behaviour.
+    // Bankruptcy grave at 0,0 is still standing, and is now armed for next round.
+    expect(state.entities.get("0,0")).toBeUndefined();
+    expect(state.graveyard.has("0,0")).toBe(true);
+    expect(armedGraves.get("player")?.has("0,0")).toBe(true);
+
+    // Next round, with the same armed buckets carried forward, it rises.
+    await runOneAiTurnHeadless(state, "ai1", 3, "medium", armedGraves, new Map());
     expect(state.entities.get("0,0")).toBe("rebel");
     expect(state.graveyard.has("0,0")).toBe(false);
+  });
+
+  it("grave on an AI tile is armed by that AI, not by the player", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const state = makeWs(
+      [makeTile(0, 0, "ai1", "grass"), makeTile(1, 0, "ai1", "grass")],
+      { graveyard: new Set(["0,0"]) },
+    );
+    const armedGraves: ArmedSites = new Map();
+    await runOneAiTurnHeadless(state, "ai1", 2, "medium", armedGraves, new Map());
+
+    // ai1 had nothing armed yet, so the grave survives its turn untouched…
+    expect(state.graveyard.has("0,0")).toBe(true);
+    // …and lands in ai1's bucket, never the player's.
+    expect(armedGraves.get("ai1")?.has("0,0")).toBe(true);
+    expect(armedGraves.get("player")?.has("0,0")).toBeFalsy();
+  });
+});
+
+// ── Armed-bucket helpers ─────────────────────────────────────────────────────
+
+describe("armedSitesForOwner", () => {
+  it("keeps only sites on tiles the owner currently holds", () => {
+    const tileMap = new Map([
+      ["0,0", makeTile(0, 0, "player")],
+      ["1,0", makeTile(1, 0, "ai1")],
+      ["2,0", makeTile(2, 0, "neutral")],
+    ]);
+    const sites = new Set(["0,0", "1,0", "2,0", "9,9" /* off-board */]);
+
+    expect([...armedSitesForOwner("player", tileMap, sites)]).toEqual(["0,0"]);
+    expect([...armedSitesForOwner("ai1", tileMap, sites)]).toEqual(["1,0"]);
+    expect([...armedSitesForOwner("neutral", tileMap, sites)]).toEqual(["2,0"]);
+  });
+
+  it("re-arms a captured site under its new owner", () => {
+    const sites = new Set(["0,0"]);
+    const captured = new Map([["0,0", makeTile(0, 0, "ai1")]]);
+
+    expect(armedSitesForOwner("player", captured, sites).size).toBe(0);
+    expect(armedSitesForOwner("ai1", captured, sites).has("0,0")).toBe(true);
+  });
+});
+
+describe("sweepNeutralMarkers", () => {
+  // Water markers have no owner to sweep them, so this single pass is the whole
+  // of their lifetime: armed on one call, deleted on the next.
+  it("expires a neutral marker on the second sweep, not the first", () => {
+    const tileMap = new Map([["0,1", makeTile(0, 1, "neutral", "lake")]]);
+    const graveyard = new Set<string>();
+    const ruins = new Set(["0,1"]);
+    const armedGraveyard: ArmedSites = new Map();
+    const armedRuins: ArmedSites = new Map();
+
+    sweepNeutralMarkers(tileMap, graveyard, ruins, armedGraveyard, armedRuins);
+    expect(ruins.has("0,1")).toBe(true); // survives one full player turn
+    expect(armedRuins.get("neutral")?.has("0,1")).toBe(true);
+
+    sweepNeutralMarkers(tileMap, graveyard, ruins, armedGraveyard, armedRuins);
+    expect(ruins.has("0,1")).toBe(false); // gone
+    expect(armedRuins.get("neutral")?.size).toBe(0);
+  });
+
+  it("leaves markers on owned tiles to their owner's sweep", () => {
+    const tileMap = new Map([["0,0", makeTile(0, 0, "player")]]);
+    const graveyard = new Set(["0,0"]);
+    const armedGraveyard: ArmedSites = new Map();
+
+    sweepNeutralMarkers(tileMap, graveyard, new Set(), armedGraveyard, new Map());
+    sweepNeutralMarkers(tileMap, graveyard, new Set(), armedGraveyard, new Map());
+
+    expect(graveyard.has("0,0")).toBe(true);
+    expect(armedGraveyard.get("neutral")?.size).toBe(0);
   });
 });
