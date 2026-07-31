@@ -779,7 +779,7 @@ export function generateCandidateActions(
   const terrKeys = new Set(territory.map((t) => t.key));
 
   const income = calcTerritoryIncome(territory, ctx.entities, ctx.cities, ctx.tileMap);
-  const upkeep = calcTerritoryUpkeep(territory, ctx.entities);
+  const upkeep = calcTerritoryUpkeep(territory, ctx.entities, ctx.elements);
   const canAfford = (cost: number, extraUpkeep = 0): boolean =>
     balanceForTid >= cost && balanceForTid + (income - (upkeep + extraUpkeep)) >= 0;
 

@@ -104,7 +104,7 @@ export async function runAiTerritoryDecisionLoop(
     const currBal = aiCtx.balances.get(currTid) ?? 0;
 
     const currIncome = calcTerritoryIncome(currTerr, aiCtx.entities, aiCtx.cities, aiCtx.tileMap);
-    const currUpkeep = calcTerritoryUpkeep(currTerr, aiCtx.entities);
+    const currUpkeep = calcTerritoryUpkeep(currTerr, aiCtx.entities, aiCtx.elements);
 
     const canAfford = (cost: number, extraUpkeep: number = 0): boolean =>
       currBal >= cost && currBal + (currIncome - (currUpkeep + extraUpkeep)) >= 0;

@@ -103,7 +103,7 @@ export function dtCaptureNegatesIncome(
   if (!anyRemaining) return true;
   const remTerr = getContiguousTerritory(simMap, anyRemaining.key, enemyOwner, simEntities);
   const remIncome = calcTerritoryIncome(remTerr, simEntities, ctx.cities, simMap);
-  const remUpkeep = calcTerritoryUpkeep(remTerr, simEntities);
+  const remUpkeep = calcTerritoryUpkeep(remTerr, simEntities, ctx.elements);
   return enemyBal + (remIncome - remUpkeep) < 0;
 }
 
