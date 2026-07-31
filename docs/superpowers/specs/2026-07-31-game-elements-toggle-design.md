@@ -130,9 +130,9 @@ export function isEntityEnabled(id: EntityType, elements: GameElements): boolean
 
 | Element | Off means |
 |---|---|
-| `mounted` | `unitPurchasablesFor` drops scout/knight; `handleTileTapLogic` refuses to buy or upgrade to them; AI candidate generation skips them. No cavalry can exist, so `STRENGTH_TO_CAVALRY` merges are unreachable — that code is left untouched. |
-| `improvements` | `improvementPurchasablesFor` returns `[]`; `handleTileTapLogic` refuses the improve action; the AI generates no improve candidates. `TERRAIN_INCOME` for field/sawmill/mine is left untouched — those terrains simply never come into existence. |
-| `adminBurden` | `calcTerritoryUpkeep` (`logic/gameLogic.ts:45`) and the display path `useEconBreakdown.ts:165` add 0 instead of `calcAdminBurden(territory.length)`. `calcAdminBurden` itself is unchanged. |
+| `mounted` | `unitPurchasablesFor` drops scout/knight; `handleTileTapLogic` refuses to buy them; the AI's three creation points skip them (`AI_UNIT_BUY_ORDER_ASC`/`_DESC` and the rebel-clearing `buyPreference` in `aiStrategy.ts`, `UNIT_TYPES` in `aiExpert.ts`). Because no cavalry can then exist, `STRENGTH_TO_CAVALRY` merges and `UNIT_UPGRADE.scout` are unreachable — that code is left untouched. |
+| `improvements` | `improvementPurchasablesFor` returns `[]`; `handleTileTapLogic` refuses the improve action; `dtFindImproveMove` (`logic/aiHelpers.ts:234`) returns `null`, which is the single choke point both AI brains use — the decision tree's priority J and the expert search's last resort. `TERRAIN_INCOME` for field/sawmill/mine is left untouched — those terrains simply never come into existence. |
+| `adminBurden` | `calcTerritoryUpkeep` (`logic/gameLogic.ts:45`) adds 0 instead of `calcAdminBurden(territory.length)`, which covers every economy path. The two display hooks that compute their own numbers — `useEconBreakdown.ts:165` and `useDevEconomicOverlays.ts:65` — take the element set too, so the panel matches the charge. `calcAdminBurden` itself is unchanged. |
 | `rebels` | `spawnRebelsForOwner` still sweeps and clears armed graves/ruins but places no rebel. Skull and ruin markers still render — they mark where units fell — they just never breed. |
 
 `spawnRebelsForOwner` gains a trailing `spawnEnabled: boolean` parameter rather
@@ -141,18 +141,37 @@ keeps running and markers do not accumulate forever.
 
 ### 3.5 Threading
 
-The element set is plumbed through exactly five seams:
+The element set is plumbed through exactly four seams:
 
 1. `TileTapParams` (`logic/tileTapHandler.ts:42`) — new `elements: GameElements` field.
-2. `EndTurnParams` (`logic/endTurnHandler.ts:12`) — same.
-3. `AiWorkingState` (`logic/aiStrategy.ts:949`) — new **optional** `elements?: GameElements`.
+2. `AiWorkingState` (`logic/aiStrategy.ts:949`) — new **optional** `elements?: GameElements`.
    Absent means `ALL_GAME_ELEMENTS`: self-play and the existing AI tests exercise
    the full rule set, so they need no edits. `game.tsx` always sets it.
-4. `AiContext` (`logic/aiHelpers.ts:19`) — new `elements: GameElements` field,
+3. `AiContext` (`logic/aiHelpers.ts:19`) — new `elements: GameElements` field,
    populated at its single construction site (`aiStrategy.ts:1201`) from `ws`.
    This is what the decision tree and the expert search read.
-5. `app/game.tsx` — parses the element set once and passes it as a prop to
-   `PurchaseRibbon` and into the three logic entry points.
+4. `app/game.tsx` — parses the element set once, passes it as a prop to
+   `PurchaseRibbon` and the two economy display hooks, and into
+   `handleTileTapLogic` and the `AiWorkingState` it builds.
+
+`EndTurnParams` deliberately gets **no** field: `handleEndTurnLogic` neither
+charges economy nor spawns rebels — both happen inside `runAiTurn` via
+`applyOwnerEconomy` and `spawnRebelsForOwner` — so it has nothing to gate.
+
+Two shared functions take the element set as an **optional trailing argument**
+that defaults to `ALL_GAME_ELEMENTS`, so the ~20 existing test call sites keep
+working unchanged:
+
+- `calcTerritoryUpkeep(territory, ents, elements?)` — gates the admin burden.
+- `applyOwnerEconomy({ …, elements? })` — forwards it to `calcTerritoryUpkeep`.
+
+`spawnRebelsForOwner` instead gets a required trailing `spawnEnabled` argument
+after its existing `rng` parameter, defaulting to `true`.
+
+Hot-path lookups are memoized on the element object's identity with a
+`WeakMap`, so the AI's per-iteration buy loops stay O(1): `enabledUnitTypes` in
+`gameElements.ts` and the sorted `aiUnitBuyOrders` in `aiStrategy.ts`. `game.tsx`
+builds the element object once per game, so each map holds a single entry.
 
 **Performance:** the expert search resolves its allowed-entity list **once per AI
 turn**, at `AiContext` construction, never per candidate inside
