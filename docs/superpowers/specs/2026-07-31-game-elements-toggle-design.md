@@ -168,10 +168,11 @@ working unchanged:
 `spawnRebelsForOwner` instead gets a required trailing `spawnEnabled` argument
 after its existing `rng` parameter, defaulting to `true`.
 
-Hot-path lookups are memoized on the element object's identity with a
-`WeakMap`, so the AI's per-iteration buy loops stay O(1): `enabledUnitTypes` in
-`gameElements.ts` and the sorted `aiUnitBuyOrders` in `aiStrategy.ts`. `game.tsx`
-builds the element object once per game, so each map holds a single entry.
+`enabledUnitTypes` is memoized on the element object's identity with a `WeakMap`,
+because the expert search calls it once per candidate-generation pass. `game.tsx`
+builds the element object once per game, so the map holds a single entry. The
+decision tree's sorted buy orders are hoisted to a single computation at the top
+of `runAiTerritoryDecisionLoop` instead — once per territory, not per iteration.
 
 **Performance:** the expert search resolves its allowed-entity list **once per AI
 turn**, at `AiContext` construction, never per candidate inside
