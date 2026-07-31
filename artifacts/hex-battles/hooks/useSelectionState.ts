@@ -11,6 +11,7 @@ import {
   unitMovement,
 } from "@/utils/hexGrid";
 import { canImproveTile, mergeResult } from "@/logic/gameLogic";
+import { rangedTargets } from "@/logic/rangedAttack";
 import { computeSelectionBorderEdges } from "@/utils/borderEdges";
 import { SELECTED_UNIT_RING } from "@/constants/colors";
 
@@ -30,6 +31,7 @@ interface SelectionStateParams {
   spentUnits: Set<string>;
   combatSpentUnits: Set<string>;
   partialMoves: Map<string, number>;
+  firedUnits: Set<string>;
   territoryBalances: Map<string, number>;
   cities: Set<string>;
   freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
@@ -52,6 +54,7 @@ export function useSelectionState({
   spentUnits,
   combatSpentUnits,
   partialMoves,
+  firedUnits,
   territoryBalances,
   cities,
   freeTowerUsedTiles,
@@ -140,6 +143,27 @@ export function useSelectionState({
     partialMoves,
     combatSpentUnits,
   ]);
+
+  // The adjacent enemy tiles the selected unit may shoot right now. Empty for
+  // anything that is not a player-owned ranged unit with its shot still
+  // available; rangedTargets applies those rules.
+  const validRangedTargets = useMemo<Set<string>>(() => {
+    if (!selectedEntityKey) return EMPTY_TILE_SET;
+    if (activeTileMap.get(selectedEntityKey)?.owner !== "player")
+      return EMPTY_TILE_SET;
+    const targets = rangedTargets({
+      shooterKey: selectedEntityKey,
+      owner: "player",
+      entities,
+      tileMap: activeTileMap,
+      firedUnits,
+    });
+    // Collapse the empty result (every non-ranged unit, which is the common
+    // case) onto the shared instance rather than a fresh Set, so selecting or
+    // moving an ordinary unit doesn't hand the memoized SVG layers a new
+    // identity and force a redraw.
+    return targets.size > 0 ? targets : EMPTY_TILE_SET;
+  }, [selectedEntityKey, entities, activeTileMap, firedUnits]);
 
   const fortificationDots = useMemo<Set<string>>(() => {
     let territory: HexTile[];
@@ -406,6 +430,7 @@ export function useSelectionState({
     selectedTileKeys,
     selectedTerritoryDefenseCounts,
     validMoveTiles,
+    validRangedTargets,
     fortificationDots,
     validBridgePlacementTiles,
     hasBridgePlacementAvailable,

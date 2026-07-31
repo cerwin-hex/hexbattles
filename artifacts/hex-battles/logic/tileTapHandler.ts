@@ -20,6 +20,7 @@ import {
 import {
   advanceAttacksUsed,
   advanceCombatSpent,
+  advanceFired,
   applySingleHexPenalty,
   canImproveTile,
   isChargeAttack,
@@ -27,6 +28,7 @@ import {
   resolveMovedUnitMoves,
   effectiveRemaining,
 } from "@/logic/gameLogic";
+import { resolveRangedShot } from "@/logic/rangedAttack";
 
 /**
  * Checks whether the player can afford an action costing `cost` gold.
@@ -59,10 +61,9 @@ export interface TileTapParams {
   turn: number;
   graveyard: Set<string>;
   ruins: Set<string>;
-  // Ranged state, threaded ahead of the tap handler that reads it. Nothing in
-  // this file consumes them yet.
   killMarks: Set<string>;
   firedUnits: Set<string>;
+  validRangedTargets: Set<string>;
   liveOwnerMap: Map<string, TerritoryOwner>;
   combatSpentUnits: Set<string>;
   spentUnits: Set<string>;
@@ -125,6 +126,9 @@ export function handleTileTapLogic(params: TileTapParams): void {
     turn,
     graveyard,
     ruins,
+    killMarks,
+    firedUnits,
+    validRangedTargets,
     liveOwnerMap,
     combatSpentUnits,
     spentUnits,
@@ -147,6 +151,8 @@ export function handleTileTapLogic(params: TileTapParams): void {
     setSelectedTileKey,
     setGraveyard,
     setRuins,
+    setKillMarks,
+    setFiredUnits,
     setArmedEntityId,
     setArmedImprovement,
     setFreeTowerUsedTiles,
@@ -163,6 +169,33 @@ export function handleTileTapLogic(params: TileTapParams): void {
   lastTileTapMs.current = now;
   if (isAiTurn || gameResult !== null) return;
   const tile = activeTileMap.get(key);
+
+  // ─── Ranged shot ─────────────────────────────────────────────────────────────
+  // A ranged unit's targets are never valid move tiles (it cannot take ground),
+  // so this branch and the move branch below can never both match the same tap.
+  // A shot changes no ownership and no passability, so it needs none of the
+  // territory recalculation the move branch does.
+  if (selectedEntityKey && validRangedTargets.has(key)) {
+    pushHistory();
+    const shot = resolveRangedShot({
+      shooterKey: selectedEntityKey,
+      targetKey: key,
+      entities,
+      tileMap: activeTileMap,
+      killMarks,
+      firedUnits,
+    });
+    unstable_batchedUpdates(() => {
+      setEntities(shot.entities);
+      setKillMarks(shot.killMarks);
+      setFiredUnits(shot.firedUnits);
+      // The shooter keeps its movement, so leave it selected to move away.
+      setSelectedEntityKey(selectedEntityKey);
+      setSelectedTileKey(selectedEntityKey);
+      if (ribbonOpen) closeRibbon();
+    });
+    return;
+  }
 
   // ─── Unit move ───────────────────────────────────────────────────────────────
   if (selectedEntityKey && validMoveTiles.has(key)) {
@@ -254,6 +287,15 @@ export function handleTileTapLogic(params: TileTapParams): void {
       spent: moved.spent,
     });
 
+    // The "has fired" flag rides along separately from the attack counter: it
+    // must survive becoming spent, since a spent bowman may still shoot.
+    const newFiredUnits = advanceFired({
+      firedUnits,
+      fromKey: selectedEntityKey,
+      toKey: key,
+      isMerge,
+    });
+
     // Combat-lock the unit when it strikes a defender (cavalry: blocks a second
     // strike while it may still take one open tile) or finishes its combat.
     const isEntityStrike =
@@ -287,10 +329,12 @@ export function handleTileTapLogic(params: TileTapParams): void {
 
       const newGraveyard = new Set(graveyard);
       const newRuins = new Set(ruins);
-      // A unit stepping onto a grave/ruin tile clears the marker for good — it
-      // must not reappear once the unit moves on again.
+      const newKillMarks = new Set(killMarks);
+      // A unit stepping onto a grave/ruin/kill-marked tile clears the marker for
+      // good — it must not reappear once the unit moves on again.
       newGraveyard.delete(key);
       newRuins.delete(key);
+      newKillMarks.delete(key);
       applySingleHexPenalty(
         activeTileMap,
         newTileMap,
@@ -321,9 +365,11 @@ export function handleTileTapLogic(params: TileTapParams): void {
         setCombatSpentUnits(newCombatSpentUnits);
         setPartialMoves(newPartialMoves);
         setAttacksUsed(newAttacksUsed);
+        setFiredUnits(newFiredUnits);
         setTerritoryBalances(newBalances);
         setGraveyard(newGraveyard);
         setRuins(newRuins);
+        setKillMarks(newKillMarks);
         setLiveOwnerMap(newLiveOwnerMap);
         checkWinLoss(newTileMap);
       });
@@ -667,12 +713,14 @@ export function handleTileTapLogic(params: TileTapParams): void {
           );
         const newGraveyard2 = new Set(graveyard);
         const newRuins2 = new Set(ruins);
-        // Capturing a grave/ruin tile by buying a unit onto it clears the marker
-        // for good, same as walking onto it. Buildings don't (the rule is about
-        // active units), so guard on meta.isUnit.
+        const newKillMarks2 = new Set(killMarks);
+        // Capturing a grave/ruin/kill-marked tile by buying a unit onto it
+        // clears the marker for good, same as walking onto it. Buildings don't
+        // (the rule is about active units), so guard on meta.isUnit.
         if (meta.isUnit) {
           newGraveyard2.delete(key);
           newRuins2.delete(key);
+          newKillMarks2.delete(key);
         }
         applySingleHexPenalty(
           activeTileMap,
@@ -689,6 +737,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
         setTerritoryBalances(newBalances);
         setGraveyard(newGraveyard2);
         setRuins(newRuins2);
+        setKillMarks(newKillMarks2);
         setLiveOwnerMap(newLiveOwnerMap);
         checkWinLoss(newTileMap);
       }, 0);

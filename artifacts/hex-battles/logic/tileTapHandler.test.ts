@@ -44,6 +44,7 @@ function makeParams(overrides: Partial<TileTapParams> = {}): TileTapParams {
     ruins: new Set(),
     killMarks: new Set(),
     firedUnits: new Set(),
+    validRangedTargets: new Set(),
     liveOwnerMap: new Map(),
     combatSpentUnits: new Set(),
     spentUnits: new Set(),
@@ -1001,5 +1002,163 @@ describe("building on an improved tile", () => {
     handleTileTapLogic(params);
     // No terrain rewrite is needed, so the tile map is not republished at all.
     expect(params.setMutableTileMap).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Ranged firing ────────────────────────────────────────────────────────────
+
+describe("ranged firing", () => {
+  // Player crossbowman on 0,0, enemy tile 1,0 held by an ai1 swordsman.
+  function shotParams(overrides: Partial<TileTapParams> = {}) {
+    const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "ai1")]);
+    return makeParams({
+      key: "1,0",
+      activeTileMap: map,
+      selectedEntityKey: "0,0",
+      entities: ents([["0,0", "crossbowman"], ["1,0", "swordsman"]]),
+      validRangedTargets: new Set(["1,0"]),
+      liveOwnerMap: new Map([["0,0", "player"], ["1,0", "ai1"]]),
+      ...overrides,
+    });
+  }
+
+  it("kills the target and marks the tile", () => {
+    const params = shotParams();
+    handleTileTapLogic(params);
+    const newEnts: Map<string, EntityType> = (
+      params.setEntities as ReturnType<typeof vi.fn>
+    ).mock.calls[0][0];
+    expect(newEnts.has("1,0")).toBe(false);
+    expect(newEnts.get("0,0")).toBe("crossbowman");
+    const marks: Set<string> = (
+      params.setKillMarks as ReturnType<typeof vi.fn>
+    ).mock.calls[0][0];
+    expect(marks.has("1,0")).toBe(true);
+    expect(params.pushHistory).toHaveBeenCalled();
+  });
+
+  it("changes no tile ownership", () => {
+    const params = shotParams();
+    handleTileTapLogic(params);
+    expect(params.setMutableTileMap).not.toHaveBeenCalled();
+    expect(params.setTerritoryBalances).not.toHaveBeenCalled();
+  });
+
+  it("spends the shot but neither the movement nor the unit", () => {
+    const params = shotParams();
+    handleTileTapLogic(params);
+    const fired: Set<string> = (
+      params.setFiredUnits as ReturnType<typeof vi.fn>
+    ).mock.calls[0][0];
+    expect(fired.has("0,0")).toBe(true);
+    expect(params.setSpentUnits).not.toHaveBeenCalled();
+    expect(params.setPartialMoves).not.toHaveBeenCalled();
+  });
+
+  it("keeps the shooter selected so it can move away", () => {
+    const params = shotParams();
+    handleTileTapLogic(params);
+    expect(params.setSelectedEntityKey).toHaveBeenCalledWith("0,0");
+  });
+
+  it("does not fire when the tile is not a legal target", () => {
+    // An empty validRangedTargets is how a second shot in one turn is refused:
+    // useSelectionState computes it from firedUnits.
+    const params = shotParams({ validRangedTargets: new Set() });
+    handleTileTapLogic(params);
+    expect(params.setKillMarks).not.toHaveBeenCalled();
+    expect(params.setFiredUnits).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Fired flag across moves ──────────────────────────────────────────────────
+
+describe("fired flag across moves", () => {
+  it("carries to the destination on a plain move", () => {
+    const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "player")]);
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: map,
+      selectedEntityKey: "0,0",
+      validMoveTiles: new Set(["1,0"]),
+      entities: ents([["0,0", "shortbowman"]]),
+      firedUnits: new Set(["0,0"]),
+      liveOwnerMap: new Map([["0,0", "player"], ["1,0", "player"]]),
+    });
+    handleTileTapLogic(params);
+    const fired: Set<string> = (
+      params.setFiredUnits as ReturnType<typeof vi.fn>
+    ).mock.calls[0][0];
+    expect(fired.has("1,0")).toBe(true);
+    expect(fired.has("0,0")).toBe(false);
+  });
+
+  it("survives the move that exhausts the movement budget", () => {
+    // Regression guard for the two-shots bug: attacksUsed drops its counter
+    // when a unit becomes spent, so the fired flag must not live there.
+    const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "player")]);
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: map,
+      selectedEntityKey: "0,0",
+      validMoveTiles: new Set(["1,0"]),
+      entities: ents([["0,0", "shortbowman"]]),
+      partialMoves: new Map([["0,0", 1]]), // this move spends it
+      firedUnits: new Set(["0,0"]),
+      liveOwnerMap: new Map([["0,0", "player"], ["1,0", "player"]]),
+    });
+    handleTileTapLogic(params);
+    const spent: Set<string> = (
+      params.setSpentUnits as ReturnType<typeof vi.fn>
+    ).mock.calls[0][0];
+    expect(spent.has("1,0")).toBe(true);
+    const fired: Set<string> = (
+      params.setFiredUnits as ReturnType<typeof vi.fn>
+    ).mock.calls[0][0];
+    expect(fired.has("1,0")).toBe(true);
+  });
+
+  it("unions the flag when a fresh bowman merges into a fired one", () => {
+    const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "player")]);
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: map,
+      selectedEntityKey: "0,0",
+      validMoveTiles: new Set(["1,0"]),
+      entities: ents([["0,0", "shortbowman"], ["1,0", "shortbowman"]]),
+      firedUnits: new Set(["1,0"]), // the destination already fired
+      liveOwnerMap: new Map([["0,0", "player"], ["1,0", "player"]]),
+    });
+    handleTileTapLogic(params);
+    const newEnts: Map<string, EntityType> = (
+      params.setEntities as ReturnType<typeof vi.fn>
+    ).mock.calls[0][0];
+    expect(newEnts.get("1,0")).toBe("longbowman");
+    const fired: Set<string> = (
+      params.setFiredUnits as ReturnType<typeof vi.fn>
+    ).mock.calls[0][0];
+    expect(fired.has("1,0")).toBe(true);
+  });
+});
+
+// ─── Kill markers ─────────────────────────────────────────────────────────────
+
+describe("kill markers", () => {
+  it("clears when a unit walks onto the tile", () => {
+    const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "player")]);
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: map,
+      selectedEntityKey: "0,0",
+      validMoveTiles: new Set(["1,0"]),
+      entities: ents([["0,0", "peasant"]]),
+      killMarks: new Set(["1,0"]),
+      liveOwnerMap: new Map([["0,0", "player"], ["1,0", "player"]]),
+    });
+    handleTileTapLogic(params);
+    const marks: Set<string> = (
+      params.setKillMarks as ReturnType<typeof vi.fn>
+    ).mock.calls[0][0];
+    expect(marks.has("1,0")).toBe(false);
   });
 });

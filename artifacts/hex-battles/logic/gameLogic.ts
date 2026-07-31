@@ -433,6 +433,31 @@ export function advanceAttacksUsed(o: {
 }
 
 /**
+ * Move the "has fired this turn" flag from `fromKey` to `toKey`.
+ *
+ * Deliberately NOT folded into advanceAttacksUsed: that helper drops a unit's
+ * counter when the unit becomes spent, which is harmless for cavalry (a spent
+ * cavalry unit cannot act) but would hand a ranged unit a second shot, since
+ * firing costs no movement and a spent bowman may still fire. The flag survives
+ * moving and spending, and a merge unions it — otherwise a used shot could be
+ * refreshed by merging in a fresh bowman.
+ */
+export function advanceFired(o: {
+  firedUnits: Set<string>;
+  fromKey: string;
+  toKey: string;
+  isMerge: boolean;
+}): Set<string> {
+  const next = new Set(o.firedUnits);
+  const moverFired = next.has(o.fromKey);
+  const destFired = o.isMerge && next.has(o.toKey);
+  next.delete(o.fromKey);
+  if (moverFired || destFired) next.add(o.toKey);
+  else next.delete(o.toKey);
+  return next;
+}
+
+/**
  * Carry the "combat-locked" flag with a unit as it moves from `fromKey` to
  * `toKey`. A unit is combat-locked once it has struck a defender (cavalry, who
  * may then still take one open tile) or finished its combat for the turn

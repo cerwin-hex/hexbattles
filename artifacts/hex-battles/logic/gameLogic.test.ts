@@ -11,6 +11,7 @@ import {
   isChargeAttack,
   advanceAttacksUsed,
   advanceCombatSpent,
+  advanceFired,
   calcTerritoryIncome,
   tileEconomicIncome,
   canImproveTile,
@@ -835,5 +836,61 @@ describe("ranged merging", () => {
   it("never merges with another track", () => {
     expect(mergeResult("shortbowman", "peasant")).toBeNull();
     expect(mergeResult("shortbowman", "scout")).toBeNull();
+  });
+});
+
+// ─── Fired flag carry ─────────────────────────────────────────────────────────
+
+describe("advanceFired", () => {
+  it("carries the fired flag to the destination", () => {
+    const r = advanceFired({
+      firedUnits: new Set(["0,0"]),
+      fromKey: "0,0",
+      toKey: "1,0",
+      isMerge: false,
+    });
+    expect(r.has("0,0")).toBe(false);
+    expect(r.has("1,0")).toBe(true);
+  });
+
+  it("keeps the flag even when the unit runs out of movement", () => {
+    // Unlike advanceAttacksUsed, becoming spent must NOT clear it: a ranged
+    // unit can fire with zero movement left, so a dropped flag would hand it a
+    // second shot.
+    const r = advanceFired({
+      firedUnits: new Set(["0,0"]),
+      fromKey: "0,0",
+      toKey: "1,0",
+      isMerge: false,
+    });
+    expect(r.has("1,0")).toBe(true);
+  });
+
+  it("unions the flag on a merge", () => {
+    const fromFired = advanceFired({
+      firedUnits: new Set(["0,0"]),
+      fromKey: "0,0",
+      toKey: "1,0",
+      isMerge: true,
+    });
+    expect(fromFired.has("1,0")).toBe(true);
+
+    const destFired = advanceFired({
+      firedUnits: new Set(["1,0"]),
+      fromKey: "0,0",
+      toKey: "1,0",
+      isMerge: true,
+    });
+    expect(destFired.has("1,0")).toBe(true);
+  });
+
+  it("clears the destination when neither unit had fired", () => {
+    const r = advanceFired({
+      firedUnits: new Set(),
+      fromKey: "0,0",
+      toKey: "1,0",
+      isMerge: false,
+    });
+    expect(r.has("1,0")).toBe(false);
   });
 });
