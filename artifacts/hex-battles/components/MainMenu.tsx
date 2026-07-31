@@ -5,7 +5,9 @@ import React, { useCallback, useState } from 'react';
 import { WelcomeModal } from '@/components/WelcomeModal';
 import { SettingsModal } from '@/components/SettingsModal';
 import { Slider } from '@/components/Slider';
+import { GameElementsSection } from '@/components/GameElementsSection';
 import { useSettings } from '@/contexts/SettingsContext';
+import { elementsForNewGame, encodeGameElements } from '@/constants/gameElements';
 import {
   Modal,
   Platform,
@@ -229,6 +231,9 @@ export default function MainMenu() {
         desertPct: String(settings.desertPct),
         forestPct: String(settings.forestPct),
         cityCount: String(settings.cityCount),
+        elements: encodeGameElements(
+          elementsForNewGame(settings.elements, settings.showBetaElements),
+        ),
       },
     });
   }
@@ -333,6 +338,12 @@ export default function MainMenu() {
               ))}
             </View>
           </View>
+
+          <GameElementsSection
+            elements={settings.elements}
+            showBeta={settings.showBetaElements}
+            onChange={(next) => updateSettings({ ...settings, elements: next })}
+          />
 
         </View>
 
