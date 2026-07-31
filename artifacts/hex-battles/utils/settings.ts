@@ -1,5 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+import {
+  DEFAULT_GAME_ELEMENTS,
+  normalizeGameElements,
+  type GameElements,
+} from "@/constants/gameElements";
+
 const STORAGE_KEY = "hex_battles_settings_v1";
 
 export const COLOR_KEYS = ["blue", "red", "green", "orange", "purple", "teal"] as const;
@@ -12,6 +18,10 @@ export interface GameSettings {
   desertPct: number;
   forestPct: number;
   cityCount: number;
+  /** Which parts of the game new games start with. Remembered between launches. */
+  elements: GameElements;
+  /** Whether unfinished elements appear in the menu at all. */
+  showBetaElements: boolean;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -21,6 +31,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
   desertPct: 10,
   forestPct: 10,
   cityCount: 2,
+  elements: DEFAULT_GAME_ELEMENTS,
+  showBetaElements: false,
 };
 
 export const MIN_TERRAIN_PCT = 0;
@@ -44,6 +56,8 @@ export function normalizeSettings(s: Partial<GameSettings> | null | undefined): 
     desertPct: clampInt(safe.desertPct ?? DEFAULT_SETTINGS.desertPct, MIN_TERRAIN_PCT, MAX_TERRAIN_PCT),
     forestPct: clampInt(safe.forestPct ?? DEFAULT_SETTINGS.forestPct, MIN_TERRAIN_PCT, MAX_TERRAIN_PCT),
     cityCount: clampInt(safe.cityCount ?? DEFAULT_SETTINGS.cityCount, MIN_CITY_COUNT, MAX_CITY_COUNT),
+    elements: normalizeGameElements((safe as { elements?: unknown }).elements),
+    showBetaElements: safe.showBetaElements === true,
   };
 }
 
