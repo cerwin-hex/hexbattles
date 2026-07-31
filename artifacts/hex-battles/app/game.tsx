@@ -74,6 +74,11 @@ import {
   ENTITY_PANEL_H,
 } from "@/constants/gameConstants";
 import {
+  DEFAULT_GAME_ELEMENTS,
+  decodeGameElements,
+  type GameElements,
+} from "@/constants/gameElements";
+import {
   applySingleHexPenalty,
   autoDeployFreeTowers,
   initTerritoryBalances,
@@ -143,6 +148,7 @@ export default function GameScreen() {
     desertPct: string;
     forestPct: string;
     cityCount: string;
+    elements: string;
   }>();
 
   const clampPctParam = (v: string | undefined, fallback: number) => {
@@ -172,6 +178,17 @@ export default function GameScreen() {
   const aiDifficulty: Difficulty = resumeSnapshot
     ? resumeSnapshot.config.difficulty
     : ((params.difficulty as Difficulty) || "medium");
+  // The single element set for this game. A resumed game keeps the set it was
+  // started with and ignores the current menu and beta setting entirely.
+  const elements: GameElements = useMemo(
+    () =>
+      resumeSnapshot
+        ? (resumeSnapshot.config.elements ?? DEFAULT_GAME_ELEMENTS)
+        : decodeGameElements(params.elements),
+    // params from useLocalSearchParams are stable per nav and resumeSnapshot is captured once
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
   const mapGenOptions = useMemo(
     () =>
       resumeSnapshot
@@ -764,7 +781,7 @@ export default function GameScreen() {
 
     setSavedGame({
       tiles,
-      config: { numTiles, numOpponents, difficulty: aiDifficulty },
+      config: { numTiles, numOpponents, difficulty: aiDifficulty, elements },
       state: {
         mutableTileMap,
         entities,
@@ -790,6 +807,7 @@ export default function GameScreen() {
     numTiles,
     numOpponents,
     aiDifficulty,
+    elements,
     mutableTileMap,
     entities,
     territoryBalances,
@@ -1471,6 +1489,7 @@ export default function GameScreen() {
         setArmedImprovement={setArmedImprovement}
         improvementAvailability={improvementAvailability}
         hasBridgePlacementAvailable={hasBridgePlacementAvailable}
+        elements={elements}
       />
 
       <TouchableOpacity
