@@ -174,11 +174,15 @@ this feature load cleanly. `elements` runs through `normalizeGameElements`.
 `elements: encodeGameElements(...)`, alongside the existing terrain params.
 `game.tsx` decodes it next to `clampPctParam` (around `app/game.tsx:180`).
 
-**Saved games** (`utils/savedGame.ts`) — `SavedGameConfig` gains an **optional**
-`elements?: GameElements`, and `Serialized.state` is untouched; `v` stays `1`.
-This follows the `armedGraveyard?` / `armedRuins?` precedent already in the file.
-A save written before this feature has no field and loads as
-`DEFAULT_GAME_ELEMENTS` — every shipped element on, beta off.
+**Saved games** (`utils/savedGame.ts`) — the save exists for one purpose: getting
+back into a game you left by accident. It is deliberately treated lightly here.
+`SavedGameConfig` gains an **optional** `elements?: GameElements`; `Serialized.state`
+is untouched and `v` stays `1`, following the `armedGraveyard?` / `armedRuins?`
+precedent already in the file. Storing the field is the cheapest way to keep
+resume honest — without it, a game begun without rebels would sprout rebels the
+moment the menu setting changed. A save written before this feature has no field
+and loads as `DEFAULT_GAME_ELEMENTS`. No migration, no version bump, no further
+ceremony.
 
 ### 3.7 UI
 
@@ -249,10 +253,9 @@ suite for `gameConstants.ts` yet):
   them when on; melee units are present in both cases.
 - `improvementPurchasablesFor` returns `[]` when `improvements` is off.
 
-Extend `utils/savedGame.test.ts`:
+Extend `utils/savedGame.test.ts` — one case only, guarding the crash path:
 
 - A serialized save without `elements` loads as `DEFAULT_GAME_ELEMENTS`.
-- A save with an element set round-trips.
 
 New `utils/settings.test.ts` (`utils/settings.ts` has no suite today):
 
@@ -278,12 +281,12 @@ Extend the logic suites:
 2. Element choices survive an app restart.
 3. Starting a game with an element off means that element is absent for the
    player *and* the AI for the whole game.
-4. Resuming a game uses the element set it was started with.
-5. A saved game created before this feature resumes with all four elements on.
-6. Beta elements are invisible until **Show beta elements** is switched on in
+4. Resuming works: a game resumes with the element set it was started with, and
+   a save created before this feature resumes with all four elements on.
+5. Beta elements are invisible until **Show beta elements** is switched on in
    Settings, and are off in a new game while invisible.
-7. `pnpm run typecheck` and `pnpm test` pass from the repository root.
-8. The AI peak-turn timing guard does not regress.
+6. `pnpm run typecheck` and `pnpm test` pass from the repository root.
+7. The AI peak-turn timing guard does not regress.
 
 ## 6. Plain-language summary
 
