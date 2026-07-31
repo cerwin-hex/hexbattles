@@ -21,6 +21,7 @@ import {
 } from "@/utils/hexGrid";
 import { calcTerritoryIncome, calcTerritoryUpkeep, mergeResult } from "@/logic/gameLogic";
 import { dtCountClusters, dtFindImproveMove } from "@/logic/aiHelpers";
+import { enabledUnitTypes } from "@/constants/gameElements";
 import type { AiContext } from "@/logic/aiHelpers";
 import type { AiDecisionExec } from "@/logic/aiStrategy";
 
@@ -767,10 +768,6 @@ export function opponentBestResponse(
 // (moves, buys, builds, upgrades, removes) so expert has no blind spots.
 // ════════════════════════════════════════════════════════════════════════════
 
-const UNIT_TYPES: EntityType[] = (Object.keys(ENTITY_META) as EntityType[]).filter(
-  (e) => ENTITY_META[e].isUnit,
-);
-
 export function generateCandidateActions(
   ctx: AiContext,
   territory: HexTile[],
@@ -934,7 +931,9 @@ export function generateCandidateActions(
       ? innerPlacements.filter((t) => distToEnemy(t.key) <= FRONT_BUILD_REACH)
       : innerPlacements;
   const placeInner = frontProximal.length > 0 ? frontProximal : innerPlacements;
-  for (const uType of UNIT_TYPES) {
+  // `enabledUnitTypes` is memoized on the element object's identity, so asking
+  // for it here costs a WeakMap lookup rather than a rebuild per candidate pass.
+  for (const uType of enabledUnitTypes(ctx.elements)) {
     if (buyCount >= capPerKind) break;
     const cost = ENTITY_META[uType].cost;
     const upk = ENTITY_META[uType].upkeep;

@@ -15,6 +15,7 @@ import {
 import type { AiDecisionExec, AiWorkingState } from "@/logic/aiStrategy";
 import { runOneAiTurnHeadless } from "@/logic/aiSelfPlay";
 import type { AiContext } from "@/logic/aiHelpers";
+import { ALL_GAME_ELEMENTS } from "@/constants/gameElements";
 import type { HexTile, EntityType, TerritoryOwner } from "@/types";
 import { getContiguousTerritory, getTerritoryId, getValidMoves } from "@/utils/hexGrid";
 
@@ -52,6 +53,7 @@ function makeCtx(
     partialMoves: new Map(),
     combatSpentUnits: new Set(),
     aiOwner: owner,
+    elements: ALL_GAME_ELEMENTS,
   };
 }
 

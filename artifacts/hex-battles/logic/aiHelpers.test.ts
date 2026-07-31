@@ -12,6 +12,7 @@ import {
   dtFindMergeMove,
   dtFindImproveMove,
 } from "@/logic/aiHelpers";
+import { ALL_GAME_ELEMENTS, type GameElements } from "@/constants/gameElements";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -37,6 +38,7 @@ function makeCtx(
   entityPairs: [string, EntityType][] = [],
   balancePairs: [string, number][] = [],
   aiOwner: TerritoryOwner = "ai1",
+  elements: GameElements = ALL_GAME_ELEMENTS,
 ): AiContext {
   return {
     tileMap: tileMap(tiles),
@@ -47,6 +49,7 @@ function makeCtx(
     partialMoves: new Map(),
     combatSpentUnits: new Set(),
     aiOwner,
+    elements,
   };
 }
 
@@ -143,6 +146,7 @@ describe("dtCaptureNegatesIncome", () => {
       partialMoves: new Map(),
       combatSpentUnits: new Set(),
       aiOwner: "ai1",
+      elements: ALL_GAME_ELEMENTS,
     };
     // Capture "0,0": remaining ai2 territory has 2 grass tiles = 4 income, 0 upkeep
     // balance = 20 + (4 - 0) = 24 > 0, so NOT negated
@@ -322,6 +326,7 @@ describe("dtFindMergeMove", () => {
       partialMoves: new Map(),
       combatSpentUnits: new Set(),
       aiOwner: "ai1",
+      elements: ALL_GAME_ELEMENTS,
     };
     const result = dtFindMergeMove(2, new Set(["2,0"]), [["0,0", "peasant"], ["1,0", "peasant"]], ctx);
     expect(result).not.toBeNull();
@@ -340,6 +345,7 @@ describe("dtFindMergeMove", () => {
       partialMoves: new Map(),
       combatSpentUnits: new Set(),
       aiOwner: "ai1",
+      elements: ALL_GAME_ELEMENTS,
     };
     const result = dtFindMergeMove(3, new Set(["2,0"]), [["0,0", "warrior"], ["1,0", "warrior"]], ctx);
     expect(result).toBeNull();
@@ -432,6 +438,30 @@ describe("dtFindImproveMove", () => {
     expect(dtFindImproveMove(territory, ctx, 10)).toEqual({
       key: "1,0",
       terrain: "sawmill",
+    });
+  });
+
+  // This function is the single choke point for AI improvements — the decision
+  // tree's priority J and the expert search's last resort both go through it —
+  // so gating it here is what keeps both brains off improvements when the
+  // element is switched off.
+  it("offers no improvement when improvements are off", () => {
+    const tiles = [makeTile(0, 0, "ai1", "grass"), makeTile(5, 5, "ai1", "grass")];
+    const ctx = makeCtx(tiles, [], [], "ai1", {
+      ...ALL_GAME_ELEMENTS,
+      improvements: false,
+    });
+    ctx.cities = new Set(["5,5"]);
+    expect(dtFindImproveMove(tiles, ctx, 10)).toBeNull();
+  });
+
+  it("offers an improvement when improvements are on", () => {
+    const tiles = [makeTile(0, 0, "ai1", "grass"), makeTile(5, 5, "ai1", "grass")];
+    const ctx = makeCtx(tiles, [], [], "ai1");
+    ctx.cities = new Set(["5,5"]);
+    expect(dtFindImproveMove(tiles, ctx, 10)).toEqual({
+      key: "0,0",
+      terrain: "field",
     });
   });
 });

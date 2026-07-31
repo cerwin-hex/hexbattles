@@ -719,6 +719,7 @@ export default function GameScreen() {
         attacksUsed: new Map<string, number>(),
         combatSpentUnits: new Set<string>(),
         freeTowerUsed: new Map(freeTowerUsedTilesRef.current),
+        elements,
       };
 
       const cbs = makeAiTurnCallbacks({
@@ -760,7 +761,7 @@ export default function GameScreen() {
         cloneArmedSites(passedArmedRuins  ?? armedRuinsRef.current),
       );
     },
-    [aiOwners, checkWinLoss, awaitStep, triggerUnitAnimation],
+    [aiOwners, checkWinLoss, awaitStep, triggerUnitAnimation, elements],
   );
 
   // Once a game ends we must NEVER auto-save again, even if some handler
