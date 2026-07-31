@@ -21,7 +21,11 @@ import {
 } from "@/utils/hexGrid";
 import { calcTerritoryIncome, calcTerritoryUpkeep, mergeResult } from "@/logic/gameLogic";
 import { dtCountClusters, dtFindImproveMove } from "@/logic/aiHelpers";
-import { enabledUnitTypes } from "@/constants/gameElements";
+import {
+  ALL_GAME_ELEMENTS,
+  enabledUnitTypes,
+  type GameElements,
+} from "@/constants/gameElements";
 import type { AiContext } from "@/logic/aiHelpers";
 import type { AiDecisionExec } from "@/logic/aiStrategy";
 
@@ -272,6 +276,12 @@ function tileValue(
 /**
  * Score a board position from one owner's perspective. Higher is better.
  * Pure: reads only the supplied state.
+ *
+ * `elements` must match the match's rule set, because the economy block below
+ * scores ONLY `owner`'s own territories — it is not a symmetric term. Charging
+ * upkeep the real economy does not collect therefore invents a one-sided
+ * pessimism about the AI's own position. Trailing and optional so the existing
+ * evaluator tests, which pin weights rather than elements, need no edits.
  */
 export function evaluatePosition(
   owner: TerritoryOwner,
@@ -280,6 +290,7 @@ export function evaluatePosition(
   balances: Map<string, number>,
   cities: Set<string>,
   w: EvalWeights = DEFAULT_WEIGHTS,
+  elements: GameElements = ALL_GAME_ELEMENTS,
 ): number {
   // ── Economy: income, reserves, per-territory deficit penalty ──
   let income = 0;
@@ -302,7 +313,7 @@ export function evaluatePosition(
     bufferShortfall += Math.max(0, w.bufferThreshold - bal);
     const terrIncome = calcTerritoryIncome(terr, entities, cities, tileMap);
     income += terrIncome;
-    const net = terrIncome - calcTerritoryUpkeep(terr, entities);
+    const net = terrIncome - calcTerritoryUpkeep(terr, entities, elements);
     // Asymmetric: only deficits are penalised; a profitable army is free.
     if (net < 0) {
       // Tempo: a deficit whose reserves cover it for `deficitGraceTurns` turns is
@@ -1167,7 +1178,7 @@ export async function runExpertTerritoryDecisionLoop(
   const owner = ctx.aiOwner;
   const search = SEARCH_OVERRIDE ?? DEFAULT_SEARCH;
   const score = (st: SimState): number =>
-    evaluatePosition(owner, st.tileMap, st.entities, st.balances, st.cities, weights);
+    evaluatePosition(owner, st.tileMap, st.entities, st.balances, st.cities, weights, ctx.elements);
   const maxIters = MAX_ITERS_OVERRIDE ?? DEFAULT_MAX_ITERS;
   let iter = 0;
   while (iter++ < maxIters) {

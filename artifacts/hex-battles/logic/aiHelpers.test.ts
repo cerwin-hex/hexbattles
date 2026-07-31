@@ -444,7 +444,9 @@ describe("dtFindImproveMove", () => {
   // This function is the single choke point for AI improvements — the decision
   // tree's priority J and the expert search's last resort both go through it —
   // so gating it here is what keeps both brains off improvements when the
-  // element is switched off.
+  // element is switched off. Same fixture as "improves an empty grass tile into
+  // a field" above, which is the positive control: it proves this board DOES
+  // yield {0,0 → field} once the element is on.
   it("offers no improvement when improvements are off", () => {
     const tiles = [makeTile(0, 0, "ai1", "grass"), makeTile(5, 5, "ai1", "grass")];
     const ctx = makeCtx(tiles, [], [], "ai1", {
@@ -453,15 +455,5 @@ describe("dtFindImproveMove", () => {
     });
     ctx.cities = new Set(["5,5"]);
     expect(dtFindImproveMove(tiles, ctx, 10)).toBeNull();
-  });
-
-  it("offers an improvement when improvements are on", () => {
-    const tiles = [makeTile(0, 0, "ai1", "grass"), makeTile(5, 5, "ai1", "grass")];
-    const ctx = makeCtx(tiles, [], [], "ai1");
-    ctx.cities = new Set(["5,5"]);
-    expect(dtFindImproveMove(tiles, ctx, 10)).toEqual({
-      key: "0,0",
-      terrain: "field",
-    });
   });
 });
