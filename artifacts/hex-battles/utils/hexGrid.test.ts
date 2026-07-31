@@ -119,6 +119,15 @@ describe("offense/defense split", () => {
     expect(militaryValue("swordsman")).toBe(3);
     expect(militaryValue("bridge")).toBe(0);
   });
+
+  // mergeResult dropped its explicit isUnit guard and now relies entirely on
+  // non-units having no unitClass. That correspondence is load-bearing: a unit
+  // added without a class would silently become unmergeable.
+  it("gives a unitClass to exactly the units", () => {
+    for (const id of Object.keys(ENTITY_META) as EntityType[]) {
+      expect(ENTITY_META[id].isUnit).toBe(ENTITY_META[id].unitClass !== undefined);
+    }
+  });
 });
 
 // ─── TERRAIN_INCOME ───────────────────────────────────────────────────────────

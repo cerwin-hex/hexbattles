@@ -743,7 +743,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tableCellNum: {
-    width: 48,
+    // 40, not 48: the Atk/Def split took this table from four fixed columns to
+    // five, and the name column (flex: 1) is what pays for the extra width.
+    width: 40,
     textAlign: 'center',
   },
   tableHeaderText: {

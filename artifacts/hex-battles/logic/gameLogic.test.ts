@@ -123,6 +123,7 @@ describe("mergeResult", () => {
 
   it("infantry: warrior + warrior is illegal (no strength-4 unit)", () => {
     expect(mergeResult("warrior", "warrior")).toBeNull();
+    expect(mergeResult("swordsman", "peasant")).toBeNull();
   });
 
   it("cavalry: scout + scout = knight (own upgrade track, strength 2)", () => {
@@ -138,42 +139,19 @@ describe("mergeResult", () => {
     expect(mergeResult("scout", "peasant")).toBeNull();
     expect(mergeResult("peasant", "scout")).toBeNull();
     expect(mergeResult("knight", "warrior")).toBeNull();
+    expect(mergeResult("warrior", "knight")).toBeNull();
   });
 
-  it("buildings never merge", () => {
+  it("buildings and markers never merge", () => {
     expect(mergeResult("tower", "tower")).toBeNull();
     expect(mergeResult("peasant", "tower")).toBeNull();
+    expect(mergeResult("peasant", "rebel")).toBeNull();
   });
 
   it("two scout merges in sequence: scout+scout = knight (str 2), then knight cannot merge further", () => {
     const step1 = mergeResult("scout", "scout");
     expect(step1).toBe("knight");
     expect(mergeResult("knight", "scout")).toBeNull();
-  });
-});
-
-describe("mergeResult tier parity", () => {
-  it("preserves every infantry and cavalry merge outcome", () => {
-    expect(mergeResult("peasant", "peasant")).toBe("warrior");
-    expect(mergeResult("peasant", "warrior")).toBe("swordsman");
-    expect(mergeResult("warrior", "peasant")).toBe("swordsman");
-    expect(mergeResult("warrior", "warrior")).toBeNull();
-    expect(mergeResult("swordsman", "peasant")).toBeNull();
-    expect(mergeResult("scout", "scout")).toBe("knight");
-    expect(mergeResult("scout", "knight")).toBeNull();
-    expect(mergeResult("knight", "knight")).toBeNull();
-  });
-
-  it("never merges across tracks", () => {
-    expect(mergeResult("peasant", "scout")).toBeNull();
-    expect(mergeResult("scout", "peasant")).toBeNull();
-    expect(mergeResult("warrior", "knight")).toBeNull();
-  });
-
-  it("never merges non-units", () => {
-    expect(mergeResult("tower", "tower")).toBeNull();
-    expect(mergeResult("peasant", "tower")).toBeNull();
-    expect(mergeResult("peasant", "rebel")).toBeNull();
   });
 });
 
