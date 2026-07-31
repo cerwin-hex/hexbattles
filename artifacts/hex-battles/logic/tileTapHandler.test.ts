@@ -574,6 +574,73 @@ describe("armed entity placement on own territory", () => {
     expect(spent.has("1,0")).toBe(true);
   });
 
+  // The armed-placement branch is the fifth and last canCapture gate (the other
+  // four live in getValidMoves and getPlacementAttackTiles, covered in
+  // utils/hexGrid.test.ts). A ranged unit takes no ground, so buying one onto an
+  // occupied tile must never clear the occupant. Each case pairs the ranged
+  // assertion with the peasant that DOES overwrite, so the test fails if the
+  // flash ever comes from something other than the class gate.
+  it("a ranged unit bought onto a rebel does not overwrite it", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
+    const territory = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
+    const base = {
+      key: "1,0",
+      activeTileMap: tileMap(tiles),
+      selectedTileKeys: new Set(["0,0", "1,0"]),
+      selectedTerritoryId: "0,0",
+      selectedTerritory: territory,
+      entities: ents([["1,0", "rebel"]]),
+      // Ample balance: a ranged unit must be refused by canOverwriteRebel, not
+      // by affordability.
+      territoryBalances: new Map([["0,0", 100]]),
+    };
+
+    const ranged = makeParams({ ...base, armedEntityId: "shortbowman" });
+    handleTileTapLogic(ranged);
+    expect(ranged.triggerErrorFlash).toHaveBeenCalledWith("1,0");
+    expect(ranged.pushHistory).not.toHaveBeenCalled();
+    expect(ranged.setEntities).not.toHaveBeenCalled();
+
+    // Contrast: a capturing unit on the same board does clear the rebel.
+    const melee = makeParams({ ...base, armedEntityId: "peasant" });
+    handleTileTapLogic(melee);
+    expect(melee.setEntities).toHaveBeenCalled();
+    const after: Map<string, EntityType> = (melee.setEntities as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(after.get("1,0")).toBe("peasant");
+  });
+
+  it("a ranged unit bought onto a non-own building does not overwrite it", () => {
+    // A non-player tile inside selectedTileKeys is the only shape in which
+    // canOverwriteBuilding can fire at all (an own-territory building is
+    // excluded by existingBuildingIsOwn), so the board is constructed rather
+    // than reachable in normal play — the gate itself is what is under test.
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "ai1")];
+    const territory = [makeTile(0, 0, "player")];
+    const base = {
+      key: "1,0",
+      activeTileMap: tileMap(tiles),
+      selectedTileKeys: new Set(["0,0", "1,0"]),
+      selectedTerritoryId: "0,0",
+      selectedTerritory: territory,
+      entities: ents([["1,0", "tower"]]),
+      territoryBalances: new Map([["0,0", 100]]),
+      liveOwnerMap: new Map<string, TerritoryOwner>([["0,0", "player"], ["1,0", "ai1"]]),
+    };
+
+    const ranged = makeParams({ ...base, armedEntityId: "shortbowman" });
+    handleTileTapLogic(ranged);
+    expect(ranged.triggerErrorFlash).toHaveBeenCalledWith("1,0");
+    expect(ranged.pushHistory).not.toHaveBeenCalled();
+    expect(ranged.setEntities).not.toHaveBeenCalled();
+
+    // Contrast: a peasant (off 1 ≥ tower def 1) does demolish it.
+    const melee = makeParams({ ...base, armedEntityId: "peasant" });
+    handleTileTapLogic(melee);
+    expect(melee.setEntities).toHaveBeenCalled();
+    const after: Map<string, EntityType> = (melee.setEntities as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(after.get("1,0")).toBe("peasant");
+  });
+
   it("triggers error flash when placing on an already occupied tile", () => {
     const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
     const territory = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];

@@ -15,7 +15,6 @@ import {
   unitMovement,
   unitMaxAttacks,
   isCavalry,
-  isRanged,
   moveKind,
   improveCostFor,
   IMPROVED_TERRAINS,
@@ -31,19 +30,19 @@ import {
 } from "@/logic/aiHelpers";
 import type { AiContext } from "@/logic/aiHelpers";
 import { runExpertTerritoryDecisionLoop } from "@/logic/aiExpert";
+import { AI_BUYABLE_UNITS } from "@/constants/gameConstants";
 import type { AiState, Difficulty } from "@/types";
 
-// Unit purchase candidates for the AI, derived from ENTITY_META so new units are
-// picked up automatically. The buy loops take the first affordable type meeting
-// the strength threshold. Within a tier, cavalry (more attacks) is preferred
-// over plain infantry, so the AI buys a Scout/Knight when it can afford one and
-// falls back to cheaper infantry otherwise.
+// Unit purchase candidates for the AI, ordered for the buy loops, which take the
+// first affordable type meeting the strength threshold. Within a tier, cavalry
+// (more attacks) is preferred over plain infantry, so the AI buys a Scout/Knight
+// when it can afford one and falls back to cheaper infantry otherwise.
 //
-// Ranged units are excluded: they are player-only for now, and the AI has no
-// ranged behaviour, so buying one would just burn gold on a unit it never fires.
+// WHICH units the AI may buy is not decided here — AI_BUYABLE_UNITS owns that
+// (and the ranged exclusion), shared with aiExpert's UNIT_TYPES. Copy before
+// sorting so the shared list keeps its own order.
 const aiUnitBuyOrder = (tierDir: 1 | -1): EntityType[] =>
-  (Object.keys(ENTITY_META) as EntityType[])
-    .filter((e) => ENTITY_META[e].isUnit && !isRanged(e))
+  [...AI_BUYABLE_UNITS]
     .sort(
       (a, b) =>
         tierDir * (ENTITY_META[a].tier - ENTITY_META[b].tier) ||

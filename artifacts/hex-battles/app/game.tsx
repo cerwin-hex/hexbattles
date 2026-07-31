@@ -1641,6 +1641,7 @@ export default function GameScreen() {
           botInset={botInset}
           pushHistory={pushHistory}
           setEntities={setEntities}
+          setFiredUnits={setFiredUnits}
           setTerritoryBalances={setTerritoryBalances}
           setSelectedEntityKey={setSelectedEntityKey}
           onRemoveOverride={

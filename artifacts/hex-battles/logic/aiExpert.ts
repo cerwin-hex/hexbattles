@@ -14,14 +14,14 @@ import {
   unitMovement,
   unitMaxAttacks,
   isCavalry,
-  isRanged,
-  militaryValue,
+  MILITARY_VALUE,
   moveKind,
   DEFAULT_MOVEMENT,
   improveCostFor,
   IMPROVED_TERRAINS,
 } from "@/utils/hexGrid";
 import { calcTerritoryIncome, calcTerritoryUpkeep, mergeResult } from "@/logic/gameLogic";
+import { AI_BUYABLE_UNITS } from "@/constants/gameConstants";
 import { dtCountClusters, dtFindImproveMove } from "@/logic/aiHelpers";
 import type { AiContext } from "@/logic/aiHelpers";
 import type { AiDecisionExec } from "@/logic/aiStrategy";
@@ -58,8 +58,8 @@ export function __setExpertCandidateMode(m: CandidateMode | null): void {
 const FRONT_BUILD_REACH = 2;
 
 // When true (shipping), an *inert* isolated single-hex enemy tile — empty or
-// holding only a strength-0 rebel — does not count as "front" for the
-// `borderBonus`, `frontline` and `frontier` terms. See the rationale at the
+// holding only an occupant with no military value — does not count as "front"
+// for the `borderBonus`, `frontline` and `frontier` terms. See the rationale at the
 // call site in `evaluatePosition`. Toggleable for the self-play A/B (off ⇒
 // original behaviour: any non-owned neighbour is a front).
 let INERT_POCKET_FRONT = true;
@@ -82,8 +82,9 @@ export function __setExpertInertPocketFront(on: boolean | null): void {
  * so the gradient never blinds.
  *
  * `inertPockets` — isolated single-hex enemy tiles that cannot strike back
- * (empty, or holding only a strength-0 rebel/bridge). These must not count as
- * "front" for `borderBonus` / `frontline` / `frontier`; see INERT_POCKET_FRONT.
+ * (empty, or holding only a rebel/bridge, which have no military value). These
+ * must not count as "front" for `borderBonus` / `frontline` / `frontier`; see
+ * INERT_POCKET_FRONT.
  *
  * "Single-hex" is detected cheaply as "no adjacent same-owner land tile" — an
  * isolated enemy tile, exactly the pocket case — avoiding a full territory sweep
@@ -108,11 +109,14 @@ function enemyFrontInfo(
       substantial.push([t.q, t.r]);
     } else if (t.terrain !== "lake") {
       // Isolated. It is an INERT pocket only if nothing on it can strike back:
-      // empty, or a strength-0 occupant (rebel / bridge). A pocket holding a real
-      // unit or a fort keeps its front status — it defends itself and can attack
-      // out, and `threat` / `enemyMilitary` already drive killing it.
+      // empty, or a militarily worthless occupant (rebel / bridge). A pocket
+      // holding a real unit or a fort keeps its front status — it defends itself
+      // and can attack out, and `threat` / `enemyMilitary` already drive killing
+      // it. Tested on militaryValue (max of offense and defense) rather than on
+      // defense alone: a player Shortbowman is 2/0, so a defense-only test would
+      // call a tile that shoots back every turn "inert".
       const e = entities.get(t.key);
-      if (!e || ENTITY_META[e].defStrength === 0) inertPockets.add(t.key);
+      if (!e || MILITARY_VALUE[e] === 0) inertPockets.add(t.key);
     }
   }
   return { advanceTargets: substantial.length > 0 ? substantial : all, inertPockets };
@@ -260,7 +264,7 @@ function tileValue(
   return (
     (TERRAIN_INCOME[t.terrain] ?? 0) +
     (cities.has(key) ? CITY_BONUS : 0) +
-    (e && ENTITY_META[e].isUnit ? militaryValue(e) : 0) +
+    (e && ENTITY_META[e].isUnit ? MILITARY_VALUE[e] : 0) +
     // A fortification's defensive strength is real value: losing the tile both
     // hands the enemy ground and demolishes the fort. Without this a tower tile
     // scored the same as bare grass, so the AI never prioritised protecting (or
@@ -361,7 +365,7 @@ export function evaluatePosition(
     // whose removal improves our position. Counted regardless of adjacency so a
     // capture that destroys it shows up as a score gain.
     if (t.owner !== owner && t.owner !== "neutral") {
-      if (meta.isUnit || e === "tower" || e === "castle") enemyMilitary += militaryValue(e);
+      if (meta.isUnit || e === "tower" || e === "castle") enemyMilitary += MILITARY_VALUE[e];
       continue;
     }
     if (t.owner !== owner) continue; // neutral-owned entity (none today) — skip
@@ -386,10 +390,10 @@ export function evaluatePosition(
       return !!nt && nt.owner !== owner && nt.owner !== "neutral" && !isPhantomFront(nt);
     });
     if (meta.isUnit) {
-      unitStrength += militaryValue(e);
+      unitStrength += MILITARY_VALUE[e];
       mobility += (unitMovement(e) - DEFAULT_MOVEMENT) + (unitMaxAttacks(e) - 1);
-      if (onBorder) borderBonus += militaryValue(e);
-      if (enemyAdjacent) frontline += militaryValue(e);
+      if (onBorder) borderBonus += MILITARY_VALUE[e];
+      if (enemyAdjacent) frontline += MILITARY_VALUE[e];
       // Advance gradient: a unit far from any enemy is drawn forward. Diminishing
       // (capped at ADVANCE_REACH) so it never outweighs a real action.
       if (enemyCoords.length > 0) {
@@ -539,7 +543,7 @@ export function evaluatePosition(
     const e = entities.get(k);
     let v = 1; // the zeroed treasury / disrupted tile
     if (e && e !== "rebel") {
-      if (ENTITY_META[e].isUnit || e === "tower" || e === "castle") v += militaryValue(e);
+      if (ENTITY_META[e].isUnit || e === "tower" || e === "castle") v += MILITARY_VALUE[e];
     }
     if (cities.has(k)) v += CITY_BONUS;
     enemyIsolated += v;
@@ -769,10 +773,10 @@ export function opponentBestResponse(
 // (moves, buys, builds, upgrades, removes) so expert has no blind spots.
 // ════════════════════════════════════════════════════════════════════════════
 
-// Ranged units are player-only for now — see aiUnitBuyOrder in aiStrategy.ts.
-const UNIT_TYPES: EntityType[] = (Object.keys(ENTITY_META) as EntityType[]).filter(
-  (e) => ENTITY_META[e].isUnit && !isRanged(e),
-);
+// Which units expert may buy comes from the one shared list, so the ranged
+// exclusion cannot drift between expert and the other difficulties. Copied
+// because the shared list is readonly and must keep its own order.
+const UNIT_TYPES: EntityType[] = [...AI_BUYABLE_UNITS];
 
 export function generateCandidateActions(
   ctx: AiContext,

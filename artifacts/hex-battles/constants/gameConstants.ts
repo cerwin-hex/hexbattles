@@ -1,4 +1,4 @@
-import { ENTITY_META, IMPROVEMENTS } from "@/utils/hexGrid";
+import { ENTITY_META, IMPROVEMENTS, isRanged } from "@/utils/hexGrid";
 import type { EntityType, ImprovementMeta, UnitClass } from "@/utils/hexGrid";
 
 export const BTN_H = 52;
@@ -31,6 +31,22 @@ export const TIER_TO_UNIT: Record<UnitClass, Record<number, EntityType>> = {
   cavalry:  { 1: "scout",   2: "knight" },
   ranged:   { 1: "shortbowman", 2: "longbowman", 3: "crossbowman" },
 };
+
+/**
+ * The units the AI is allowed to buy — the single source of truth for the
+ * branch's headline scope constraint, "the AI never buys ranged units". Ranged
+ * units are player-only for now: the AI has no ranged behaviour, so buying one
+ * would just burn gold on a unit it never fires.
+ *
+ * Both AI buy lists derive from this — `aiUnitBuyOrder` in `logic/aiStrategy.ts`
+ * and `UNIT_TYPES` in `logic/aiExpert.ts` — so the filter cannot drift out of
+ * step between the difficulty tiers. Consumers that need a different order must
+ * copy before sorting; the readonly type makes an in-place `.sort()` a
+ * typecheck error.
+ */
+export const AI_BUYABLE_UNITS: readonly EntityType[] = (
+  Object.keys(ENTITY_META) as EntityType[]
+).filter((e) => ENTITY_META[e].isUnit && !isRanged(e));
 
 export const PURCHASABLES = (Object.keys(ENTITY_META) as EntityType[])
   .filter((id) => id !== "rebel")

@@ -56,7 +56,7 @@ Android-first turn-based hexagonal strategy game. Package name: `dk.hextek.hexba
 
 ### State and logic separation
 
-All game state lives in `app/game.tsx` as React state: `mutableTileMap`, `entities`, `territoryBalances`, `spentUnits`, `combatSpentUnits`, `partialMoves`, `liveOwnerMap`, `cities`, `graveyard`, `ruins`, `turn`, `isAiTurn`, `gameResult`, `selectedTileKey`, `selectedEntityKey`, `armedEntityId`.
+All game state lives in `app/game.tsx` as React state: `mutableTileMap`, `entities`, `territoryBalances`, `spentUnits`, `combatSpentUnits`, `partialMoves`, `liveOwnerMap`, `cities`, `graveyard`, `ruins`, `killMarks`, `firedUnits`, `turn`, `isAiTurn`, `gameResult`, `selectedTileKey`, `selectedEntityKey`, `armedEntityId`.
 
 Pure logic is extracted into:
 - `logic/gameLogic.ts` — Economy calculations (`calcTerritoryUpkeep`, `applySingleHexPenalty`), unit merging

@@ -23,6 +23,7 @@ interface EntityPanelProps {
   botInset: number;
   pushHistory: () => void;
   setEntities: (updater: (prev: Map<string, EntityType>) => Map<string, EntityType>) => void;
+  setFiredUnits: (updater: (prev: Set<string>) => Set<string>) => void;
   setTerritoryBalances: (updater: (prev: Map<string, number>) => Map<string, number>) => void;
   setSelectedEntityKey: (key: string | null) => void;
   onRemoveOverride?: () => void;
@@ -40,6 +41,7 @@ export default function EntityPanel({
   botInset,
   pushHistory,
   setEntities,
+  setFiredUnits,
   setTerritoryBalances,
   setSelectedEntityKey,
   onRemoveOverride,
@@ -79,7 +81,10 @@ export default function EntityPanel({
   return (
     <View style={[styles.entityPanel, { bottom: BOTTOM_BAR_H + botInset }]}>
       {entityId && hasStrength && (
-        <View style={{ justifyContent: "center", paddingHorizontal: 8 }}>
+        // flexShrink so the readout gives way on a narrow screen instead of
+        // pushing the Upgrade button off the fixed-width row (the buttons are
+        // content-sized, so without this the row simply overflows).
+        <View style={{ justifyContent: "center", paddingHorizontal: 8, flexShrink: 1 }}>
           <Text style={[styles.buildBtnText, { fontSize: 12 }]}>
             {`Atk ${ENTITY_META[entityId].offStrength} · Def ${ENTITY_META[entityId].defStrength}`}
           </Text>
@@ -126,6 +131,16 @@ export default function EntityPanel({
             } else {
               next.delete(selectedEntityKey);
             }
+            return next;
+          });
+          // firedUnits is keyed by tile, not by unit, so the removed unit's flag
+          // would otherwise be inherited by whatever is bought onto the tile
+          // next — a fresh bowman reading "Shot used" before it ever fired. The
+          // move path clears the destination the same way (advanceFired).
+          setFiredUnits((prev) => {
+            if (!prev.has(selectedEntityKey)) return prev;
+            const next = new Set(prev);
+            next.delete(selectedEntityKey);
             return next;
           });
           if (removeCost > 0) {

@@ -5,6 +5,7 @@ import {
   AI_UNIT_BUY_ORDER_ASC,
 } from "@/logic/aiStrategy";
 import { applySingleHexPenalty } from "@/logic/gameLogic";
+import { AI_BUYABLE_UNITS } from "@/constants/gameConstants";
 import type { AiWorkingState, AiTurnCallbacks, AiDecisionExec } from "@/logic/aiStrategy";
 import type { HexTile, EntityType, TerritoryOwner, AiStepSnapshot } from "@/types";
 import type { AiContext } from "@/logic/aiHelpers";
@@ -978,11 +979,24 @@ describe("runAiTerritoryDecisionLoop", () => {
 // ─── AI purchase candidates ───────────────────────────────────────────────────
 
 describe("AI purchase candidates", () => {
+  // AI_BUYABLE_UNITS is the single gate behind the branch's headline scope
+  // constraint, "the AI never buys ranged units". Both the heuristic buy order
+  // and expert's UNIT_TYPES derive from it, so asserting on it here covers
+  // every difficulty rather than only the one whose list is exported.
   it("never offers a ranged unit to the AI", () => {
     for (const id of ["shortbowman", "longbowman", "crossbowman"] as const) {
-      expect(AI_UNIT_BUY_ORDER_ASC).not.toContain(id);
+      expect(AI_BUYABLE_UNITS).not.toContain(id);
     }
-    expect(AI_UNIT_BUY_ORDER_ASC).toContain("peasant");
+  });
+
+  it("offers every infantry and cavalry unit to the AI", () => {
+    for (const id of ["peasant", "warrior", "swordsman", "scout", "knight"] as const) {
+      expect(AI_BUYABLE_UNITS).toContain(id);
+    }
+  });
+
+  it("derives the heuristic buy order from the shared list", () => {
+    expect([...AI_UNIT_BUY_ORDER_ASC].sort()).toEqual([...AI_BUYABLE_UNITS].sort());
   });
 });
 
@@ -996,6 +1010,20 @@ describe("ranged kill markers", () => {
     await runAiTurn(ws, cbs, ["ai1"], 3, "easy");
     // The AI phase ends by handing the turn back to the player; last round's
     // markers must be gone by then.
+    expect(setKillMarks).toHaveBeenCalledWith(new Set());
+  });
+
+  it("clears them after round 1 too, so a round-1 marker never lives two rounds", async () => {
+    // Pins a deliberate deviation: the clear sits OUTSIDE the `currentTurn !== 1`
+    // gate that suspends the player's rebel spawn. Rebel spawning has something
+    // to suspend in the opening round; marker expiry does not, and gating it
+    // would give a marker created in round 1 two full rounds on screen instead
+    // of the one the design guarantees. The round-3 case above passes either
+    // way, so without this case the placement is unpinned.
+    const setKillMarks = vi.fn();
+    const ws = makeEmptyWs(makeTileMap([makeTile(0, 0, "ai1"), makeTile(1, 0, "ai1")]));
+    const cbs = makeCbs({ state: { setKillMarks } });
+    await runAiTurn(ws, cbs, ["ai1"], 1, "easy");
     expect(setKillMarks).toHaveBeenCalledWith(new Set());
   });
 });

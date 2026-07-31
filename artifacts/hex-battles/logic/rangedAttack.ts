@@ -74,8 +74,14 @@ export function resolveRangedShot(o: {
   const killMarks = new Set(o.killMarks);
   const firedUnits = new Set(o.firedUnits);
 
+  const victim = o.entities.get(o.targetKey);
   entities.delete(o.targetKey);
-  if (o.tileMap.get(o.targetKey)?.terrain === "lake") {
+  // Only a unit can have been standing on a bridge, so only a unit leaves one
+  // behind. The guard is currently a no-op — no other lake occupant is a legal
+  // target (rebels never spawn on lake, and bridges cannot be shot) — but it
+  // keeps that invariant stated here instead of resting on a rule enforced in
+  // gameLogic's rebel spawner.
+  if (victim && ENTITY_META[victim].isUnit && o.tileMap.get(o.targetKey)?.terrain === "lake") {
     entities.set(o.targetKey, "bridge");
   }
   killMarks.add(o.targetKey);

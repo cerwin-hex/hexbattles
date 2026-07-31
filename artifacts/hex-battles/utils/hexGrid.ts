@@ -78,13 +78,30 @@ export function canCapture(entity: EntityType): boolean {
 }
 
 /**
+ * How much military weight an entity carries, precomputed once per entity type.
+ *
+ * The expert AI's `evaluatePosition` reads this several times per entity per
+ * candidate action, and it dominates the peak-turn budget, so the hot loops
+ * index this table directly instead of paying a call plus a `Math.max` for a
+ * value that can never change. `militaryValue()` below is the same table.
+ */
+export const MILITARY_VALUE: Record<EntityType, number> = Object.fromEntries(
+  (Object.keys(ENTITY_META) as EntityType[]).map((e) => [
+    e,
+    Math.max(ENTITY_META[e].offStrength, ENTITY_META[e].defStrength),
+  ]),
+) as Record<EntityType, number>;
+
+/**
  * How much military weight an entity carries, for AI valuation sums that care
  * about "how strong is this side" rather than about a specific attack or
  * defense roll. Equals the old `strength` for every non-ranged entity.
+ *
+ * A thin read of MILITARY_VALUE, kept as the named accessor (and the tested
+ * definition of the rule) for callers outside the eval's hot loops.
  */
 export function militaryValue(entity: EntityType): number {
-  const m = ENTITY_META[entity];
-  return Math.max(m.offStrength, m.defStrength);
+  return MILITARY_VALUE[entity];
 }
 
 /**

@@ -10,10 +10,16 @@ import { parse, SvgAst } from "react-native-svg";
 import type { EntityType } from "@/types";
 
 /**
- * Inline SVG markup for every unit/building plus the coin/skull/ruin markers —
- * the single icon source for board tokens, the purchase ribbon, the reference
+ * The single icon source for board tokens, the purchase ribbon, the reference
  * tables, the economy ledger, the HUD gold counter and the battlefield
- * graves/ruins. These replace the game's former emoji glyphs entirely.
+ * graves/ruins/kill markers.
+ *
+ * SVG first, emoji as the fallback: most entities plus the coin/skull/ruin
+ * markers are inline SVG markup, and an entity with no SVG art yet falls back
+ * to a placeholder glyph from EMOJI_ICON (the ranged track today). The kill
+ * marker is emoji-only, via KILL_MARK_EMOJI. UnitIcon picks the source per
+ * entity, so promoting a placeholder to real art is a one-entry move between
+ * the two maps.
  *
  * The source art lives in assets/icons/*.svg. There is no
  * react-native-svg-transformer configured, so the markup is inlined as strings

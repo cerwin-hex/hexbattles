@@ -38,7 +38,7 @@ export interface EconBreakdownResult {
     id: EntityType;
     name: string;
     count: number;
-    category: "infantry" | "cavalry" | "buildings";
+    category: "infantry" | "cavalry" | "ranged" | "buildings";
     upkeepPerUnit: number | null;
     mostExpensiveCost: number | null;
     total: number;
@@ -105,11 +105,14 @@ export function useEconBreakdown({
       const mostExpensiveCost = isDefense
         ? nextDefenseUpkeep(type as "tower" | "castle", count - 1)
         : null;
-      const category: "infantry" | "cavalry" | "buildings" = !meta.isUnit
+      // Read the track off unitClass rather than inferring it from a proxy
+      // field: `meta.movement` happens to be set only for cavalry today, but it
+      // labelled every bowman "infantry". The ?? is unreachable for units —
+      // ENTITY_META gives every unit a unitClass — and only satisfies the
+      // optional type.
+      const category: "infantry" | "cavalry" | "ranged" | "buildings" = !meta.isUnit
         ? "buildings"
-        : meta.movement
-          ? "cavalry"
-          : "infantry";
+        : (meta.unitClass ?? "infantry");
       return {
         id: type,
         name: meta.name,
