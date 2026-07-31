@@ -5,6 +5,7 @@ import {
   UNIT_UPGRADE,
   getContiguousTerritory,
   getTerritoryId,
+  isRanged,
 } from "@/utils/hexGrid";
 import type { EntityType, HexTile } from "@/types";
 import { BOTTOM_BAR_H } from "@/constants/gameConstants";
@@ -15,6 +16,7 @@ interface EntityPanelProps {
   entities: Map<string, EntityType>;
   activeTileMap: Map<string, HexTile>;
   spentUnits: Set<string>;
+  firedUnits: Set<string>;
   territoryBalances: Map<string, number>;
   isAiTurn: boolean;
   gameResult: "victory" | "defeat" | null;
@@ -31,6 +33,7 @@ export default function EntityPanel({
   entities,
   activeTileMap,
   spentUnits,
+  firedUnits,
   territoryBalances,
   isAiTurn,
   gameResult,
@@ -69,6 +72,24 @@ export default function EntityPanel({
 
   return (
     <View style={[styles.entityPanel, { bottom: BOTTOM_BAR_H + botInset }]}>
+      {entityId && (
+        <View style={{ justifyContent: "center", paddingHorizontal: 8 }}>
+          <Text style={[styles.buildBtnText, { fontSize: 12 }]}>
+            {`Atk ${ENTITY_META[entityId].offStrength} · Def ${ENTITY_META[entityId].defStrength}`}
+          </Text>
+          {isRanged(entityId) && (
+            <Text
+              style={[
+                styles.buildBtnText,
+                { fontSize: 11 },
+                !firedUnits.has(selectedEntityKey) && styles.buildBtnTextDisabled,
+              ]}
+            >
+              {firedUnits.has(selectedEntityKey) ? "Shot used" : "Shot ready"}
+            </Text>
+          )}
+        </View>
+      )}
       <TouchableOpacity
         style={[
           styles.buildBtn,

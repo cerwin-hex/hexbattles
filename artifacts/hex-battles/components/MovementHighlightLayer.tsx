@@ -2,6 +2,7 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { ENTITY_META } from "@/utils/hexGrid";
+import { areMovementHighlightLayerEqual } from "@/components/layerEquality";
 import type { EntityType, HexTile, TerrainType } from "@/types";
 
 export interface MovementHighlightLayerProps {
@@ -9,6 +10,7 @@ export interface MovementHighlightLayerProps {
   validBridgePlacementTiles: Set<string>;
   validImprovementTiles: Set<string>;
   validPlacementAttackTiles: Set<string>;
+  validRangedTargets: Set<string>;
   selectedTileKeys: Set<string>;
   armedEntityId: EntityType | null;
   armedImprovement: TerrainType | null;
@@ -27,6 +29,7 @@ function MovementHighlightLayerInner({
   validBridgePlacementTiles,
   validImprovementTiles,
   validPlacementAttackTiles,
+  validRangedTargets,
   selectedTileKeys,
   armedEntityId,
   armedImprovement,
@@ -56,6 +59,24 @@ function MovementHighlightLayerInner({
               cy={pos.cy}
               r={HEX_SIZE * 0.18}
               fill={isAttackMove ? "rgba(220,40,40,0.85)" : "rgba(255,220,0,0.85)"}
+            />
+          );
+        })}
+
+        {Array.from(validRangedTargets).map((key) => {
+          const pos = tileDataMap.get(key);
+          if (!pos) return null;
+          // A stroked ring, not a filled dot: a shot is not a move, and the two
+          // must never be confused at a glance.
+          return (
+            <Circle
+              key={`shot-ring-${key}`}
+              cx={pos.cx}
+              cy={pos.cy}
+              r={HEX_SIZE * 0.34}
+              fill="none"
+              stroke="rgba(220,40,40,0.95)"
+              strokeWidth={HEX_SIZE * 0.09}
             />
           );
         })}
@@ -139,29 +160,6 @@ function MovementHighlightLayerInner({
           })}
       </Svg>
     </View>
-  );
-}
-
-function areMovementHighlightLayerEqual(
-  prev: MovementHighlightLayerProps,
-  next: MovementHighlightLayerProps,
-): boolean {
-  return (
-    prev.validMoveTiles === next.validMoveTiles &&
-    prev.validBridgePlacementTiles === next.validBridgePlacementTiles &&
-    prev.validImprovementTiles === next.validImprovementTiles &&
-    prev.validPlacementAttackTiles === next.validPlacementAttackTiles &&
-    prev.selectedTileKeys === next.selectedTileKeys &&
-    prev.armedEntityId === next.armedEntityId &&
-    prev.armedImprovement === next.armedImprovement &&
-    prev.entities === next.entities &&
-    prev.activeTileMap === next.activeTileMap &&
-    prev.graveyard === next.graveyard &&
-    prev.fortificationDots === next.fortificationDots &&
-    prev.tileDataMap === next.tileDataMap &&
-    prev.boardW === next.boardW &&
-    prev.boardH === next.boardH &&
-    prev.HEX_SIZE === next.HEX_SIZE
   );
 }
 

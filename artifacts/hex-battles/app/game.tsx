@@ -1372,6 +1372,7 @@ export default function GameScreen() {
                 validMoveTiles={validMoveTiles}
                 validBridgePlacementTiles={validBridgePlacementTiles}
                 validPlacementAttackTiles={validPlacementAttackTiles}
+                validRangedTargets={validRangedTargets}
                 armedEntityId={armedEntityId}
                 tileDataMap={tileDataMap}
                 HEX_SIZE={HEX_SIZE}
@@ -1399,6 +1400,7 @@ export default function GameScreen() {
             <GraveyardLayer
               graveyard={graveyard}
               ruins={ruins}
+              killMarks={killMarks}
               entities={entities}
               tileDataMap={tileDataMap}
               HEX_SIZE={HEX_SIZE}
@@ -1459,6 +1461,7 @@ export default function GameScreen() {
               validBridgePlacementTiles={validBridgePlacementTiles}
               validImprovementTiles={validImprovementTiles}
               validPlacementAttackTiles={validPlacementAttackTiles}
+              validRangedTargets={validRangedTargets}
               selectedTileKeys={selectedTileKeys}
               armedEntityId={armedEntityId}
               armedImprovement={armedImprovement}
@@ -1619,6 +1622,7 @@ export default function GameScreen() {
           entities={entities}
           activeTileMap={activeTileMap}
           spentUnits={spentUnits}
+          firedUnits={firedUnits}
           territoryBalances={territoryBalances}
           isAiTurn={isAiTurn}
           gameResult={gameResult}
