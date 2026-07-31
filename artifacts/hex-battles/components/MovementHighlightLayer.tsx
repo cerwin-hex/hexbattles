@@ -2,27 +2,14 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { ENTITY_META } from "@/utils/hexGrid";
-import { areMovementHighlightLayerEqual } from "@/components/layerEquality";
-import type { EntityType, HexTile, TerrainType } from "@/types";
+import {
+  areMovementHighlightLayerEqual,
+  type MovementHighlightLayerEqualProps,
+} from "@/components/layerEquality";
 
-export interface MovementHighlightLayerProps {
-  validMoveTiles: Set<string>;
-  validBridgePlacementTiles: Set<string>;
-  validImprovementTiles: Set<string>;
-  validPlacementAttackTiles: Set<string>;
-  validRangedTargets: Set<string>;
-  selectedTileKeys: Set<string>;
-  armedEntityId: EntityType | null;
-  armedImprovement: TerrainType | null;
-  entities: Map<string, EntityType>;
-  activeTileMap: Map<string, HexTile>;
-  graveyard: Set<string>;
-  fortificationDots: Set<string>;
-  tileDataMap: Map<string, { cx: number; cy: number }>;
-  boardW: number;
-  boardH: number;
-  HEX_SIZE: number;
-}
+// The prop list lives with the equality function it is compared by, so a new
+// prop cannot be added without deciding how the memo compares it.
+export type MovementHighlightLayerProps = MovementHighlightLayerEqualProps;
 
 function MovementHighlightLayerInner({
   validMoveTiles,

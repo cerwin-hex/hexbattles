@@ -327,13 +327,25 @@ export default function GameScreen() {
   // At most one thing is armed at a time. Every arming path in the app goes
   // through these two setters, so the invariant lives in exactly one place and
   // children keep their existing `setArmedEntityId(null)` call shape.
+  //
+  // Arming also clears the unit selection, making "a unit is selected" and "a
+  // purchase is armed" mutually exclusive. Without that, a selected unit's
+  // highlights and the armed purchase's highlights can both claim the same
+  // enemy tile — and the tap handler's unit branches outrank both buy branches,
+  // so the purchase highlight would be a lie about what tapping does. Only
+  // arming clears it: disarming (`null`) must leave the selection alone,
+  // because completing or cancelling a purchase should not also deselect.
+  // Clearing selectedEntityKey does not disturb selectedTileKey, so the
+  // territory selection the purchase highlights are computed from survives.
   const setArmedEntityId = useCallback((id: EntityType | null) => {
     setArmedEntityIdState(id);
     setArmedImprovementState(null);
+    if (id !== null) setSelectedEntityKey(null);
   }, []);
   const setArmedImprovement = useCallback((t: TerrainType | null) => {
     setArmedImprovementState(t);
     setArmedEntityIdState(null);
+    if (t !== null) setSelectedEntityKey(null);
   }, []);
   const lastTileTapMs = useRef(0);
   const [entities, setEntities] = useState<Map<string, EntityType>>(new Map());

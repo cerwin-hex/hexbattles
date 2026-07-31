@@ -69,10 +69,16 @@ export default function EntityPanel({
   const removeEnabled = isUnit
     ? !isSpent
     : !!entityTerritoryId && entityTerritoryBalance >= removeCost;
+  // Bridges, cities and rebels are all 0/0 in ENTITY_META — a strength readout
+  // for them would be noise at best and misleading at worst, so the line is
+  // driven off the data rather than off an entity allow-list.
+  const hasStrength = entityId
+    ? ENTITY_META[entityId].offStrength > 0 || ENTITY_META[entityId].defStrength > 0
+    : false;
 
   return (
     <View style={[styles.entityPanel, { bottom: BOTTOM_BAR_H + botInset }]}>
-      {entityId && (
+      {entityId && hasStrength && (
         <View style={{ justifyContent: "center", paddingHorizontal: 8 }}>
           <Text style={[styles.buildBtnText, { fontSize: 12 }]}>
             {`Atk ${ENTITY_META[entityId].offStrength} · Def ${ENTITY_META[entityId].defStrength}`}
@@ -82,7 +88,9 @@ export default function EntityPanel({
               style={[
                 styles.buildBtnText,
                 { fontSize: 11 },
-                !firedUnits.has(selectedEntityKey) && styles.buildBtnTextDisabled,
+                // The actionable state carries the full colour; the spent one is
+                // dimmed, matching how every other affordance in the UI reads.
+                firedUnits.has(selectedEntityKey) && styles.buildBtnTextDisabled,
               ]}
             >
               {firedUnits.has(selectedEntityKey) ? "Shot used" : "Shot ready"}

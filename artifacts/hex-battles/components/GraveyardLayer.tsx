@@ -6,17 +6,14 @@ import {
   RuinIcon,
   SkullIcon,
 } from "@/components/UnitIcon";
-import { areGraveyardLayerEqual } from "@/components/layerEquality";
-import type { EntityType } from "@/types";
+import {
+  areGraveyardLayerEqual,
+  type GraveyardLayerEqualProps,
+} from "@/components/layerEquality";
 
-export interface GraveyardLayerProps {
-  graveyard: Set<string>;
-  ruins: Set<string>;
-  killMarks: Set<string>;
-  entities: Map<string, EntityType>;
-  tileDataMap: Map<string, { cx: number; cy: number }>;
-  HEX_SIZE: number;
-}
+// The prop list lives with the equality function it is compared by, so a new
+// prop cannot be added without deciding how the memo compares it.
+export type GraveyardLayerProps = GraveyardLayerEqualProps;
 
 /**
  * Battlefield graves (skulls), razed buildings (ruins) and ranged kill marks
