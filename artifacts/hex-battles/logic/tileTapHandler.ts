@@ -15,7 +15,6 @@ import {
   unitMovement,
   unitMaxAttacks,
   moveKind,
-  canCapture,
 } from "@/utils/hexGrid";
 import {
   advanceAttacksUsed,
@@ -23,6 +22,7 @@ import {
   advanceFired,
   applySingleHexPenalty,
   canImproveTile,
+  classifyOwnTilePlacement,
   isChargeAttack,
   mergeResult,
   resolveMovedUnitMoves,
@@ -486,54 +486,30 @@ export function handleTileTapLogic(params: TileTapParams): void {
   if (armedEntityId && selectedTileKeys.has(key)) {
     const existingOnTile = entities.get(key);
     const armedIsUnit = ENTITY_META[armedEntityId].isUnit;
-    const existingIsAllyUnit =
-      !!existingOnTile &&
-      existingOnTile !== "rebel" &&
-      existingOnTile !== "city" &&
-      existingOnTile !== "bridge" &&
-      ENTITY_META[existingOnTile].isUnit &&
-      activeTileMap.get(key)?.owner === "player";
-    const mergeBuyInto =
-      armedIsUnit && existingIsAllyUnit
-        ? mergeResult(armedEntityId, existingOnTile!)
-        : null;
+    const tileData = activeTileMap.get(key);
+    // The shared rule — mirrored by the purchase dots in MovementHighlightLayer,
+    // which is why it lives in gameLogic rather than here. It covers occupancy,
+    // merging, rebel/building overruns, bridges and lakes; cities and graveyards
+    // are ours to add below.
+    const placement = classifyOwnTilePlacement({
+      armedEntityId,
+      occupant: existingOnTile,
+      tileOwner: tileData?.owner,
+      terrain: tileData?.terrain ?? "grass",
+    });
+    const mergeBuyInto = placement.mergeInto;
     const canMerge = mergeBuyInto !== null;
-    const canOverwriteRebel =
-      armedIsUnit && canCapture(armedEntityId) && existingOnTile === "rebel";
+    const canOverwriteRebel = placement.overwritesRebel;
     // A charge unit (maxAttacks > 1) bought directly onto a rebel spends one
     // attack but stays active so it can charge on and attack again, mirroring
     // the buy-into-attack capture path. Other units are spent immediately.
     const isChargeRebelOverwrite =
       canOverwriteRebel && unitMaxAttacks(armedEntityId) > 1;
-    const existingIsBuilding =
-      !!existingOnTile &&
-      !ENTITY_META[existingOnTile].isUnit &&
-      existingOnTile !== "rebel";
-    const existingBuildingIsOwn =
-      existingIsBuilding && activeTileMap.get(key)?.owner === "player";
-    const canOverwriteBuilding =
-      armedIsUnit &&
-      canCapture(armedEntityId) &&
-      existingIsBuilding &&
-      !existingBuildingIsOwn &&
-      ENTITY_META[armedEntityId].offStrength >=
-        ENTITY_META[existingOnTile as EntityType].defStrength;
-    const canPlaceOnBridge =
-      armedIsUnit &&
-      existingOnTile === "bridge" &&
-      activeTileMap.get(key)?.owner === "player";
     // Cities live in a separate Set from entities, so an empty city tile has
     // no entity. Block any non-unit armed entity (city/tower/castle/bridge)
     // from being placed on a city — only units may stand on cities.
     const alreadyOccupied =
-      (!!existingOnTile && !canMerge && !canOverwriteRebel && !canOverwriteBuilding && !canPlaceOnBridge) ||
-      (!armedIsUnit && cities.has(key));
-    // Don't allow placement on lake tiles unless there's a bridge (bridges are placed via validBridgePlacementTiles path)
-    const tileData = activeTileMap.get(key);
-    if (tileData?.terrain === "lake" && existingOnTile !== "bridge") {
-      triggerErrorFlash(key);
-      return;
-    }
+      placement.blocked || (!armedIsUnit && cities.has(key));
     if (!alreadyOccupied && selectedTerritoryId) {
       const meta = ENTITY_META[armedEntityId];
       const balance = territoryBalances.get(selectedTerritoryId) ?? 0;

@@ -2,6 +2,7 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { ENTITY_META } from "@/utils/hexGrid";
+import { classifyOwnTilePlacement } from "@/logic/gameLogic";
 import {
   areMovementHighlightLayerEqual,
   type MovementHighlightLayerEqualProps,
@@ -102,24 +103,26 @@ function MovementHighlightLayerInner({
           armedEntityId !== "bridge" &&
           Array.from(selectedTileKeys).map((key) => {
             const pos = tileDataMap.get(key);
-            if (!pos) return null;
-            if (armedEntityId && !ENTITY_META[armedEntityId].isUnit) {
-              if (entities.get(key) || graveyard.has(key) || fortificationDots.has(key))
-                return null;
-            }
-            if (armedEntityId && ENTITY_META[armedEntityId].isUnit) {
-              const existingEntity = entities.get(key);
-              if (
-                existingEntity &&
-                !ENTITY_META[existingEntity].isUnit &&
-                existingEntity !== "rebel" &&
-                existingEntity !== "bridge" &&
-                activeTileMap.get(key)?.owner === "player"
-              )
-                return null;
-            }
-            const isRebelTarget =
-              ENTITY_META[armedEntityId].isUnit && entities.get(key) === "rebel";
+            const tile = activeTileMap.get(key);
+            if (!pos || !tile) return null;
+            // The same rule the tap handler acts on, so a dot never invites a
+            // tap that only error-flashes: a bowman gets no dot on a rebel it
+            // cannot overrun, and no unit gets one on a unit it cannot merge with.
+            const placement = classifyOwnTilePlacement({
+              armedEntityId,
+              occupant: entities.get(key),
+              tileOwner: tile.owner,
+              terrain: tile.terrain,
+            });
+            if (placement.blocked) return null;
+            // Graveyards block buildings only, and are the handler's own check
+            // rather than part of the shared rule.
+            if (
+              !ENTITY_META[armedEntityId].isUnit &&
+              (graveyard.has(key) || fortificationDots.has(key))
+            )
+              return null;
+            const isRebelTarget = placement.overwritesRebel;
             return (
               <Circle
                 key={`place-dot-${key}`}

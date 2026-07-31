@@ -4,6 +4,7 @@ import {
   HexTile,
   TerritoryOwner,
   ENTITY_META,
+  canCapture,
   calcDefenseUpkeep,
   getContiguousTerritory,
   getTerritoryId,
@@ -364,6 +365,77 @@ export function mergeResult(a: EntityType, b: EntityType): EntityType | null {
   if (!ca || ca !== cb) return null;
   const total = ENTITY_META[a].tier + ENTITY_META[b].tier;
   return TIER_TO_UNIT[ca][total] ?? null;
+}
+
+/** How an armed purchase resolves on one tile of the player's own territory. */
+export interface OwnTilePlacement {
+  /** The unit this purchase merges into, or null when it is not a merge. */
+  mergeInto: EntityType | null;
+  /** The purchase overruns a rebel that stands inside our own territory. */
+  overwritesRebel: boolean;
+  /** The purchase takes an enemy building that lost the strength contest. */
+  overwritesBuilding: boolean;
+  /** The purchase puts a unit on one of our own bridges. */
+  standsOnBridge: boolean;
+  /** Nothing legal can be bought here, whatever the balance says. */
+  blocked: boolean;
+}
+
+/**
+ * Whether — and how — the armed entity may be bought onto a tile of the
+ * player's own territory. The single source of truth for that rule, shared by
+ * the tap handler (which acts on it) and the highlight layer (which draws it);
+ * they drifted apart once already, leaving purchase dots on tiles that only
+ * error-flash when tapped.
+ *
+ * Gold, cities and graveyards are deliberately out of scope: the caller owns
+ * those, because the highlight layer cannot see all of them.
+ */
+export function classifyOwnTilePlacement(o: {
+  armedEntityId: EntityType;
+  occupant: EntityType | undefined;
+  tileOwner: TerritoryOwner | undefined;
+  terrain: TerrainType;
+}): OwnTilePlacement {
+  const { armedEntityId, occupant, tileOwner, terrain } = o;
+  const armedIsUnit = ENTITY_META[armedEntityId].isUnit;
+  const occupantIsAllyUnit =
+    !!occupant &&
+    occupant !== "rebel" &&
+    occupant !== "city" &&
+    occupant !== "bridge" &&
+    ENTITY_META[occupant].isUnit &&
+    tileOwner === "player";
+  const mergeInto =
+    armedIsUnit && occupantIsAllyUnit ? mergeResult(armedEntityId, occupant) : null;
+  const overwritesRebel =
+    armedIsUnit && canCapture(armedEntityId) && occupant === "rebel";
+  const occupantIsBuilding =
+    !!occupant && !ENTITY_META[occupant].isUnit && occupant !== "rebel";
+  const overwritesBuilding =
+    armedIsUnit &&
+    canCapture(armedEntityId) &&
+    occupantIsBuilding &&
+    tileOwner !== "player" &&
+    ENTITY_META[armedEntityId].offStrength >= ENTITY_META[occupant].defStrength;
+  const standsOnBridge =
+    armedIsUnit && occupant === "bridge" && tileOwner === "player";
+  // A lake tile carries a purchase only through a bridge, and only for a unit —
+  // an armed bridge is placed through its own path, never this one.
+  const lakeBlocked = terrain === "lake" && occupant !== "bridge";
+  return {
+    mergeInto,
+    overwritesRebel,
+    overwritesBuilding,
+    standsOnBridge,
+    blocked:
+      lakeBlocked ||
+      (!!occupant &&
+        !mergeInto &&
+        !overwritesRebel &&
+        !overwritesBuilding &&
+        !standsOnBridge),
+  };
 }
 
 /**

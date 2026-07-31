@@ -80,29 +80,6 @@ export default function EntityPanel({
 
   return (
     <View style={[styles.entityPanel, { bottom: BOTTOM_BAR_H + botInset }]}>
-      {entityId && hasStrength && (
-        // flexShrink so the readout gives way on a narrow screen instead of
-        // pushing the Upgrade button off the fixed-width row (the buttons are
-        // content-sized, so without this the row simply overflows).
-        <View style={{ justifyContent: "center", paddingHorizontal: 8, flexShrink: 1 }}>
-          <Text style={[styles.buildBtnText, { fontSize: 12 }]}>
-            {`Atk ${ENTITY_META[entityId].offStrength} · Def ${ENTITY_META[entityId].defStrength}`}
-          </Text>
-          {isRanged(entityId) && (
-            <Text
-              style={[
-                styles.buildBtnText,
-                { fontSize: 11 },
-                // The actionable state carries the full colour; the spent one is
-                // dimmed, matching how every other affordance in the UI reads.
-                firedUnits.has(selectedEntityKey) && styles.buildBtnTextDisabled,
-              ]}
-            >
-              {firedUnits.has(selectedEntityKey) ? "Shot used" : "Shot ready"}
-            </Text>
-          )}
-        </View>
-      )}
       <TouchableOpacity
         style={[
           styles.buildBtn,
@@ -190,6 +167,37 @@ export default function EntityPanel({
           ⬆ Upgrade {canUpgrade ? `(${upgradeCost})` : "(Max)"}
         </Text>
       </TouchableOpacity>
+      {entityId && hasStrength && (
+        // Pushed to the far right by marginLeft:auto so the buttons keep the
+        // left edge they have always had. flexShrink so the readout gives way on
+        // a narrow screen instead of overflowing the row.
+        <View
+          style={{
+            marginLeft: "auto",
+            justifyContent: "center",
+            alignItems: "flex-end",
+            paddingLeft: 8,
+            flexShrink: 1,
+          }}
+        >
+          <Text style={[styles.buildBtnText, { fontSize: 12 }]}>
+            {`Atk ${ENTITY_META[entityId].offStrength} · Def ${ENTITY_META[entityId].defStrength}`}
+          </Text>
+          {isRanged(entityId) && (
+            <Text
+              style={[
+                styles.buildBtnText,
+                { fontSize: 11 },
+                // The actionable state carries the full colour; the spent one is
+                // dimmed, matching how every other affordance in the UI reads.
+                firedUnits.has(selectedEntityKey) && styles.buildBtnTextDisabled,
+              ]}
+            >
+              {firedUnits.has(selectedEntityKey) ? "Shot used" : "Shot ready"}
+            </Text>
+          )}
+        </View>
+      )}
     </View>
   );
 }

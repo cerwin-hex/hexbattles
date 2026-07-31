@@ -6,6 +6,7 @@ import {
   applyOwnerEconomy,
   initTerritoryBalances,
   mergeResult,
+  classifyOwnTilePlacement,
   resolveMovedUnitMoves,
   effectiveRemaining,
   isChargeAttack,
@@ -153,6 +154,69 @@ describe("mergeResult", () => {
     const step1 = mergeResult("scout", "scout");
     expect(step1).toBe("knight");
     expect(mergeResult("knight", "scout")).toBeNull();
+  });
+});
+
+// ─── classifyOwnTilePlacement ─────────────────────────────────────────────────
+
+describe("classifyOwnTilePlacement", () => {
+  function classify(
+    armedEntityId: EntityType,
+    occupant?: EntityType,
+    opts: { tileOwner?: TerritoryOwner; terrain?: HexTile["terrain"] } = {},
+  ) {
+    return classifyOwnTilePlacement({
+      armedEntityId,
+      occupant,
+      tileOwner: opts.tileOwner ?? "player",
+      terrain: opts.terrain ?? "grass",
+    });
+  }
+
+  it("an empty tile takes any purchase", () => {
+    expect(classify("shortbowman").blocked).toBe(false);
+    expect(classify("peasant").blocked).toBe(false);
+    expect(classify("tower").blocked).toBe(false);
+  });
+
+  it("a ranged unit cannot overrun a rebel — it takes no ground", () => {
+    const p = classify("shortbowman", "rebel");
+    expect(p.blocked).toBe(true);
+    expect(p.overwritesRebel).toBe(false);
+  });
+
+  it("a capturing unit overruns a rebel", () => {
+    const p = classify("peasant", "rebel");
+    expect(p.blocked).toBe(false);
+    expect(p.overwritesRebel).toBe(true);
+  });
+
+  it("only same-track units that merge are placeable on an ally", () => {
+    expect(classify("shortbowman", "shortbowman").mergeInto).toBe("longbowman");
+    expect(classify("shortbowman", "peasant").blocked).toBe(true);
+    expect(classify("peasant", "shortbowman").blocked).toBe(true);
+    // Same track, but tier 1 + tier 3 overflows the track — no merge, no dot.
+    expect(classify("shortbowman", "crossbowman").blocked).toBe(true);
+  });
+
+  it("a ranged unit cannot take an enemy building", () => {
+    expect(classify("shortbowman", "tower", { tileOwner: "ai1" }).blocked).toBe(true);
+    expect(
+      classify("swordsman", "tower", { tileOwner: "ai1" }).overwritesBuilding,
+    ).toBe(true);
+  });
+
+  it("our own buildings are never overwritten", () => {
+    expect(classify("swordsman", "tower").blocked).toBe(true);
+  });
+
+  it("a lake tile carries a unit only through a bridge", () => {
+    expect(classify("peasant", undefined, { terrain: "lake" }).blocked).toBe(true);
+    const bridged = classify("peasant", "bridge", { terrain: "lake" });
+    expect(bridged.blocked).toBe(false);
+    expect(bridged.standsOnBridge).toBe(true);
+    // A building cannot be founded on the bridge a unit may stand on.
+    expect(classify("tower", "bridge", { terrain: "lake" }).blocked).toBe(true);
   });
 });
 
