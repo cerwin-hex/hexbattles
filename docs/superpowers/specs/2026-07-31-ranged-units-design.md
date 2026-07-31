@@ -183,36 +183,30 @@ today, which is why the cavalry rules had to be mirrored three times:
 2. `getPlacementAttackTiles` — `utils/hexGrid.ts`
 3. the armed-placement branch in `handleTileTapLogic` — `logic/tileTapHandler.ts`
 
-Rather than mirroring the ranged rules a fourth time, generalise
-`cavalryMoveKind` / `cavalryMayEnter` into a class-agnostic pair that all three
-sites call:
+The ranged rule is expressed as **one predicate**, `canCapture(e)` (`false` only
+for ranged units), applied at every point where a unit takes ground:
 
-```ts
-export type MoveKind = "empty" | "entity" | "building";
-export function moveKind(destEntity: EntityType | undefined): MoveKind;
-export function mayEnter(o: {
-  mover: EntityType;
-  destEntity: EntityType | undefined;
-  isOwnTerritory: boolean;
-  hasStruck: boolean;
-}): boolean;
-```
+1. `getValidMoves`, neutral branch — `if (!canCapture(mover)) continue;`
+2. `getValidMoves`, enemy branch — same guard, alongside the existing cavalry check
+3. `getValidMoves`, own-territory rebel branch — ranged may not step onto a
+   rebel, because clearing a rebel is a strike
+4. `getPlacementAttackTiles` — returns an empty set for a ranged armed unit, so
+   a bowman can never be bought into an attack
+5. `handleTileTapLogic` armed placement — `canOverwriteRebel` and
+   `canOverwriteBuilding` both require `canCapture`
 
-Per class:
+A single all-classes `mayEnter` predicate was considered and rejected. The
+cavalry rules are consulted at *some* branches and deliberately not at others —
+a cavalry unit that has already struck may still move onto a friendly unit to
+merge, and may still take a neutral tile that happens to hold a rebel. Routing
+every branch through one predicate would silently change both. What *is* worth
+consolidating is `cavalryMoveKind`, which is already class-agnostic and is
+called for non-cavalry purposes in `tileTapHandler`: rename it to `moveKind`.
+`cavalryMayEnter` keeps its name and its cavalry-only scope.
 
-- **infantry** — unchanged: any tile subject to the caller's ZoC/range checks.
-- **cavalry** — unchanged: never a building; never an occupied tile once it has
-  struck this turn.
-- **ranged** — only tiles the mover's owner already owns, and never a rebel
-  tile. Concretely: the neutral branch and the enemy branch of `getValidMoves`
-  reject ranged outright; `getPlacementAttackTiles` returns empty for a ranged
-  armed unit; and in the armed-placement branch, `canOverwriteRebel` and
-  `canOverwriteBuilding` are false for ranged.
-
-Ranged units follow the existing ally-tile rules unchanged (they may move onto
-an allied unit's tile to merge). The pre-existing behaviour where moving onto an
-allied unit that *cannot* merge destroys the destination unit is out of scope
-and is not made better or worse here.
+Ranged units follow the existing ally-tile rules unchanged: they may move onto
+an allied unit's tile to merge, and `useSelectionState` already strips ally
+tiles whose merge would be illegal, so no new guard is needed.
 
 ## 5. The ranged attack
 
@@ -294,24 +288,37 @@ AI exec callbacks).
 ## 6. The kill marker
 
 A new marker set, `killMarks: Set<string>`, sitting beside `graveyard` and
-`ruins` and reusing the existing `ArmedSites` lifecycle machinery:
+`ruins`:
 
 - placed when a ranged shot kills;
-- armed at round start like graves, so it always survives at least one full
-  player turn on screen;
-- swept when the tile owner starts their next turn — **without any rebel roll**;
-- cleared immediately when any unit enters the tile, exactly like a grave;
-- orphaned markers on unowned water tiles expire via the same neutral sweep.
+- cleared immediately when a unit enters the tile, exactly like a grave (and
+  hidden under any occupying token, since `GraveyardLayer` already skips keys
+  present in `entities`);
+- otherwise cleared wholesale at the **start of the player's turn**.
 
-The sweep is a new `sweepKillMarks(owner, tileMap, killMarks, armedKillMarks)`
-in `logic/gameLogic.ts`, modelled on `spawnRebelsForOwner` minus the rebel
-logic. Rendering is a third branch in `GraveyardLayer` using the 🎯 glyph.
+That single clear reproduces a grave's on-screen lifetime exactly, and it does
+so without the `ArmedSites` two-phase machinery. The reasoning is specific to
+v1: only the player can create a kill marker, and it can only be created during
+the player's own turn. A marker placed in turn N therefore survives the rest of
+turn N and the whole AI phase, and disappears as turn N+1 begins — one full
+round, the same as a grave. The moment the AI gains ranged units this must
+become an owner-scoped sweep with arming, like graves; note it in the code.
 
-Plumbing (the same set of places `graveyard` already threads through):
-`app/game.tsx` state, `MoveHistorySnapshot`, `AiStepSnapshot`,
-`logic/endTurnHandler.ts`, `logic/aiStrategy.ts` (the `AiDecisionExec` state
-callbacks), `hooks/useMoveHistory.ts`, `hooks/useAiTurnCallbacks.ts`,
-`logic/aiSelfPlay.ts` (no-op setter) and `utils/savedGame.ts`.
+Concretely: `AiDecisionExec.state` gains a `setKillMarks` callback, called with
+an empty set in the player block at the end of `runAiTurn` in
+`logic/aiStrategy.ts` — the same place the player's rebel spawn and re-arm
+already run, which is the start of the player's turn.
+
+The marker is **not** threaded through the AI's working state. The AI never
+creates one, and an AI unit stepping onto a marked tile hides it visually and
+then has it cleared by the turn-start sweep anyway.
+
+Rendering is a third branch in `GraveyardLayer` using the 🎯 glyph.
+
+Plumbing: `app/game.tsx` state, `MoveHistorySnapshot` (so undoing a shot removes
+the marker along with restoring the victim), `hooks/useMoveHistory.ts`,
+`hooks/useAiTurnCallbacks.ts`, `logic/aiSelfPlay.ts` (no-op setter) and
+`utils/savedGame.ts`.
 
 ## 7. UI
 
@@ -382,9 +389,12 @@ new-vs-old A/B run is required for this branch.
 ## 9. Persistence
 
 `utils/savedGame.ts` serialises `EntityType` values directly, so saves
-containing ranged units work without a format change. Loading must default the
-new marker set: `killMarks: new Set(parsed.state.killMarks ?? [])`, so saves
-written before this branch still load.
+containing ranged units work without a format change. Saves capture mid-turn
+state (`spentUnits`, `attacksUsed`), so both new sets join them as optional
+fields, defaulted on load exactly like `armedGraveyard` already is:
+`killMarks: new Set(parsed.state.killMarks ?? [])` and
+`firedUnits: new Set(parsed.state.firedUnits ?? [])`. Saves written before this
+branch keep loading.
 
 ## 10. Testing
 
