@@ -757,6 +757,23 @@ describe("armed entity placement on own territory", () => {
     expect(params.triggerErrorFlash).toHaveBeenCalledWith("1,0");
   });
 
+  it("cannot buy a ranged unit onto a rebel in our own territory", () => {
+    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: tileMap(tiles),
+      armedEntityId: "shortbowman",
+      selectedTileKeys: new Set(["0,0", "1,0"]),
+      selectedTerritoryId: "0,0",
+      selectedTerritory: tiles,
+      entities: new Map([["1,0", "rebel"]]),
+      territoryBalances: new Map([["0,0", 100]]),
+    });
+    handleTileTapLogic(params);
+    expect(params.triggerErrorFlash).toHaveBeenCalledWith("1,0");
+    expect(params.setEntities).not.toHaveBeenCalled();
+  });
+
   it("founds a city on an improved (field) tile and removes the improvement", () => {
     const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player", "field")];
     const territory = [
