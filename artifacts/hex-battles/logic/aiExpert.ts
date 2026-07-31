@@ -15,7 +15,7 @@ import {
   unitMaxAttacks,
   isCavalry,
   militaryValue,
-  cavalryMoveKind,
+  moveKind,
   DEFAULT_MOVEMENT,
   improveCostFor,
   IMPROVED_TERRAINS,
@@ -744,7 +744,7 @@ export function opponentBestResponse(
       if (!nt || nt.owner !== owner) continue;
       if (nt.terrain === "mountain" || nt.terrain === "lake") continue;
       const targetE = s.entities.get(nk);
-      if (isCavalry(e) && cavalryMoveKind(targetE) === "building") continue;
+      if (isCavalry(e) && moveKind(targetE) === "building") continue;
       if (strength <= getMaxEnemyZoC(nk, enemyOwner, s.entities, s.tileMap)) continue;
       const v = tileValue(nk, s.tileMap, s.entities, s.cities);
       if (v > bestValue) {
@@ -875,7 +875,7 @@ export function generateCandidateActions(
       if (mt.owner !== owner) {
         // capture / neutral grab — must beat the defending ZoC
         const targetE = ctx.entities.get(mk);
-        if (isCavalry(ue) && cavalryMoveKind(targetE) === "building") continue;
+        if (isCavalry(ue) && moveKind(targetE) === "building") continue;
         const zoc = getMaxEnemyZoC(mk, owner, ctx.entities, ctx.tileMap);
         if (ENTITY_META[ue].offStrength <= zoc) continue;
         out.push({ kind: "move", from: uk, to: mk });
@@ -956,7 +956,7 @@ export function generateCandidateActions(
         if (!nt || nt.owner === owner) continue;
         if (nt.terrain === "lake" || nt.terrain === "mountain") continue;
         const ne = ctx.entities.get(nk);
-        if (isCavalry(uType) && cavalryMoveKind(ne) === "building") continue;
+        if (isCavalry(uType) && moveKind(ne) === "building") continue;
         const zoc = getMaxEnemyZoC(nk, owner, ctx.entities, ctx.tileMap);
         if (ENTITY_META[uType].offStrength <= zoc) continue;
         out.push({ kind: "buy", unitType: uType, target: nk, cost, outside: true });

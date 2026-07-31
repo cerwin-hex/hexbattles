@@ -82,14 +82,12 @@ export function militaryValue(entity: EntityType): number {
 }
 
 /**
- * Classify what a cavalry unit would be doing by entering a tile that holds
- * `destEntity`: striking a defender ("entity"), assaulting a fortification
- * ("building" — forbidden for cavalry), or taking an open tile ("empty",
- * which includes cities and bridges that hold no defender).
+ * Classify what entering a tile holding `destEntity` would be: striking a
+ * defender ("entity"), assaulting a fortification ("building"), or taking an
+ * open tile ("empty", which includes cities and bridges that hold no
+ * defender). Independent of who is moving; callers apply their own class rules.
  */
-export function cavalryMoveKind(
-  destEntity: EntityType | undefined,
-): "empty" | "entity" | "building" {
+export function moveKind(destEntity: EntityType | undefined): "empty" | "entity" | "building" {
   if (!destEntity || destEntity === "bridge" || destEntity === "city") return "empty";
   if (destEntity === "rebel") return "entity";
   return ENTITY_META[destEntity].isUnit ? "entity" : "building";
@@ -105,7 +103,7 @@ export function cavalryMayEnter(
   destEntity: EntityType | undefined,
   hasStruck: boolean,
 ): boolean {
-  const kind = cavalryMoveKind(destEntity);
+  const kind = moveKind(destEntity);
   if (kind === "building") return false;
   if (kind === "entity" && hasStruck) return false;
   return true;
@@ -341,6 +339,10 @@ export function getValidMoves(
   // longer enter unit/rebel tiles — only open captures and friendly moves.
   const cav = isCavalry(unitEntity);
   const cavHasStruck = cav && (combatSpentUnits?.has(unitKey) ?? false);
+  // Ranged units never take ground: no neutral or enemy tile, and no stepping
+  // onto a rebel (clearing a rebel is a strike). They may still move freely
+  // inside their own territory, including onto an ally to merge.
+  const takesGround = canCapture(unitEntity);
   // When no explicit budget is passed, fall back to the unit's full movement.
   const range = maxRange ?? unitMovement(unitEntity);
   if (range <= 0) return result;
@@ -381,8 +383,9 @@ export function getValidMoves(
           bfsInsert(queue, { key: nk, cost: newCost });
         } else if (allyIsRebel) {
           // Can move ONTO a rebel tile to clear it, but cannot pass THROUGH it.
-          // A cavalry that has already struck this turn may not strike again.
-          if (!cavHasStruck) result.add(nk);
+          // A cavalry that has already struck this turn may not strike again,
+          // and a ranged unit may never strike at all.
+          if (!cavHasStruck && takesGround) result.add(nk);
         } else if (allyIsCity || allyIsBridge) {
           result.add(nk);
           bfsInsert(queue, { key: nk, cost: newCost });
@@ -395,8 +398,9 @@ export function getValidMoves(
       } else if (neighbor.owner === 'neutral') {
         // Neutral tiles are open captures; cavalry building/strike limits never
         // apply (a neutral tile holds no enemy defender or fortification).
-        result.add(nk);
+        if (takesGround) result.add(nk);
       } else {
+        if (!takesGround) continue;
         // Enemy tile: cavalry cannot assault buildings, nor strike a defender
         // once it has already struck this turn.
         if (cav && !cavalryMayEnter(entities.get(nk), cavHasStruck)) continue;
@@ -430,6 +434,8 @@ export function getPlacementAttackTiles(
   const meta = ENTITY_META[armedEntityId];
   const result = new Set<string>();
   if (!meta.isUnit) return result;
+  // A ranged unit can never be bought straight into an attack — it takes no ground.
+  if (!canCapture(armedEntityId)) return result;
   for (const tile of selectedTerritory) {
     if (tile.terrain === "mountain") continue;
     if (tile.terrain === "lake" && !isLakePassable(tile.key, entities)) continue;
@@ -443,7 +449,7 @@ export function getPlacementAttackTiles(
       if (neighbor.terrain === "lake" && !isLakePassable(nk, entities)) continue;
       const existingEntity = entities.get(nk);
       // Cavalry can never assault a fortification, even when buying into combat.
-      if (isCavalry(armedEntityId) && cavalryMoveKind(existingEntity) === "building")
+      if (isCavalry(armedEntityId) && moveKind(existingEntity) === "building")
         continue;
       if (existingEntity && existingEntity !== "rebel") {
         // buildings with higher strength can't be captured

@@ -14,7 +14,8 @@ import {
   recalculateTerritoriesForCapture,
   unitMovement,
   unitMaxAttacks,
-  cavalryMoveKind,
+  moveKind,
+  canCapture,
 } from "@/utils/hexGrid";
 import {
   advanceAttacksUsed,
@@ -250,7 +251,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
     // Combat-lock the unit when it strikes a defender (cavalry: blocks a second
     // strike while it may still take one open tile) or finishes its combat.
     const isEntityStrike =
-      isCombatMove && cavalryMoveKind(existingUnit) === "entity";
+      isCombatMove && moveKind(existingUnit) === "entity";
     const newCombatSpentUnits = advanceCombatSpent({
       combatSpentUnits,
       fromKey: selectedEntityKey,
@@ -445,7 +446,8 @@ export function handleTileTapLogic(params: TileTapParams): void {
         ? mergeResult(armedEntityId, existingOnTile!)
         : null;
     const canMerge = mergeBuyInto !== null;
-    const canOverwriteRebel = armedIsUnit && existingOnTile === "rebel";
+    const canOverwriteRebel =
+      armedIsUnit && canCapture(armedEntityId) && existingOnTile === "rebel";
     // A charge unit (maxAttacks > 1) bought directly onto a rebel spends one
     // attack but stays active so it can charge on and attack again, mirroring
     // the buy-into-attack capture path. Other units are spent immediately.
@@ -459,6 +461,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
       existingIsBuilding && activeTileMap.get(key)?.owner === "player";
     const canOverwriteBuilding =
       armedIsUnit &&
+      canCapture(armedEntityId) &&
       existingIsBuilding &&
       !existingBuildingIsOwn &&
       ENTITY_META[armedEntityId].offStrength >=
@@ -611,7 +614,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
       // defender also combat-locks them (no second strike); taking an open enemy
       // tile leaves them free to strike later. Other units (and cities) spend.
       const isChargePlacement = !isCity && unitMaxAttacks(armedEntityId) > 1;
-      const isEntityStrike = cavalryMoveKind(entities.get(key)) === "entity";
+      const isEntityStrike = moveKind(entities.get(key)) === "entity";
       const newCombatSpent2 =
         !isChargePlacement || isEntityStrike
           ? new Set([...combatSpentUnits, key])

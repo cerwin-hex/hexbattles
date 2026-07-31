@@ -26,6 +26,7 @@ import {
   isCavalry,
   canCapture,
   militaryValue,
+  moveKind,
 } from "@/utils/hexGrid";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -127,6 +128,17 @@ describe("offense/defense split", () => {
     for (const id of Object.keys(ENTITY_META) as EntityType[]) {
       expect(ENTITY_META[id].isUnit).toBe(ENTITY_META[id].unitClass !== undefined);
     }
+  });
+});
+
+describe("moveKind", () => {
+  it("classifies destinations independently of the mover", () => {
+    expect(moveKind(undefined)).toBe("empty");
+    expect(moveKind("bridge")).toBe("empty");
+    expect(moveKind("city")).toBe("empty");
+    expect(moveKind("rebel")).toBe("entity");
+    expect(moveKind("peasant")).toBe("entity");
+    expect(moveKind("tower")).toBe("building");
   });
 });
 

@@ -15,7 +15,7 @@ import {
   unitMovement,
   unitMaxAttacks,
   isCavalry,
-  cavalryMoveKind,
+  moveKind,
   improveCostFor,
   IMPROVED_TERRAINS,
 } from "@/utils/hexGrid";
@@ -694,7 +694,7 @@ export async function runAiTerritoryDecisionLoop(
               if (!ne || ne === "rebel") continue;
               if (nt.terrain === "lake") continue;
               // Cavalry can never assault a fortification.
-              if (isCavalry(uType) && cavalryMoveKind(ne) === "building") continue;
+              if (isCavalry(uType) && moveKind(ne) === "building") continue;
               const zoc = getMaxEnemyZoC(nk, aiOwner, aiCtx.entities, aiCtx.tileMap);
               if (str > zoc) {
                 actionTaken = await exec.buy(uType, nk, cost, true);
@@ -1353,7 +1353,7 @@ export async function runAiTurn(
           // Combat-lock the unit when it strikes a defender (cavalry: no second
           // strike) or finishes its combat; carries with it on later moves.
           const isEntityStrike =
-            isCombatMove && cavalryMoveKind(destExisting) === "entity";
+            isCombatMove && moveKind(destExisting) === "entity";
           ws.combatSpentUnits = advanceCombatSpent({
             combatSpentUnits: ws.combatSpentUnits,
             fromKey,
@@ -1470,7 +1470,7 @@ export async function runAiTurn(
           if (unitMaxAttacks(unitType) > 1) {
             ws.attacksUsed = new Map(ws.attacksUsed);
             ws.attacksUsed.set(target, 1);
-            if (cavalryMoveKind(targetEntityBefore) === "entity") {
+            if (moveKind(targetEntityBefore) === "entity") {
               ws.combatSpentUnits = new Set(ws.combatSpentUnits);
               ws.combatSpentUnits.add(target);
             }
