@@ -14,6 +14,7 @@ import {
   unitMovement,
   unitMaxAttacks,
   isCavalry,
+  isRanged,
   militaryValue,
   moveKind,
   DEFAULT_MOVEMENT,
@@ -768,8 +769,9 @@ export function opponentBestResponse(
 // (moves, buys, builds, upgrades, removes) so expert has no blind spots.
 // ════════════════════════════════════════════════════════════════════════════
 
+// Ranged units are player-only for now — see aiUnitBuyOrder in aiStrategy.ts.
 const UNIT_TYPES: EntityType[] = (Object.keys(ENTITY_META) as EntityType[]).filter(
-  (e) => ENTITY_META[e].isUnit,
+  (e) => ENTITY_META[e].isUnit && !isRanged(e),
 );
 
 export function generateCandidateActions(

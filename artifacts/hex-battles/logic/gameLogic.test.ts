@@ -821,3 +821,19 @@ describe("applyOwnerEconomy", () => {
     expect(r.balances.get("5,5")).toBe(0); // ai1 untouched
   });
 });
+
+// ─── Ranged merging ───────────────────────────────────────────────────────────
+
+describe("ranged merging", () => {
+  it("merges along the ranged track by tier", () => {
+    expect(mergeResult("shortbowman", "shortbowman")).toBe("longbowman");
+    expect(mergeResult("shortbowman", "longbowman")).toBe("crossbowman");
+    expect(mergeResult("longbowman", "longbowman")).toBeNull();
+    expect(mergeResult("crossbowman", "shortbowman")).toBeNull();
+  });
+
+  it("never merges with another track", () => {
+    expect(mergeResult("shortbowman", "peasant")).toBeNull();
+    expect(mergeResult("shortbowman", "scout")).toBeNull();
+  });
+});

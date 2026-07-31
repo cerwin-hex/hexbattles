@@ -135,7 +135,9 @@ const CITY_BODY = `<rect x="29" y="26" width="12" height="11" fill="#D6C8A8"></r
   <rect x="19" y="42" width="8" height="14" fill="#5C3A1E"></rect>
   <rect x="43" y="44" width="6" height="6" fill="#5C3A1E"></rect>`;
 
-export const UNIT_ICON_SVG: Record<EntityType, string> = {
+/** Inline SVG art, for entities that have it. Entities without an entry fall
+ *  back to EMOJI_ICON — see the UnitIcon component. */
+export const UNIT_ICON_SVG: Partial<Record<EntityType, string>> = {
   peasant: withOutline(PEASANT_BODY),
   warrior: withOutline(WARRIOR_BODY),
   swordsman: withOutline(SWORDSMAN_BODY),
@@ -147,6 +149,20 @@ export const UNIT_ICON_SVG: Record<EntityType, string> = {
   rebel: withOutline(REBEL_BODY),
   city: withOutline(CITY_BODY),
 };
+
+/**
+ * Placeholder emoji art for entities with no SVG icon yet. Swapping in real
+ * art later means moving an entry from here into UNIT_ICON_SVG — nothing else
+ * changes, because UnitIcon picks the source per entity.
+ */
+export const EMOJI_ICON: Partial<Record<EntityType, string>> = {
+  shortbowman: "🏹",
+  longbowman: "🪃",
+  crossbowman: "✴️",
+};
+
+/** Marker left where a ranged shot killed a unit. */
+export const KILL_MARK_EMOJI = "🎯";
 
 const MONEY_BODY = `<circle cx="39" cy="24" r="13.5" fill="#C49232"></circle>
   <circle cx="39" cy="24" r="8.5" fill="none" stroke="#9C742C" stroke-width="2.5"></circle>
@@ -203,17 +219,39 @@ export const RUIN_ICON_SVG = withOutline(RUIN_BODY);
 // component SvgXml delegates to internally). Width/height are applied per render
 // via `override`, exactly as SvgXml passes them. The AST is immutable React-side,
 // so the single parsed tree is safely shared across every token on the board.
-const UNIT_ICON_AST: Record<EntityType, ReturnType<typeof parse>> =
+const UNIT_ICON_AST: Partial<Record<EntityType, ReturnType<typeof parse>>> =
   Object.fromEntries(
     (Object.keys(UNIT_ICON_SVG) as EntityType[]).map((id) => [
       id,
-      parse(UNIT_ICON_SVG[id]),
+      parse(UNIT_ICON_SVG[id]!),
     ]),
-  ) as Record<EntityType, ReturnType<typeof parse>>;
+  );
 
 const MONEY_ICON_AST = parse(MONEY_ICON_SVG);
 const SKULL_ICON_AST = parse(SKULL_ICON_SVG);
 const RUIN_ICON_AST = parse(RUIN_ICON_SVG);
+
+/** Renders a single emoji glyph sized to fill an icon box. */
+export const EmojiGlyph = React.memo(function EmojiGlyph({
+  glyph,
+  size,
+}: {
+  glyph: string;
+  size: number;
+}) {
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <Text style={{ fontSize: size * 0.72, lineHeight: size }}>{glyph}</Text>
+    </View>
+  );
+});
 
 /** Renders a unit/building icon at the given pixel size. */
 export const UnitIcon = React.memo(function UnitIcon({
@@ -223,9 +261,12 @@ export const UnitIcon = React.memo(function UnitIcon({
   entityId: EntityType;
   size: number;
 }) {
-  return (
-    <SvgAst ast={UNIT_ICON_AST[entityId]} override={{ width: size, height: size }} />
-  );
+  const ast = UNIT_ICON_AST[entityId];
+  if (!ast) {
+    const glyph = EMOJI_ICON[entityId];
+    return glyph ? <EmojiGlyph glyph={glyph} size={size} /> : null;
+  }
+  return <SvgAst ast={ast} override={{ width: size, height: size }} />;
 });
 
 /** Renders the coin/gold icon at the given pixel size. */

@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { runAiTurn, runAiTerritoryDecisionLoop } from "@/logic/aiStrategy";
+import {
+  runAiTurn,
+  runAiTerritoryDecisionLoop,
+  AI_UNIT_BUY_ORDER_ASC,
+} from "@/logic/aiStrategy";
 import { applySingleHexPenalty } from "@/logic/gameLogic";
 import type { AiWorkingState, AiTurnCallbacks, AiDecisionExec } from "@/logic/aiStrategy";
 import type { HexTile, EntityType, TerritoryOwner, AiStepSnapshot } from "@/types";
@@ -967,5 +971,16 @@ describe("runAiTerritoryDecisionLoop", () => {
     expect(target).toBe("0,0");
     expect(terrain).toBe("field");
     expect(cost).toBe(2);
+  });
+});
+
+// ─── AI purchase candidates ───────────────────────────────────────────────────
+
+describe("AI purchase candidates", () => {
+  it("never offers a ranged unit to the AI", () => {
+    for (const id of ["shortbowman", "longbowman", "crossbowman"] as const) {
+      expect(AI_UNIT_BUY_ORDER_ASC).not.toContain(id);
+    }
+    expect(AI_UNIT_BUY_ORDER_ASC).toContain("peasant");
   });
 });

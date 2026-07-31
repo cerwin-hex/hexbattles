@@ -24,6 +24,12 @@ export const ENTITY_META: Record<EntityType, EntityMeta> = {
   swordsman: { name: 'Swordsman', cost: 30, upkeep: 27, isUnit: true,  offStrength: 3, defStrength: 3, tier: 3, unitClass: 'infantry' },
   scout:     { name: 'Scout',     cost: 12, upkeep: 4,  isUnit: true,  offStrength: 1, defStrength: 1, tier: 1, unitClass: 'cavalry', movement: 5, maxAttacks: 2 },
   knight:    { name: 'Knight',    cost: 24, upkeep: 12, isUnit: true,  offStrength: 2, defStrength: 2, tier: 2, unitClass: 'cavalry', movement: 5, maxAttacks: 2 },
+  // Ranged track: priced exactly like cavalry (+12 cost, ×3 upkeep per tier).
+  // High offense, low defense — a Shortbowman projects no zone of control at
+  // all, so it must stand behind infantry.
+  shortbowman: { name: 'Shortbowman', cost: 12, upkeep: 4,  isUnit: true, offStrength: 2, defStrength: 0, tier: 1, unitClass: 'ranged' },
+  longbowman:  { name: 'Longbowman',  cost: 24, upkeep: 12, isUnit: true, offStrength: 3, defStrength: 1, tier: 2, unitClass: 'ranged' },
+  crossbowman: { name: 'Crossbowman', cost: 36, upkeep: 36, isUnit: true, offStrength: 4, defStrength: 2, tier: 3, unitClass: 'ranged' },
   // NOTE: tower/castle upkeep here is the per-building BASE rate only.
   // Actual territory upkeep is LINEAR (n-th building costs n×base); use calcDefenseUpkeep/nextDefenseUpkeep.
   tower:     { name: 'Tower',     cost: 15, upkeep: 1,  isUnit: false, offStrength: 1, defStrength: 1, tier: 1 },
@@ -213,6 +219,8 @@ export const UNIT_UPGRADE: Partial<Record<EntityType, EntityType>> = {
   peasant: 'warrior',
   warrior: 'swordsman',
   scout: 'knight',
+  shortbowman: 'longbowman',
+  longbowman: 'crossbowman',
   tower: 'castle',
 };
 

@@ -29,7 +29,7 @@ export const ORDERED_EDGES: ReadonlyArray<{
 export const TIER_TO_UNIT: Record<UnitClass, Record<number, EntityType>> = {
   infantry: { 1: "peasant", 2: "warrior", 3: "swordsman" },
   cavalry:  { 1: "scout",   2: "knight" },
-  ranged:   {},
+  ranged:   { 1: "shortbowman", 2: "longbowman", 3: "crossbowman" },
 };
 
 export const PURCHASABLES = (Object.keys(ENTITY_META) as EntityType[])

@@ -15,6 +15,7 @@ import {
   unitMovement,
   unitMaxAttacks,
   isCavalry,
+  isRanged,
   moveKind,
   improveCostFor,
   IMPROVED_TERRAINS,
@@ -34,19 +35,22 @@ import type { AiState, Difficulty } from "@/types";
 
 // Unit purchase candidates for the AI, derived from ENTITY_META so new units are
 // picked up automatically. The buy loops take the first affordable type meeting
-// the strength threshold. Within a strength tier, cavalry (more attacks) is
-// preferred over plain infantry, so the AI buys a Scout/Knight when it can afford
-// one and falls back to cheaper infantry otherwise.
-const aiUnitBuyOrder = (strengthDir: 1 | -1): EntityType[] =>
+// the strength threshold. Within a tier, cavalry (more attacks) is preferred
+// over plain infantry, so the AI buys a Scout/Knight when it can afford one and
+// falls back to cheaper infantry otherwise.
+//
+// Ranged units are excluded: they are player-only for now, and the AI has no
+// ranged behaviour, so buying one would just burn gold on a unit it never fires.
+const aiUnitBuyOrder = (tierDir: 1 | -1): EntityType[] =>
   (Object.keys(ENTITY_META) as EntityType[])
-    .filter((e) => ENTITY_META[e].isUnit)
+    .filter((e) => ENTITY_META[e].isUnit && !isRanged(e))
     .sort(
       (a, b) =>
-        strengthDir * (ENTITY_META[a].tier - ENTITY_META[b].tier) ||
+        tierDir * (ENTITY_META[a].tier - ENTITY_META[b].tier) ||
         unitMaxAttacks(b) - unitMaxAttacks(a) || // cavalry first within a tier
         ENTITY_META[a].cost - ENTITY_META[b].cost,
     );
-const AI_UNIT_BUY_ORDER_ASC: EntityType[] = aiUnitBuyOrder(1);
+export const AI_UNIT_BUY_ORDER_ASC: EntityType[] = aiUnitBuyOrder(1);
 const AI_UNIT_BUY_ORDER_DESC: EntityType[] = aiUnitBuyOrder(-1);
 
 export interface AiDecisionExec {

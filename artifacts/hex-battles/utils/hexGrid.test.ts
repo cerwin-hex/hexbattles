@@ -24,9 +24,11 @@ import {
   calcAdminBurden,
   ADMIN_BURDEN_THRESHOLD,
   isCavalry,
+  isRanged,
   canCapture,
   militaryValue,
   moveKind,
+  unitMovement,
 } from "@/utils/hexGrid";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -722,5 +724,88 @@ describe("IMPROVEMENTS catalogue", () => {
     expect(improveTargetFor("mountain")).toBeNull();
     expect(improveTargetFor("lake")).toBeNull();
     expect(improveTargetFor("field")).toBeNull();
+  });
+});
+
+// ─── Ranged units ─────────────────────────────────────────────────────────────
+
+describe("ranged units", () => {
+  it("prices them like cavalry, extrapolated to tier 3", () => {
+    expect(ENTITY_META.shortbowman.cost).toBe(12);
+    expect(ENTITY_META.shortbowman.upkeep).toBe(4);
+    expect(ENTITY_META.longbowman.cost).toBe(24);
+    expect(ENTITY_META.longbowman.upkeep).toBe(12);
+    expect(ENTITY_META.crossbowman.cost).toBe(36);
+    expect(ENTITY_META.crossbowman.upkeep).toBe(36);
+  });
+
+  it("gives them high offense and low defense", () => {
+    expect(ENTITY_META.shortbowman.offStrength).toBe(2);
+    expect(ENTITY_META.shortbowman.defStrength).toBe(0);
+    expect(ENTITY_META.longbowman.offStrength).toBe(3);
+    expect(ENTITY_META.longbowman.defStrength).toBe(1);
+    expect(ENTITY_META.crossbowman.offStrength).toBe(4);
+    expect(ENTITY_META.crossbowman.defStrength).toBe(2);
+  });
+
+  it("moves at the infantry default", () => {
+    expect(unitMovement("shortbowman")).toBe(3);
+    expect(unitMovement("crossbowman")).toBe(3);
+  });
+
+  it("cannot take ground", () => {
+    expect(canCapture("shortbowman")).toBe(false);
+    expect(canCapture("longbowman")).toBe(false);
+    expect(canCapture("crossbowman")).toBe(false);
+    expect(isRanged("peasant")).toBe(false);
+  });
+
+  it("upgrades along its own track", () => {
+    expect(UNIT_UPGRADE.shortbowman).toBe("longbowman");
+    expect(UNIT_UPGRADE.longbowman).toBe("crossbowman");
+    expect(UNIT_UPGRADE.crossbowman).toBeUndefined();
+  });
+
+  it("projects no zone of control at tier 1", () => {
+    // A Shortbowman has 0 defense, so it neither holds its own tile nor
+    // supports a neighbour: any strength-1 attacker can walk in.
+    const map = tileMap([makeTile(0, 0, "ai1"), makeTile(1, 0, "ai1")]);
+    const ents = new Map<string, EntityType>([["0,0", "shortbowman"]]);
+    expect(getMaxEnemyZoC("0,0", "player", ents, map)).toBe(0);
+    expect(getMaxEnemyZoC("1,0", "player", ents, map)).toBe(0);
+  });
+});
+
+describe("ranged movement", () => {
+  it("offers friendly ground but no neutral, enemy or rebel tile", () => {
+    // 0,0 owned bowman; 1,0 own empty; 0,1 neutral; -1,0 enemy; 1,-1 own rebel
+    const map = tileMap([
+      makeTile(0, 0, "player"),
+      makeTile(1, 0, "player"),
+      makeTile(0, 1, "neutral"),
+      makeTile(-1, 0, "ai1"),
+      makeTile(1, -1, "player"),
+    ]);
+    const ents = new Map<string, EntityType>([
+      ["0,0", "crossbowman"],
+      ["1,-1", "rebel"],
+    ]);
+    const moves = getValidMoves("0,0", "player", ents, map, new Set());
+    expect(moves.has("1,0")).toBe(true);
+    expect(moves.has("0,1")).toBe(false);
+    expect(moves.has("-1,0")).toBe(false);
+    expect(moves.has("1,-1")).toBe(false);
+  });
+
+  it("is never buyable straight into an attack", () => {
+    const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "neutral")]);
+    const tiles = [map.get("0,0")!];
+    const own = new Set(["0,0"]);
+    expect(
+      getPlacementAttackTiles("crossbowman", tiles, own, map, new Map()).size,
+    ).toBe(0);
+    expect(
+      getPlacementAttackTiles("peasant", tiles, own, map, new Map()).size,
+    ).toBe(1);
   });
 });
