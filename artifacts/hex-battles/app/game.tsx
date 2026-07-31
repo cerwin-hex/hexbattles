@@ -644,12 +644,16 @@ export default function GameScreen() {
       if (!owners.includes(tile.owner)) continue;
       if (tile.terrain === "mountain" || tile.terrain === "lake") continue;
       if (initialEntities.has(tile.key)) continue;
-      if (Math.random() < 0.1) {
+      // Short-circuit order matters: with rebels ON, Math.random() is still
+      // consumed once per candidate tile in the same sequence as before this
+      // gate existed, so an all-elements-on game generates a bit-identical
+      // starting board.
+      if (elements.rebels && Math.random() < 0.1) {
         initialEntities.set(tile.key, "rebel");
       }
     }
     setEntities(initialEntities);
-  }, [tiles, tileMap, resumeSnapshot]);
+  }, [tiles, tileMap, resumeSnapshot, elements]);
 
   const activeTileMap = mutableTileMap.size > 0 ? mutableTileMap : tileMap;
 
