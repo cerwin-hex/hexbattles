@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { EntityType, HexTile } from "@/types";
+import type { GameElements } from "@/constants/gameElements";
 import {
   CITY_BONUS,
   ENTITY_META,
@@ -55,12 +56,14 @@ interface UseEconBreakdownParams {
   selectedTerritory: HexTile[];
   entities: Map<string, EntityType>;
   cities: Set<string>;
+  elements: GameElements;
 }
 
 export function useEconBreakdown({
   selectedTerritory,
   entities,
   cities,
+  elements,
 }: UseEconBreakdownParams): EconBreakdownResult | null {
   return useMemo(() => {
     if (selectedTerritory.length === 0) return null;
@@ -162,7 +165,9 @@ export function useEconBreakdown({
       cityIncome +
       cityImproveBonus;
     const totalUpkeep = upkeepGroups.reduce((s, g) => s + g.total, 0);
-    const adminBurden = calcAdminBurden(selectedTerritory.length);
+    const adminBurden = elements.adminBurden
+      ? calcAdminBurden(selectedTerritory.length)
+      : 0;
     let rebelCount = 0;
     let rebelTotalLoss = 0;
     for (const t of selectedTerritory) {
@@ -201,5 +206,5 @@ export function useEconBreakdown({
       rebelTotalLoss,
       net,
     };
-  }, [selectedTerritory, entities, cities]);
+  }, [selectedTerritory, entities, cities, elements]);
 }

@@ -882,7 +882,7 @@ export default function GameScreen() {
 
   const canBuild = selectedTerritory.length > 0;
 
-  const econBreakdown = useEconBreakdown({ selectedTerritory, entities, cities });
+  const econBreakdown = useEconBreakdown({ selectedTerritory, entities, cities, elements });
 
   const hasAffordableTerritories = affordableTerritoryTileKeys.size > 0;
   useEffect(() => {
@@ -917,6 +917,7 @@ export default function GameScreen() {
     cities,
     tileDataMap,
     aiStateMap,
+    elements,
   });
 
   // Dev: owned land-tile count per player (You + each AI), shown only in dev

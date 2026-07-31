@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import type { HexTile, EntityType, TerritoryOwner, AiState } from "@/types";
+import { ALL_GAME_ELEMENTS, type GameElements } from "@/constants/gameElements";
 
 // Both hooks under test are pure computations wrapped in a single `useMemo`.
 // Replacing useMemo with an identity call is a faithful shim (useMemo returns
@@ -47,6 +48,7 @@ function runDevOverlay(o: {
   entities: Map<string, EntityType>;
   cities: Set<string>;
   balances?: Map<string, number>;
+  elements?: GameElements;
 }) {
   const tileDataMap = new Map<string, { cx: number; cy: number }>();
   for (const key of o.tileMap.keys()) tileDataMap.set(key, { cx: 0, cy: 0 });
@@ -59,6 +61,7 @@ function runDevOverlay(o: {
     cities: o.cities,
     tileDataMap,
     aiStateMap: new Map<string, AiState>(),
+    elements: o.elements ?? ALL_GAME_ELEMENTS,
   });
 }
 
@@ -173,6 +176,7 @@ describe("useEconBreakdown", () => {
       selectedTerritory: grassCity.territory,
       entities: rebelOnCity,
       cities,
+      elements: ALL_GAME_ELEMENTS,
     })!;
     expect(onGrass.rebelCount).toBe(1);
     expect(onGrass.rebelTotalLoss).toBe(3);
@@ -181,6 +185,7 @@ describe("useEconBreakdown", () => {
       selectedTerritory: desertCity.territory,
       entities: rebelOnCity,
       cities,
+      elements: ALL_GAME_ELEMENTS,
     })!;
     expect(onDesert.rebelTotalLoss).toBe(2);
   });
@@ -198,6 +203,7 @@ describe("useEconBreakdown", () => {
       selectedTerritory: territory,
       entities: rebelOnField,
       cities,
+      elements: ALL_GAME_ELEMENTS,
     })!;
 
     // field (3) + adjacency bonus from the city on 0,0 (1) = 4 denied.
@@ -227,6 +233,7 @@ describe("useEconBreakdown", () => {
         selectedTerritory: territory,
         entities,
         cities,
+        elements: ALL_GAME_ELEMENTS,
       })!;
       const engineNet =
         calcTerritoryIncome(territory, entities, cities, tileMap) -
@@ -246,6 +253,69 @@ describe("useEconBreakdown", () => {
       }
     }
     expect(mismatches).toEqual([]);
+  });
+});
+
+describe("economy display with the admin burden off", () => {
+  it("charges no burden for a 26-tile territory", () => {
+    const { territory } = makeTerritory(
+      "ai1",
+      Array.from({ length: 26 }, (_, i) => [i, 0, "grass"] as [number, number, "grass"]),
+    );
+    const off = { ...ALL_GAME_ELEMENTS, adminBurden: false };
+
+    expect(calcTerritoryUpkeep(territory, new Map(), off)).toBe(0);
+    expect(calcTerritoryUpkeep(territory, new Map(), ALL_GAME_ELEMENTS)).toBe(3);
+  });
+
+  it("drops the burden from the dev overlay's displayed net", () => {
+    const { tileMap } = makeTerritory(
+      "ai1",
+      Array.from({ length: 26 }, (_, i) => [i, 0, "grass"] as [number, number, "grass"]),
+    );
+    const off = { ...ALL_GAME_ELEMENTS, adminBurden: false };
+
+    const netOff = overlayNet(
+      runDevOverlay({
+        tileMap,
+        entities: new Map(),
+        cities: new Set(),
+        elements: off,
+      })[0].label,
+    );
+    const netOn = overlayNet(
+      runDevOverlay({
+        tileMap,
+        entities: new Map(),
+        cities: new Set(),
+        elements: ALL_GAME_ELEMENTS,
+      })[0].label,
+    );
+    expect(netOff - netOn).toBe(3);
+  });
+
+  it("drops the burden from the breakdown modal's net and adminBurden field", () => {
+    const { territory } = makeTerritory(
+      "ai1",
+      Array.from({ length: 26 }, (_, i) => [i, 0, "grass"] as [number, number, "grass"]),
+    );
+    const off = { ...ALL_GAME_ELEMENTS, adminBurden: false };
+
+    const breakdownOff = useEconBreakdown({
+      selectedTerritory: territory,
+      entities: new Map(),
+      cities: new Set(),
+      elements: off,
+    })!;
+    const breakdownOn = useEconBreakdown({
+      selectedTerritory: territory,
+      entities: new Map(),
+      cities: new Set(),
+      elements: ALL_GAME_ELEMENTS,
+    })!;
+
+    expect(breakdownOff.adminBurden).toBe(0);
+    expect(breakdownOff.net - breakdownOn.net).toBe(3);
   });
 });
 
