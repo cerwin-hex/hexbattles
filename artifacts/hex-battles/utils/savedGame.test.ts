@@ -52,7 +52,11 @@ function makeSnapshot(): SavedGame {
       numTiles: 80,
       numOpponents: 2,
       difficulty: "hard",
-      elements: { ...ALL_GAME_ELEMENTS },
+      // Deliberately not DEFAULT_GAME_ELEMENTS (currently identical to
+      // ALL_GAME_ELEMENTS — no beta element ships): if it were, the round-trip
+      // test below couldn't tell "the stored set survived" from "it was
+      // discarded and normalizeGameElements silently substituted defaults".
+      elements: { ...ALL_GAME_ELEMENTS, rebels: false },
     },
     state: {
       mutableTileMap: new Map([
