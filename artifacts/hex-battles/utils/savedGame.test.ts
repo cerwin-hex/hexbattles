@@ -75,6 +75,8 @@ function makeSnapshot(): SavedGame {
         ["player", new Set([tile1.key, tile2.key])],
         ["ai1", new Set<string>()],
       ]),
+      killMarks: new Set<string>(),
+      firedUnits: new Set<string>(),
       turn: 7,
     },
   };
@@ -243,5 +245,29 @@ describe("serialize / deserialize round-trip", () => {
   it("returns null for unknown schema version", () => {
     const bogus = JSON.stringify({ v: 99, tiles: [], config: {}, state: {} });
     expect(deserializeSavedGame(bogus)).toBe(null);
+  });
+});
+
+describe("ranged state persistence", () => {
+  it("round-trips kill marks and fired units", () => {
+    const g = makeSnapshot();
+    g.state.entities.set("0,0", "crossbowman");
+    g.state.killMarks = new Set(["1,0"]);
+    g.state.firedUnits = new Set(["0,0"]);
+    const back = deserializeSavedGame(serializeSavedGame(g))!;
+    expect(back.state.entities.get("0,0")).toBe("crossbowman");
+    expect([...back.state.killMarks]).toEqual(["1,0"]);
+    expect([...back.state.firedUnits]).toEqual(["0,0"]);
+  });
+
+  it("loads a save written before the ranged branch", () => {
+    const g = makeSnapshot();
+    const json = serializeSavedGame(g);
+    const stripped = JSON.parse(json);
+    delete stripped.state.killMarks;
+    delete stripped.state.firedUnits;
+    const back = deserializeSavedGame(JSON.stringify(stripped))!;
+    expect(back.state.killMarks.size).toBe(0);
+    expect(back.state.firedUnits.size).toBe(0);
   });
 });

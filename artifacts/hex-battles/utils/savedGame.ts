@@ -24,6 +24,10 @@ export interface SavedGameState {
   armedGraveyard: ArmedSites;
   armedRuins: ArmedSites;
   freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
+  /** Tiles marked by a ranged kill this round; purely visual. */
+  killMarks: Set<string>;
+  /** Ranged units that have already fired this turn. */
+  firedUnits: Set<string>;
   turn: number;
 }
 
@@ -60,6 +64,9 @@ interface Serialized {
     armedGraveyard?: [TerritoryOwner, string[]][];
     armedRuins?: [TerritoryOwner, string[]][];
     freeTowerUsedTiles: [TerritoryOwner, string[]][];
+    // Added with the ranged track; absent in older saves, loaded as empty.
+    killMarks?: string[];
+    firedUnits?: string[];
     turn: number;
   };
 }
@@ -88,6 +95,8 @@ export function serializeSavedGame(g: SavedGame): string {
       freeTowerUsedTiles: [...g.state.freeTowerUsedTiles.entries()].map(
         ([k, v]) => [k, [...v]],
       ),
+      killMarks: [...g.state.killMarks],
+      firedUnits: [...g.state.firedUnits],
       turn: g.state.turn,
     },
   };
@@ -122,6 +131,8 @@ export function deserializeSavedGame(json: string): SavedGame | null {
         freeTowerUsedTiles: new Map(
           parsed.state.freeTowerUsedTiles.map(([k, v]) => [k, new Set(v)]),
         ),
+        killMarks: new Set(parsed.state.killMarks ?? []),
+        firedUnits: new Set(parsed.state.firedUnits ?? []),
         turn: parsed.state.turn,
       },
     };

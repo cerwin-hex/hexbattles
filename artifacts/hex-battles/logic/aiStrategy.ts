@@ -985,6 +985,8 @@ export interface AiTurnCallbacks {
     advanceTurn(): void;
     /** Store the next-round armed graves/ruins snapshot (called once at round end). */
     setArmedGraves(graves: ArmedSites, ruins: ArmedSites): void;
+    /** Clear the ranged kill markers; called once as the player's turn begins. */
+    setKillMarks(v: Set<string>): void;
   };
   refs: {
     getAiStateMap(): Map<string, AiState>;
@@ -1723,6 +1725,17 @@ export async function runAiTurn(
     armedGraves.set("player", armedSitesForOwner("player", ws.tileMap, ws.graveyard));
     armedRuins.set("player", armedSitesForOwner("player", ws.tileMap, ws.ruins));
   }
+
+  // ── Clear last round's ranged kill markers ──────────────────────────────────
+  // Start of the player's turn: clear last round's ranged kill markers. In this
+  // version only the player can create one, and only during the player's own
+  // turn, so a single wholesale clear here gives every marker exactly one full
+  // round on screen — the same lifetime a grave gets. When the AI learns to
+  // fire, this must become an owner-scoped sweep like spawnRebelsForOwner.
+  // Deliberately NOT gated on round 1 (unlike the rebel spawn above, and for the
+  // same reason sweepNeutralMarkers isn't): there is nothing to suspend, and
+  // gating it would give a round-1 marker two rounds instead of one.
+  cbs.state.setKillMarks(new Set());
 
   // ── Expire orphaned markers on bridgeless water ─────────────────────────────
   // No owner sweep reaches a neutral tile, so this single fixed point is the

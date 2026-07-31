@@ -21,6 +21,8 @@ interface UseMoveHistoryParams {
   freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
   graveyard: Set<string>;
   ruins: Set<string>;
+  killMarks: Set<string>;
+  firedUnits: Set<string>;
   selectedTileKey: string | null;
   isAiTurn: boolean;
   gameResult: GameResult;
@@ -38,6 +40,8 @@ interface UseMoveHistoryParams {
   setFreeTowerUsedTiles: (m: Map<TerritoryOwner, Set<string>>) => void;
   setGraveyard: (s: Set<string>) => void;
   setRuins: (s: Set<string>) => void;
+  setKillMarks: (s: Set<string>) => void;
+  setFiredUnits: (s: Set<string>) => void;
   setSelectedTileKey: (k: string | null) => void;
   setSelectedEntityKey: (k: string | null) => void;
   setArmedEntityId: (id: EntityType | null) => void;
@@ -56,6 +60,8 @@ export function useMoveHistory({
   freeTowerUsedTiles,
   graveyard,
   ruins,
+  killMarks,
+  firedUnits,
   selectedTileKey,
   isAiTurn,
   gameResult,
@@ -73,6 +79,8 @@ export function useMoveHistory({
   setFreeTowerUsedTiles,
   setGraveyard,
   setRuins,
+  setKillMarks,
+  setFiredUnits,
   setSelectedTileKey,
   setSelectedEntityKey,
   setArmedEntityId,
@@ -97,6 +105,8 @@ export function useMoveHistory({
         ),
         graveyard: new Set(graveyard),
         ruins: new Set(ruins),
+        killMarks: new Set(killMarks),
+        firedUnits: new Set(firedUnits),
         selectedTileKey,
       },
     ]);
@@ -113,6 +123,8 @@ export function useMoveHistory({
     freeTowerUsedTiles,
     graveyard,
     ruins,
+    killMarks,
+    firedUnits,
     selectedTileKey,
   ]);
 
@@ -133,6 +145,8 @@ export function useMoveHistory({
       setFreeTowerUsedTiles(snapshot.freeTowerUsedTiles);
       setGraveyard(snapshot.graveyard ?? new Set());
       setRuins(snapshot.ruins ?? new Set());
+      setKillMarks(snapshot.killMarks ?? new Set());
+      setFiredUnits(snapshot.firedUnits ?? new Set());
       setSelectedTileKey(snapshot.selectedTileKey);
       setSelectedEntityKey(null);
       setArmedEntityId(null);
@@ -156,6 +170,8 @@ export function useMoveHistory({
     setFreeTowerUsedTiles,
     setGraveyard,
     setRuins,
+    setKillMarks,
+    setFiredUnits,
     setSelectedTileKey,
     setSelectedEntityKey,
     setArmedEntityId,

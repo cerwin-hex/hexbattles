@@ -63,6 +63,7 @@ function makeCbs(overrides: CbsOverrides = {}): AiTurnCallbacks {
       setIsAiTurn: vi.fn(),
       advanceTurn: vi.fn(),
       setArmedGraves: vi.fn(),
+      setKillMarks: vi.fn(),
       ...stateOverrides,
     },
     refs: {
@@ -982,5 +983,19 @@ describe("AI purchase candidates", () => {
       expect(AI_UNIT_BUY_ORDER_ASC).not.toContain(id);
     }
     expect(AI_UNIT_BUY_ORDER_ASC).toContain("peasant");
+  });
+});
+
+// ─── Ranged kill markers ──────────────────────────────────────────────────────
+
+describe("ranged kill markers", () => {
+  it("clears them at the start of the player's turn", async () => {
+    const setKillMarks = vi.fn();
+    const ws = makeEmptyWs(makeTileMap([makeTile(0, 0, "ai1"), makeTile(1, 0, "ai1")]));
+    const cbs = makeCbs({ state: { setKillMarks } });
+    await runAiTurn(ws, cbs, ["ai1"], 3, "easy");
+    // The AI phase ends by handing the turn back to the player; last round's
+    // markers must be gone by then.
+    expect(setKillMarks).toHaveBeenCalledWith(new Set());
   });
 });

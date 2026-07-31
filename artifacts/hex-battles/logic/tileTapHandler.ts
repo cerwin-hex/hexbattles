@@ -59,6 +59,10 @@ export interface TileTapParams {
   turn: number;
   graveyard: Set<string>;
   ruins: Set<string>;
+  // Ranged state, threaded ahead of the tap handler that reads it. Nothing in
+  // this file consumes them yet.
+  killMarks: Set<string>;
+  firedUnits: Set<string>;
   liveOwnerMap: Map<string, TerritoryOwner>;
   combatSpentUnits: Set<string>;
   spentUnits: Set<string>;
@@ -81,6 +85,8 @@ export interface TileTapParams {
   setSelectedTileKey: (k: string | null) => void;
   setGraveyard: (s: Set<string>) => void;
   setRuins: (s: Set<string>) => void;
+  setKillMarks: (s: Set<string>) => void;
+  setFiredUnits: (s: Set<string>) => void;
   setArmedEntityId: (id: EntityType | null) => void;
   setArmedImprovement: (t: TerrainType | null) => void;
   setFreeTowerUsedTiles: Dispatch<SetStateAction<Map<TerritoryOwner, Set<string>>>>;

@@ -22,6 +22,7 @@ export interface AiTurnCallbacksParams {
   setIsAiTurn: (v: boolean) => void;
   advanceTurn: () => void;
   setArmedGraves: (graves: ArmedSites, ruins: ArmedSites) => void;
+  setKillMarks: (v: Set<string>) => void;
   setIsAiPaused: (v: boolean) => void;
 
   setIsAiTurnDone: (v: boolean) => void;
@@ -55,6 +56,7 @@ export function makeAiTurnCallbacks(p: AiTurnCallbacksParams): AiTurnCallbacks {
       setIsAiTurn: p.setIsAiTurn,
       advanceTurn: p.advanceTurn,
       setArmedGraves: p.setArmedGraves,
+      setKillMarks: p.setKillMarks,
     },
     refs: {
       getAiStateMap: () => p.aiStateMapRef.current,

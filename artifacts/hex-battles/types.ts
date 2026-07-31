@@ -86,6 +86,8 @@ export type MoveHistorySnapshot = {
   freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
   graveyard: Set<string>;
   ruins: Set<string>;
+  killMarks: Set<string>;
+  firedUnits: Set<string>;
   selectedTileKey: string | null;
 };
 

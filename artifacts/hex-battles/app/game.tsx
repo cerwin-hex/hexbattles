@@ -356,6 +356,14 @@ export default function GameScreen() {
   const aiTurnRef = useRef<boolean>(false);
   const [graveyard, setGraveyard] = useState<Set<string>>(new Set());
   const [ruins, setRuins] = useState<Set<string>>(new Set());
+  // Tiles where a ranged shot killed something. Purely visual — a kill mark
+  // never spawns a rebel. Cleared at the start of the player's next turn
+  // (aiStrategy.runAiTurn), NOT at end of turn, so it stays visible while the
+  // AI phase plays out.
+  const [killMarks, setKillMarks] = useState<Set<string>>(new Set());
+  // Ranged units that have already fired this turn; reset with every other
+  // per-turn budget at end of turn.
+  const [firedUnits, setFiredUnits] = useState<Set<string>>(new Set());
   // cities is completely separate from entities — a permanent Set of tile keys
   // that have a city (pre-placed OR player/AI built). Units can freely occupy
   // city tiles without touching this set. Cities are never removed once placed.
@@ -581,6 +589,8 @@ export default function GameScreen() {
       setLiveOwnerMap(s.liveOwnerMap);
       setGraveyard(s.graveyard);
       setRuins(s.ruins);
+      setKillMarks(s.killMarks);
+      setFiredUnits(s.firedUnits);
       setCities(s.cities);
       setFreeTowerUsedTiles(s.freeTowerUsedTiles);
       // Absent in saves written before arming was persisted; empty is safe and
@@ -603,10 +613,12 @@ export default function GameScreen() {
     setCombatSpentUnits(new Set());
     setPartialMoves(new Map());
     setAttacksUsed(new Map());
+    setFiredUnits(new Set());
     setMutableTileMap(new Map(tileMap));
     setLiveOwnerMap(new Map());
     setGraveyard(new Set());
     setRuins(new Set());
+    setKillMarks(new Set());
     setFreeTowerUsedTiles(new Map());
 
     const initialEntities = new Map<string, EntityType>();
@@ -710,6 +722,7 @@ export default function GameScreen() {
         setTerritoryBalances,
         setGraveyard,
         setRuins,
+        setKillMarks,
         setLiveOwnerMap,
         setCities,
         setFreeTowerUsedTiles,
@@ -777,6 +790,8 @@ export default function GameScreen() {
         cities,
         graveyard,
         ruins,
+        killMarks,
+        firedUnits,
         // Refs, not state: this effect only runs on the player's turn, by which
         // point runAiTurn has already published the freshly armed buckets.
         armedGraveyard: armedGraveyardRef.current,
@@ -801,6 +816,8 @@ export default function GameScreen() {
     cities,
     graveyard,
     ruins,
+    killMarks,
+    firedUnits,
     freeTowerUsedTiles,
     turn,
     isAiTurn,
@@ -936,6 +953,8 @@ export default function GameScreen() {
     freeTowerUsedTiles,
     graveyard,
     ruins,
+    killMarks,
+    firedUnits,
     selectedTileKey,
     isAiTurn,
     gameResult,
@@ -953,6 +972,8 @@ export default function GameScreen() {
     setFreeTowerUsedTiles,
     setGraveyard,
     setRuins,
+    setKillMarks,
+    setFiredUnits,
     setSelectedTileKey,
     setSelectedEntityKey,
     setArmedEntityId,
@@ -1099,6 +1120,8 @@ export default function GameScreen() {
         turn,
         graveyard,
         ruins,
+        killMarks,
+        firedUnits,
         liveOwnerMap,
         combatSpentUnits,
         spentUnits,
@@ -1121,6 +1144,8 @@ export default function GameScreen() {
         setSelectedTileKey,
         setGraveyard,
         setRuins,
+        setKillMarks,
+        setFiredUnits,
         setArmedEntityId,
         setArmedImprovement,
         setFreeTowerUsedTiles,
@@ -1156,6 +1181,8 @@ export default function GameScreen() {
       gameResult,
       graveyard,
       ruins,
+      killMarks,
+      firedUnits,
       turn,
       freeTowerUsedTiles,
       cities,
@@ -1198,6 +1225,7 @@ export default function GameScreen() {
       setCombatSpentUnits,
       setPartialMoves,
       setAttacksUsed,
+      setFiredUnits,
       setIsAiTurn,
       checkWinLoss,
       runAiTurn,
