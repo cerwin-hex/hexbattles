@@ -461,8 +461,8 @@ export function handleTileTapLogic(params: TileTapParams): void {
       armedIsUnit &&
       existingIsBuilding &&
       !existingBuildingIsOwn &&
-      ENTITY_META[armedEntityId].strength >=
-        ENTITY_META[existingOnTile as EntityType].strength;
+      ENTITY_META[armedEntityId].offStrength >=
+        ENTITY_META[existingOnTile as EntityType].defStrength;
     const canPlaceOnBridge =
       armedIsUnit &&
       existingOnTile === "bridge" &&

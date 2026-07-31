@@ -10,7 +10,6 @@ import {
   TERRAIN_INCOME,
   CITY_BONUS,
   unitMaxAttacks,
-  isCavalry,
   calcAdminBurden,
   HEX_EDGES,
   tileKey,
@@ -18,7 +17,7 @@ import {
   improveTargetFor,
 } from "@/utils/hexGrid";
 import type { ArmedSites } from "@/types";
-import { STRENGTH_TO_UNIT, STRENGTH_TO_CAVALRY } from "@/constants/gameConstants";
+import { TIER_TO_UNIT } from "@/constants/gameConstants";
 
 export function calcTerritoryUpkeep(
   territory: HexTile[],
@@ -351,20 +350,20 @@ export function initTerritoryBalances(
  * units may merge — replacing the old per-unit `unitCanMerge` + strength-only
  * `mergedUnitType`, neither of which could enforce same-track pairing. Returns
  * the merged unit type, or null when the merge is illegal: two units merge only
- * within the same track — both infantry or both
- * cavalry, never mixed — and only when their combined strength maps to a unit
- * in that track (so warrior + warrior, scout + knight, etc. all return null).
+ * within the same track — both infantry, both cavalry or both ranged, never
+ * mixed — and only when their combined tier maps to a unit in that track (so
+ * warrior + warrior, scout + knight, etc. all return null). Entities without a
+ * unit class (buildings, markers) never merge.
  *
- * Invariant: when non-null, the result's strength equals strA + strB, because
- * each STRENGTH_TO_* table maps n to a unit of strength n.
+ * Invariant: when non-null, the result's tier equals tierA + tierB, because
+ * each TIER_TO_UNIT track maps n to the unit of tier n.
  */
 export function mergeResult(a: EntityType, b: EntityType): EntityType | null {
-  if (!ENTITY_META[a].isUnit || !ENTITY_META[b].isUnit) return null;
-  const aCav = isCavalry(a);
-  if (aCav !== isCavalry(b)) return null;
-  const total = ENTITY_META[a].strength + ENTITY_META[b].strength;
-  const table = aCav ? STRENGTH_TO_CAVALRY : STRENGTH_TO_UNIT;
-  return table[total] ?? null;
+  const ca = ENTITY_META[a].unitClass;
+  const cb = ENTITY_META[b].unitClass;
+  if (!ca || ca !== cb) return null;
+  const total = ENTITY_META[a].tier + ENTITY_META[b].tier;
+  return TIER_TO_UNIT[ca][total] ?? null;
 }
 
 /**

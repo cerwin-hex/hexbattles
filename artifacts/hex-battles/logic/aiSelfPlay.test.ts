@@ -47,7 +47,7 @@ function countTwoPlyPositiveIdleCaptures(owner: TerritoryOwner, ws: AiWorkingSta
     const ue = entities.get(tile.key);
     if (!ue || !ENTITY_META[ue].isUnit || spentUnits.has(tile.key)) continue;
     if (ws.partialMoves.has(tile.key)) continue; // already moved this turn
-    const ustr = ENTITY_META[ue].strength;
+    const ustr = ENTITY_META[ue].offStrength;
     const [q, r] = tile.key.split(",").map(Number);
     const vm = getValidMoves(tile.key, owner, entities, tileMap, spentUnits,
       unitMovement(ue), ws.combatSpentUnits);
@@ -59,7 +59,7 @@ function countTwoPlyPositiveIdleCaptures(owner: TerritoryOwner, ws: AiWorkingSta
       // Undefended targets only — a free, uncontested grab. A strength-0
       // occupant (rebel / bridge) does not defend its tile, so it still counts.
       const occ = entities.get(nk);
-      if (occ && ENTITY_META[occ].strength > 0) continue;
+      if (occ && ENTITY_META[occ].defStrength > 0) continue;
       if (!vm.has(nk) || ustr <= getMaxEnemyZoC(nk, owner, entities, tileMap)) continue;
       const after = simulateAction(base, { kind: "move", from: tile.key, to: nk }, owner);
       const d2 = score(opponentBestResponse(owner, after, W).state) - baseScore2;

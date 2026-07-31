@@ -4,6 +4,7 @@ import type {
   EntityType,
   HexTile,
   EntityMeta,
+  UnitClass,
   BoardBounds,
 } from "@/types";
 
@@ -13,22 +14,23 @@ export type {
   EntityType,
   HexTile,
   EntityMeta,
+  UnitClass,
   BoardBounds,
 };
 
 export const ENTITY_META: Record<EntityType, EntityMeta> = {
-  peasant:       { name: 'Peasant',   cost: 10, upkeep: 3,  isUnit: true,  strength: 1 },
-  warrior:       { name: 'Warrior',   cost: 20, upkeep: 9,  isUnit: true,  strength: 2 },
-  swordsman:     { name: 'Swordsman', cost: 30, upkeep: 27, isUnit: true,  strength: 3 },
-  scout:         { name: 'Scout',     cost: 12, upkeep: 4,  isUnit: true,  strength: 1, movement: 5, maxAttacks: 2 },
-  knight:        { name: 'Knight',    cost: 24, upkeep: 12, isUnit: true,  strength: 2, movement: 5, maxAttacks: 2 },
+  peasant:   { name: 'Peasant',   cost: 10, upkeep: 3,  isUnit: true,  offStrength: 1, defStrength: 1, tier: 1, unitClass: 'infantry' },
+  warrior:   { name: 'Warrior',   cost: 20, upkeep: 9,  isUnit: true,  offStrength: 2, defStrength: 2, tier: 2, unitClass: 'infantry' },
+  swordsman: { name: 'Swordsman', cost: 30, upkeep: 27, isUnit: true,  offStrength: 3, defStrength: 3, tier: 3, unitClass: 'infantry' },
+  scout:     { name: 'Scout',     cost: 12, upkeep: 4,  isUnit: true,  offStrength: 1, defStrength: 1, tier: 1, unitClass: 'cavalry', movement: 5, maxAttacks: 2 },
+  knight:    { name: 'Knight',    cost: 24, upkeep: 12, isUnit: true,  offStrength: 2, defStrength: 2, tier: 2, unitClass: 'cavalry', movement: 5, maxAttacks: 2 },
   // NOTE: tower/castle upkeep here is the per-building BASE rate only.
   // Actual territory upkeep is LINEAR (n-th building costs n×base); use calcDefenseUpkeep/nextDefenseUpkeep.
-  tower:         { name: 'Tower',     cost: 15, upkeep: 1,  isUnit: false, strength: 1 },
-  castle:        { name: 'Castle',    cost: 30, upkeep: 5,  isUnit: false, strength: 2 },
-  bridge:        { name: 'Bridge',    cost: 5,  upkeep: 1,  isUnit: false, strength: 0 },
-  rebel:         { name: 'Rebel',     cost: 0,  upkeep: 0,  isUnit: false, strength: 0 },
-  city:          { name: 'City',      cost: 5,  upkeep: 0,  isUnit: false, strength: 0 },
+  tower:     { name: 'Tower',     cost: 15, upkeep: 1,  isUnit: false, offStrength: 1, defStrength: 1, tier: 1 },
+  castle:    { name: 'Castle',    cost: 30, upkeep: 5,  isUnit: false, offStrength: 2, defStrength: 2, tier: 2 },
+  bridge:    { name: 'Bridge',    cost: 5,  upkeep: 1,  isUnit: false, offStrength: 0, defStrength: 0, tier: 0 },
+  rebel:     { name: 'Rebel',     cost: 0,  upkeep: 0,  isUnit: false, offStrength: 0, defStrength: 0, tier: 0 },
+  city:      { name: 'City',      cost: 5,  upkeep: 0,  isUnit: false, offStrength: 0, defStrength: 0, tier: 0 },
 };
 
 /** Default movement budget for units without an explicit `movement` in ENTITY_META. */
@@ -44,10 +46,39 @@ export function unitMaxAttacks(entity: EntityType): number {
   return ENTITY_META[entity].maxAttacks ?? 1;
 }
 
+/** The unit track this entity belongs to, or undefined for buildings/markers. */
+export function unitClassOf(entity: EntityType): UnitClass | undefined {
+  return ENTITY_META[entity].unitClass;
+}
+
 /** Cavalry (charge units) follow special combat rules: a free 2-action budget,
  * at most one strike against a unit/rebel, and they can never assault buildings. */
 export function isCavalry(entity: EntityType): boolean {
-  return unitMaxAttacks(entity) > 1;
+  return ENTITY_META[entity].unitClass === 'cavalry';
+}
+
+/** Ranged units shoot adjacent enemies but can never take ground. */
+export function isRanged(entity: EntityType): boolean {
+  return ENTITY_META[entity].unitClass === 'ranged';
+}
+
+/**
+ * Whether this entity may take ground — capture a neutral or enemy tile, clear
+ * a rebel by stepping on it, or be bought directly into an attack. False only
+ * for ranged units. This is the single gate for the ranged no-capture rule.
+ */
+export function canCapture(entity: EntityType): boolean {
+  return !isRanged(entity);
+}
+
+/**
+ * How much military weight an entity carries, for AI valuation sums that care
+ * about "how strong is this side" rather than about a specific attack or
+ * defense roll. Equals the old `strength` for every non-ranged entity.
+ */
+export function militaryValue(entity: EntityType): number {
+  const m = ENTITY_META[entity];
+  return Math.max(m.offStrength, m.defStrength);
 }
 
 /**
@@ -245,7 +276,7 @@ export function getZoCStrength(
     if (!t || t.owner !== owner) continue;
     const e = entities.get(ck);
     if (e) {
-      const str = ENTITY_META[e].strength;
+      const str = ENTITY_META[e].defStrength;
       if (str > maxStr) maxStr = str;
     }
   }
@@ -271,7 +302,7 @@ export function getMaxEnemyZoC(
     if (!t || t.owner !== defenderOwner) continue;
     const e = entities.get(ck);
     if (e) {
-      const str = ENTITY_META[e].strength;
+      const str = ENTITY_META[e].defStrength;
       if (str > maxStr) maxStr = str;
     }
   }
@@ -304,7 +335,7 @@ export function getValidMoves(
   if (!unitTile) return result;
   const unitEntity = entities.get(unitKey);
   if (!unitEntity) return result;
-  const unitStrength = ENTITY_META[unitEntity].strength;
+  const unitStrength = ENTITY_META[unitEntity].offStrength;
   // Cavalry combat gating: a cavalry unit can never enter a building tile, and
   // once it has struck a defender (tracked via combatSpentUnits) it can no
   // longer enter unit/rebel tiles — only open captures and friendly moves.
@@ -418,12 +449,12 @@ export function getPlacementAttackTiles(
         // buildings with higher strength can't be captured
         if (
           !ENTITY_META[existingEntity].isUnit &&
-          meta.strength < ENTITY_META[existingEntity].strength
+          meta.offStrength < ENTITY_META[existingEntity].defStrength
         )
           continue;
       }
       const enemyZoC = getMaxEnemyZoC(nk, "player", entities, tileMap);
-      if (meta.strength > enemyZoC) result.add(nk);
+      if (meta.offStrength > enemyZoC) result.add(nk);
     }
   }
   return result;

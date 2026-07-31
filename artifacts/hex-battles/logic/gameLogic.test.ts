@@ -152,6 +152,31 @@ describe("mergeResult", () => {
   });
 });
 
+describe("mergeResult tier parity", () => {
+  it("preserves every infantry and cavalry merge outcome", () => {
+    expect(mergeResult("peasant", "peasant")).toBe("warrior");
+    expect(mergeResult("peasant", "warrior")).toBe("swordsman");
+    expect(mergeResult("warrior", "peasant")).toBe("swordsman");
+    expect(mergeResult("warrior", "warrior")).toBeNull();
+    expect(mergeResult("swordsman", "peasant")).toBeNull();
+    expect(mergeResult("scout", "scout")).toBe("knight");
+    expect(mergeResult("scout", "knight")).toBeNull();
+    expect(mergeResult("knight", "knight")).toBeNull();
+  });
+
+  it("never merges across tracks", () => {
+    expect(mergeResult("peasant", "scout")).toBeNull();
+    expect(mergeResult("scout", "peasant")).toBeNull();
+    expect(mergeResult("warrior", "knight")).toBeNull();
+  });
+
+  it("never merges non-units", () => {
+    expect(mergeResult("tower", "tower")).toBeNull();
+    expect(mergeResult("peasant", "tower")).toBeNull();
+    expect(mergeResult("peasant", "rebel")).toBeNull();
+  });
+});
+
 // ─── initTerritoryBalances ────────────────────────────────────────────────────
 
 describe("initTerritoryBalances", () => {

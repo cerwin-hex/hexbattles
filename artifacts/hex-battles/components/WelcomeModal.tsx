@@ -151,7 +151,8 @@ export function WelcomeModal() {
                   <Text style={[styles.tableCell, styles.tableCellName, styles.tableHeaderText]}>Name</Text>
                   <Text style={[styles.tableCell, styles.tableCellNum, styles.tableHeaderText]}>Cost</Text>
                   <Text style={[styles.tableCell, styles.tableCellNum, styles.tableHeaderText]}>Upkeep</Text>
-                  <Text style={[styles.tableCell, styles.tableCellNum, styles.tableHeaderText]}>Str</Text>
+                  <Text style={[styles.tableCell, styles.tableCellNum, styles.tableHeaderText]}>Atk</Text>
+                  <Text style={[styles.tableCell, styles.tableCellNum, styles.tableHeaderText]}>Def</Text>
                 </View>
                 {UNIT_ROWS.map((row, i) => (
                   <View key={row.name} style={[styles.tableRow, i % 2 === 1 && styles.tableRowAlt]}>
@@ -161,7 +162,8 @@ export function WelcomeModal() {
                     <Text style={[styles.tableCell, styles.tableCellName, styles.tableBodyText]}>{row.name}</Text>
                     <Text style={[styles.tableCell, styles.tableCellNum, styles.tableBodyText]}>{row.cost}</Text>
                     <Text style={[styles.tableCell, styles.tableCellNum, styles.tableBodyText]}>{row.upkeep}</Text>
-                    <Text style={[styles.tableCell, styles.tableCellNum, styles.tableBodyText]}>{row.strength === 0 ? '—' : row.strength}</Text>
+                    <Text style={[styles.tableCell, styles.tableCellNum, styles.tableBodyText]}>{row.offStrength === 0 ? '—' : row.offStrength}</Text>
+                    <Text style={[styles.tableCell, styles.tableCellNum, styles.tableBodyText]}>{row.defStrength === 0 ? '—' : row.defStrength}</Text>
                   </View>
                 ))}
               </View>

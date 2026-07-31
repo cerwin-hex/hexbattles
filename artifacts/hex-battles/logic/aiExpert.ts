@@ -14,6 +14,7 @@ import {
   unitMovement,
   unitMaxAttacks,
   isCavalry,
+  militaryValue,
   cavalryMoveKind,
   DEFAULT_MOVEMENT,
   improveCostFor,
@@ -110,7 +111,7 @@ function enemyFrontInfo(
       // unit or a fort keeps its front status — it defends itself and can attack
       // out, and `threat` / `enemyMilitary` already drive killing it.
       const e = entities.get(t.key);
-      if (!e || ENTITY_META[e].strength === 0) inertPockets.add(t.key);
+      if (!e || ENTITY_META[e].defStrength === 0) inertPockets.add(t.key);
     }
   }
   return { advanceTargets: substantial.length > 0 ? substantial : all, inertPockets };
@@ -258,12 +259,12 @@ function tileValue(
   return (
     (TERRAIN_INCOME[t.terrain] ?? 0) +
     (cities.has(key) ? CITY_BONUS : 0) +
-    (e && ENTITY_META[e].isUnit ? ENTITY_META[e].strength : 0) +
+    (e && ENTITY_META[e].isUnit ? militaryValue(e) : 0) +
     // A fortification's defensive strength is real value: losing the tile both
     // hands the enemy ground and demolishes the fort. Without this a tower tile
     // scored the same as bare grass, so the AI never prioritised protecting (or
     // picking off) forts — exactly the gap a human exploits.
-    (isFort ? ENTITY_META[e as EntityType].strength : 0) +
+    (isFort ? ENTITY_META[e as EntityType].defStrength : 0) +
     1
   );
 }
@@ -359,7 +360,7 @@ export function evaluatePosition(
     // whose removal improves our position. Counted regardless of adjacency so a
     // capture that destroys it shows up as a score gain.
     if (t.owner !== owner && t.owner !== "neutral") {
-      if (meta.isUnit || e === "tower" || e === "castle") enemyMilitary += meta.strength;
+      if (meta.isUnit || e === "tower" || e === "castle") enemyMilitary += militaryValue(e);
       continue;
     }
     if (t.owner !== owner) continue; // neutral-owned entity (none today) — skip
@@ -384,10 +385,10 @@ export function evaluatePosition(
       return !!nt && nt.owner !== owner && nt.owner !== "neutral" && !isPhantomFront(nt);
     });
     if (meta.isUnit) {
-      unitStrength += meta.strength;
+      unitStrength += militaryValue(e);
       mobility += (unitMovement(e) - DEFAULT_MOVEMENT) + (unitMaxAttacks(e) - 1);
-      if (onBorder) borderBonus += meta.strength;
-      if (enemyAdjacent) frontline += meta.strength;
+      if (onBorder) borderBonus += militaryValue(e);
+      if (enemyAdjacent) frontline += militaryValue(e);
       // Advance gradient: a unit far from any enemy is drawn forward. Diminishing
       // (capped at ADVANCE_REACH) so it never outweighs a real action.
       if (enemyCoords.length > 0) {
@@ -407,7 +408,7 @@ export function evaluatePosition(
         if (!nt || nt.owner === owner) continue;
         if (nt.terrain === "lake" || nt.terrain === "mountain") continue;
         const zoc = getMaxEnemyZoC(nk, owner, entities, tileMap);
-        if (meta.strength > zoc) {
+        if (meta.offStrength > zoc) {
           captureTargets.add(nk);
           if (zoc >= 1) assaultTargets.add(nk);
         }
@@ -427,9 +428,9 @@ export function evaluatePosition(
         frontRelevant = minD <= FORT_RELEVANCE_DIST;
       }
       if (frontRelevant || !IDLE_FORT_PENALTY) {
-        fortification += meta.strength;
-        if (onBorder) borderBonus += meta.strength;
-        if (enemyAdjacent) frontline += meta.strength;
+        fortification += meta.defStrength;
+        if (onBorder) borderBonus += meta.defStrength;
+        if (enemyAdjacent) frontline += meta.defStrength;
       } else {
         idleForts++;
       }
@@ -466,7 +467,7 @@ export function evaluatePosition(
     if (!ENTITY_META[e].isUnit) continue;
     const t = tileMap.get(k);
     if (!t || t.owner === owner || t.owner === "neutral") continue;
-    const s = ENTITY_META[e].strength;
+    const s = ENTITY_META[e].offStrength;
     const [kq, kr] = k.split(",").map(Number);
     for (const { dir: [dq, dr] } of HEX_EDGES) {
       const nk = tileKey(kq + dq, kr + dr);
@@ -537,7 +538,7 @@ export function evaluatePosition(
     const e = entities.get(k);
     let v = 1; // the zeroed treasury / disrupted tile
     if (e && e !== "rebel") {
-      if (ENTITY_META[e].isUnit || e === "tower" || e === "castle") v += ENTITY_META[e].strength;
+      if (ENTITY_META[e].isUnit || e === "tower" || e === "castle") v += militaryValue(e);
     }
     if (cities.has(k)) v += CITY_BONUS;
     enemyIsolated += v;
@@ -735,7 +736,7 @@ export function opponentBestResponse(
     const t = s.tileMap.get(k);
     if (!t || t.owner === owner || t.owner === "neutral") continue;
     const enemyOwner = t.owner as TerritoryOwner;
-    const strength = ENTITY_META[e].strength;
+    const strength = ENTITY_META[e].offStrength;
     const [kq, kr] = k.split(",").map(Number);
     for (const { dir: [dq, dr] } of HEX_EDGES) {
       const nk = tileKey(kq + dq, kr + dr);
@@ -876,7 +877,7 @@ export function generateCandidateActions(
         const targetE = ctx.entities.get(mk);
         if (isCavalry(ue) && cavalryMoveKind(targetE) === "building") continue;
         const zoc = getMaxEnemyZoC(mk, owner, ctx.entities, ctx.tileMap);
-        if (ENTITY_META[ue].strength <= zoc) continue;
+        if (ENTITY_META[ue].offStrength <= zoc) continue;
         out.push({ kind: "move", from: uk, to: mk });
         perUnit++;
         totalMoveCount++;
@@ -957,7 +958,7 @@ export function generateCandidateActions(
         const ne = ctx.entities.get(nk);
         if (isCavalry(uType) && cavalryMoveKind(ne) === "building") continue;
         const zoc = getMaxEnemyZoC(nk, owner, ctx.entities, ctx.tileMap);
-        if (ENTITY_META[uType].strength <= zoc) continue;
+        if (ENTITY_META[uType].offStrength <= zoc) continue;
         out.push({ kind: "buy", unitType: uType, target: nk, cost, outside: true });
         buyCount++;
         if (buyCount >= capPerKind) break;
@@ -968,7 +969,7 @@ export function generateCandidateActions(
   // ── Builds: tower / castle / city / bridge ──
   const hasStrongUnit = territory.some((t) => {
     const e = ctx.entities.get(t.key);
-    return !!e && ENTITY_META[e].isUnit && ENTITY_META[e].strength >= 2;
+    return !!e && ENTITY_META[e].isUnit && ENTITY_META[e].defStrength >= 2;
   });
   for (const bType of ["tower", "castle"] as EntityType[]) {
     const cost = ENTITY_META[bType].cost;
@@ -1017,8 +1018,8 @@ export function generateCandidateActions(
   const upgradeUnlocksCapture = (key: string, fromE: EntityType, toE: EntityType): boolean => {
     if (!ENTITY_META[toE].isUnit) return false; // a fort can't attack
     if (ctx.spentUnits.has(key)) return false; // no action left this turn
-    const sFrom = ENTITY_META[fromE].strength;
-    const sTo = ENTITY_META[toE].strength;
+    const sFrom = ENTITY_META[fromE].offStrength;
+    const sTo = ENTITY_META[toE].offStrength;
     if (sTo <= sFrom) return false;
     const [kq, kr] = key.split(",").map(Number);
     return HEX_EDGES.some(({ dir: [dq, dr] }) => {
@@ -1087,7 +1088,7 @@ function territoryThreatened(
     if (!ENTITY_META[e].isUnit) continue;
     const t = tileMap.get(k);
     if (!t || t.owner === owner || t.owner === "neutral") continue;
-    const s = ENTITY_META[e].strength;
+    const s = ENTITY_META[e].offStrength;
     const [kq, kr] = k.split(",").map(Number);
     for (const { dir: [dq, dr] } of HEX_EDGES) {
       const nk = tileKey(kq + dq, kr + dr);
@@ -1236,7 +1237,7 @@ export async function runExpertTerritoryDecisionLoop(
           // pocket" capture that the top-K crowds out (measured 1-ply rank 17-75
           // of 100-120), so it never reached the 2-ply pass at all.
           const occupant = ctx.entities.get(sc.cand.to);
-          if (occupant && ENTITY_META[occupant].strength > 0) continue;
+          if (occupant && ENTITY_META[occupant].defStrength > 0) continue;
           if (seenTargets.has(sc.cand.to)) continue;
           seenTargets.add(sc.cand.to);
           evalSet.push(sc);

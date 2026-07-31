@@ -23,6 +23,9 @@ import {
   IMPROVED_TERRAINS,
   calcAdminBurden,
   ADMIN_BURDEN_THRESHOLD,
+  isCavalry,
+  canCapture,
+  militaryValue,
 } from "@/utils/hexGrid";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -47,24 +50,75 @@ function entities(pairs: [string, EntityType][]): Map<string, EntityType> {
 // ─── ENTITY_META ──────────────────────────────────────────────────────────────
 
 describe("ENTITY_META", () => {
-  it("peasant has strength 1", () => expect(ENTITY_META.peasant.strength).toBe(1));
-  it("warrior has strength 2", () => expect(ENTITY_META.warrior.strength).toBe(2));
-  it("swordsman has strength 3", () => expect(ENTITY_META.swordsman.strength).toBe(3));
+  it("peasant has strength 1", () => {
+    expect(ENTITY_META.peasant.offStrength).toBe(1);
+    expect(ENTITY_META.peasant.defStrength).toBe(1);
+  });
+  it("warrior has strength 2", () => {
+    expect(ENTITY_META.warrior.offStrength).toBe(2);
+    expect(ENTITY_META.warrior.defStrength).toBe(2);
+  });
+  it("swordsman has strength 3", () => {
+    expect(ENTITY_META.swordsman.offStrength).toBe(3);
+    expect(ENTITY_META.swordsman.defStrength).toBe(3);
+  });
   it("rebel is not a unit", () => expect(ENTITY_META.rebel.isUnit).toBe(false));
   it("city has zero upkeep", () => expect(ENTITY_META.city.upkeep).toBe(0));
-  it("bridge has zero strength", () => expect(ENTITY_META.bridge.strength).toBe(0));
+  it("bridge has zero strength", () => {
+    expect(ENTITY_META.bridge.offStrength).toBe(0);
+    expect(ENTITY_META.bridge.defStrength).toBe(0);
+  });
   it("scout is a fast cavalry unit with the charge ability", () => {
     expect(ENTITY_META.scout.isUnit).toBe(true);
-    expect(ENTITY_META.scout.strength).toBe(1);
+    expect(ENTITY_META.scout.offStrength).toBe(1);
+    expect(ENTITY_META.scout.defStrength).toBe(1);
     expect(ENTITY_META.scout.movement).toBe(5);
     expect(ENTITY_META.scout.maxAttacks).toBe(2);
   });
   it("knight is a fast cavalry unit with the charge ability", () => {
-    expect(ENTITY_META.knight.strength).toBe(2);
+    expect(ENTITY_META.knight.offStrength).toBe(2);
+    expect(ENTITY_META.knight.defStrength).toBe(2);
     expect(ENTITY_META.knight.movement).toBe(5);
     expect(ENTITY_META.knight.maxAttacks).toBe(2);
   });
   it("scouts upgrade to knights", () => expect(UNIT_UPGRADE.scout).toBe("knight"));
+});
+
+describe("offense/defense split", () => {
+  // Every entity that existed before the ranged track must keep a single
+  // effective strength: the split is a refactor for them, not a rule change.
+  const PRE_RANGED = [
+    "peasant", "warrior", "swordsman", "scout", "knight",
+    "tower", "castle", "bridge", "rebel", "city",
+  ] as const;
+
+  it("keeps offense equal to defense for every pre-ranged entity", () => {
+    for (const id of PRE_RANGED) {
+      expect(ENTITY_META[id].offStrength).toBe(ENTITY_META[id].defStrength);
+    }
+  });
+
+  it("tags each unit with its class", () => {
+    expect(ENTITY_META.peasant.unitClass).toBe("infantry");
+    expect(ENTITY_META.scout.unitClass).toBe("cavalry");
+    expect(ENTITY_META.tower.unitClass).toBeUndefined();
+    expect(isCavalry("knight")).toBe(true);
+    expect(isCavalry("swordsman")).toBe(false);
+    expect(canCapture("swordsman")).toBe(true);
+  });
+
+  it("gives every unit a tier matching its old strength", () => {
+    expect(ENTITY_META.peasant.tier).toBe(1);
+    expect(ENTITY_META.warrior.tier).toBe(2);
+    expect(ENTITY_META.swordsman.tier).toBe(3);
+    expect(ENTITY_META.scout.tier).toBe(1);
+    expect(ENTITY_META.knight.tier).toBe(2);
+  });
+
+  it("reports military value as the larger of the two strengths", () => {
+    expect(militaryValue("swordsman")).toBe(3);
+    expect(militaryValue("bridge")).toBe(0);
+  });
 });
 
 // ─── TERRAIN_INCOME ───────────────────────────────────────────────────────────

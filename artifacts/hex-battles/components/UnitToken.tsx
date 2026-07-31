@@ -44,13 +44,13 @@ const BUILDING_ICON_SCALE = 1.95;
 const RING_OUTLINE_COLOR = "#2B2118";
 
 /**
- * Outline thickness scales with unit strength so stronger units read as more
- * heavily armoured: str 1 → 1.0, str 2 → 1.5, str 3 → 2.0. Non-unit discs
- * (e.g. the rebel marker) fall back to the str-1 weight.
+ * Outline thickness scales with unit tier so higher-tier units read as more
+ * heavily armoured: tier 1 → 1.0, tier 2 → 1.5, tier 3 → 2.0. Non-unit discs
+ * (e.g. the rebel marker) fall back to the tier-1 weight.
  */
 function ringOutlineWidth(entityId: EntityType): number {
   const meta = ENTITY_META[entityId];
-  return meta.isUnit ? 0.5 + meta.strength * 0.5 : 1.0;
+  return meta.isUnit ? 0.5 + meta.tier * 0.5 : 1.0;
 }
 
 /**

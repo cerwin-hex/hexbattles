@@ -1,5 +1,5 @@
 import { ENTITY_META, IMPROVEMENTS } from "@/utils/hexGrid";
-import type { EntityType, ImprovementMeta } from "@/utils/hexGrid";
+import type { EntityType, ImprovementMeta, UnitClass } from "@/utils/hexGrid";
 
 export const BTN_H = 52;
 export const TOP_BTN_H = 40;
@@ -20,19 +20,16 @@ export const ORDERED_EDGES: ReadonlyArray<{
   { dir: [1, -1], verts: [5, 0] },
 ];
 
-export const STRENGTH_TO_UNIT: Record<number, EntityType> = {
-  1: "peasant",
-  2: "warrior",
-  3: "swordsman",
-};
-
-// Cavalry merge track, parallel to STRENGTH_TO_UNIT. Cavalry keeps its own
-// upgrade line, so two scouts (strength 1) merge into a knight (strength 2)
-// rather than collapsing into an infantry unit. There is no strength-3 cavalry,
-// so only scout + scout is a valid cavalry merge.
-export const STRENGTH_TO_CAVALRY: Record<number, EntityType> = {
-  1: "scout",
-  2: "knight",
+/**
+ * Merge tables, one per unit track. Two units of the same track merge into the
+ * unit whose tier equals the sum of theirs; a missing entry means the merge is
+ * illegal. Keyed by tier rather than by strength so a track whose strengths do
+ * not equal its tiers (ranged) merges correctly.
+ */
+export const TIER_TO_UNIT: Record<UnitClass, Record<number, EntityType>> = {
+  infantry: { 1: "peasant", 2: "warrior", 3: "swordsman" },
+  cavalry:  { 1: "scout",   2: "knight" },
+  ranged:   {},
 };
 
 export const PURCHASABLES = (Object.keys(ENTITY_META) as EntityType[])
@@ -62,7 +59,8 @@ export const INFO_TABLE_ROWS = PURCHASABLES.map((p) => ({
   name: p.name,
   cost: p.cost,
   upkeep: p.upkeep,
-  strength: p.strength,
+  offStrength: p.offStrength,
+  defStrength: p.defStrength,
 }));
 
 /**
