@@ -1,0 +1,244 @@
+Expert AI: lazy cloning in simulateAction
+=========================================
+
+Salvaged from the abandoned worktree .claude/worktrees/perf-expert-ai-lazy-clone
+on 2026-07-31. The work was never committed; the worktree's branch
+(worktree-perf-expert-ai-lazy-clone) held no commits of its own and has been
+deleted. Base commit: 0a7cb54 (2026-06-18).
+
+What it does
+------------
+simulateAction cloned all four SimState maps for every candidate action. This
+copies only the maps the action actually mutates: tileMap (~150 entries on a
+full board) and balances are cloned for captures only, since repositions,
+builds and upgrades never touch them. The author's own estimate was 4-6x less
+allocation per candidate, which matters most late-game where Expert's cost
+scales with owned territory and the eval loop dominates.
+
+Do NOT git apply this blindly
+-----------------------------
+aiExpert.ts has moved on since the base commit (88ee106, 452b136 at minimum).
+Read it as a design sketch and re-implement against the current file. The
+correctness-critical detail it gets right: on a capture, the UNMUTATED s0.tileMap
+and s0.entities serve as the previousTileMap/prevEntities snapshots that
+recalculateTerritoriesForCapture needs — that is what makes skipping the clone
+safe, and any re-implementation has to preserve it.
+
+Verify any re-implementation with a seeded self-play A/B (new vs old), not
+against Hard, which is saturated.
+
+diff --git a/artifacts/hex-battles/logic/aiExpert.ts b/artifacts/hex-battles/logic/aiExpert.ts
+index e03ad12..65d57a3 100644
+--- a/artifacts/hex-battles/logic/aiExpert.ts
++++ b/artifacts/hex-battles/logic/aiExpert.ts
+@@ -548,15 +548,6 @@ export interface SimState {
+   cities: Set<string>;
+ }
+ 
+-function cloneState(s: SimState): SimState {
+-  return {
+-    tileMap: new Map(s.tileMap),
+-    entities: new Map(s.entities),
+-    balances: new Map(s.balances),
+-    cities: new Set(s.cities),
+-  };
+-}
+-
+ function chargeCost(s: SimState, anchorKey: string, owner: TerritoryOwner, cost: number): void {
+   const terr = getContiguousTerritory(s.tileMap, anchorKey, owner, s.entities);
+   const tid = getTerritoryId(terr);
+@@ -570,14 +561,18 @@ function chargeCost(s: SimState, anchorKey: string, owner: TerritoryOwner, cost:
+  * `recalculateTerritoriesForCapture` so balance geometry matches the game.
+  */
+ export function simulateAction(s0: SimState, a: ExpertAction, owner: TerritoryOwner): SimState {
+-  const s = cloneState(s0);
++  // Lazy cloning: only copy the maps that this action actually mutates.
++  // tileMap is ~150 entries on a full board — skipping its clone for the
++  // dominant non-capture actions (repositions, builds, upgrades) cuts
++  // allocation pressure by ~4-6× per candidate, which matters most late-game
++  // when the AI evaluates dozens of such candidates per iteration.
+   switch (a.kind) {
+     case "move": {
+-      const fromE = s.entities.get(a.from);
+-      const destTile = s.tileMap.get(a.to);
+-      if (!fromE || !destTile) return s;
++      const fromE = s0.entities.get(a.from);
++      const destTile = s0.tileMap.get(a.to);
++      if (!fromE || !destTile) return s0;
+       const prevOwner = destTile.owner as TerritoryOwner;
+-      const destExisting = s.entities.get(a.to);
++      const destExisting = s0.entities.get(a.to);
+       // Only a real mergeable ally counts as a merge. Moving onto a rebel (or any
+       // non-mergeable occupant) is combat: the occupant is removed and the unit
+       // takes the tile — matching dtExecMove in the real game.
+@@ -586,80 +581,128 @@ export function simulateAction(s0: SimState, a: ExpertAction, owner: TerritoryOw
+           ? mergeResult(fromE, destExisting)
+           : null;
+       const isAllyMerge = mergeInto !== null;
+-      const prevMap = new Map(s.tileMap);
+-      const prevEnt = new Map(s.entities);
+-      if (prevOwner !== owner) s.tileMap.set(a.to, { ...destTile, owner });
++      // Always need a fresh entities copy; tileMap/balances only for captures.
++      const entities = new Map(s0.entities);
+       if (isAllyMerge) {
+-        s.entities.delete(a.from);
+-        s.entities.set(a.to, mergeInto);
++        entities.delete(a.from);
++        entities.set(a.to, mergeInto);
+       } else {
+-        s.entities.delete(a.to);
+-        s.entities.delete(a.from);
+-        s.entities.set(a.to, fromE);
++        entities.delete(a.to);
++        entities.delete(a.from);
++        entities.set(a.to, fromE);
+       }
+-      if (s.tileMap.get(a.from)?.terrain === "lake") s.entities.set(a.from, "bridge");
++      if (s0.tileMap.get(a.from)?.terrain === "lake") entities.set(a.from, "bridge");
+       if (prevOwner !== owner) {
+-        s.balances = recalculateTerritoriesForCapture(
+-          a.to, owner, prevOwner, prevMap, s.tileMap, s.balances, s.entities, prevEnt,
++        // Capture: tileMap and balances also change. s0.tileMap remains unmutated
++        // and serves directly as the previousTileMap snapshot for recalculate;
++        // s0.entities (pre-mutation) serves as prevEntities.
++        const tileMap = new Map(s0.tileMap);
++        tileMap.set(a.to, { ...destTile, owner });
++        const balances = recalculateTerritoriesForCapture(
++          a.to, owner, prevOwner, s0.tileMap, tileMap, s0.balances, entities, s0.entities,
+         );
++        return { tileMap, entities, balances, cities: s0.cities };
+       }
+-      return s;
++      // Own-tile move (reposition / merge / rebel-clear): only entities changed.
++      return { tileMap: s0.tileMap, entities, balances: s0.balances, cities: s0.cities };
+     }
+     case "buy": {
+-      const target = s.tileMap.get(a.target);
+-      if (!target) return s;
++      const target = s0.tileMap.get(a.target);
++      if (!target) return s0;
+       if (a.outside) {
++        // Outside buy captures an enemy/neutral tile: tileMap changes.
+         const prevOwner = target.owner as TerritoryOwner;
+-        const prevMap = new Map(s.tileMap);
+-        s.tileMap.set(a.target, { ...target, owner });
++        const tileMap = new Map(s0.tileMap);
++        tileMap.set(a.target, { ...target, owner });
++        const entities = new Map(s0.entities);
++        let cities = s0.cities;
+         if (a.unitType === "city") {
+-          s.cities.add(a.target);
++          cities = new Set(s0.cities);
++          cities.add(a.target);
+         } else {
+-          s.entities.delete(a.target);
+-          s.entities.set(a.target, a.unitType);
++          entities.set(a.target, a.unitType);
+         }
+-        s.balances = recalculateTerritoriesForCapture(
+-          a.target, owner, prevOwner, prevMap, s.tileMap, s.balances, s.entities,
++        // s0.tileMap is the pre-capture snapshot; recalculate returns a new Map.
++        const balances = recalculateTerritoriesForCapture(
++          a.target, owner, prevOwner, s0.tileMap, tileMap, s0.balances, entities,
+         );
++        const s: SimState = { tileMap, entities, balances, cities };
++        chargeCost(s, a.target, owner, a.cost);
++        return s;
+       } else if (a.unitType === "city") {
+-        s.cities.add(a.target);
++        // Inside city buy: only cities and balances change.
++        const cities = new Set(s0.cities);
++        cities.add(a.target);
++        const balances = new Map(s0.balances);
++        const s: SimState = { tileMap: s0.tileMap, entities: s0.entities, balances, cities };
++        chargeCost(s, a.target, owner, a.cost);
++        return s;
+       } else {
+-        s.entities.set(a.target, a.unitType);
++        // Inside unit buy: only entities and balances change.
++        const entities = new Map(s0.entities);
++        entities.set(a.target, a.unitType);
++        const balances = new Map(s0.balances);
++        const s: SimState = { tileMap: s0.tileMap, entities, balances, cities: s0.cities };
++        chargeCost(s, a.target, owner, a.cost);
++        return s;
+       }
+-      chargeCost(s, a.target, owner, a.cost);
+-      return s;
+     }
+     case "build": {
+-      const target = s.tileMap.get(a.target);
+-      if (!target) return s;
++      const target = s0.tileMap.get(a.target);
++      if (!target) return s0;
+       if (a.buildingType === "bridge") {
+-        const prevMap = new Map(s.tileMap);
+-        s.tileMap.set(a.target, { ...target, owner });
+-        s.entities.set(a.target, "bridge");
+-        s.balances = recalculateTerritoriesForCapture(
+-          a.target, owner, "neutral", prevMap, s.tileMap, s.balances, s.entities,
++        // Bridge annexes a neutral lake tile: tileMap changes.
++        const tileMap = new Map(s0.tileMap);
++        tileMap.set(a.target, { ...target, owner });
++        const entities = new Map(s0.entities);
++        entities.set(a.target, "bridge");
++        const balances = recalculateTerritoriesForCapture(
++          a.target, owner, "neutral", s0.tileMap, tileMap, s0.balances, entities,
+         );
++        const s: SimState = { tileMap, entities, balances, cities: s0.cities };
++        chargeCost(s, a.target, owner, a.cost);
++        return s;
+       } else if (a.buildingType === "city") {
+-        s.cities.add(a.target);
++        // City build: only cities and balances change.
++        const cities = new Set(s0.cities);
++        cities.add(a.target);
++        const balances = new Map(s0.balances);
++        const s: SimState = { tileMap: s0.tileMap, entities: s0.entities, balances, cities };
++        chargeCost(s, a.target, owner, a.cost);
++        return s;
+       } else {
+-        s.entities.set(a.target, a.buildingType);
++        // Tower/castle build: only entities and balances change.
++        const entities = new Map(s0.entities);
++        entities.set(a.target, a.buildingType);
++        const balances = new Map(s0.balances);
++        const s: SimState = { tileMap: s0.tileMap, entities, balances, cities: s0.cities };
++        chargeCost(s, a.target, owner, a.cost);
++        return s;
+       }
+-      chargeCost(s, a.target, owner, a.cost);
+-      return s;
+     }
+     case "upgrade": {
+-      s.entities.set(a.target, a.to);
++      // Only entities and balances change.
++      const entities = new Map(s0.entities);
++      entities.set(a.target, a.to);
++      const balances = new Map(s0.balances);
++      const s: SimState = { tileMap: s0.tileMap, entities, balances, cities: s0.cities };
+       chargeCost(s, a.target, owner, a.cost);
+       return s;
+     }
+     case "remove": {
+-      const e = s.entities.get(a.target);
+-      s.entities.delete(a.target);
++      const e = s0.entities.get(a.target);
++      const entities = new Map(s0.entities);
++      entities.delete(a.target);
+       if (e === "bridge") {
+-        const lt = s.tileMap.get(a.target);
+-        if (lt?.terrain === "lake") s.tileMap.set(a.target, { ...lt, owner: "neutral" });
++        const lt = s0.tileMap.get(a.target);
++        if (lt?.terrain === "lake") {
++          // Bridge removal reverts the lake tile to neutral: tileMap changes.
++          const tileMap = new Map(s0.tileMap);
++          tileMap.set(a.target, { ...lt, owner: "neutral" });
++          return { tileMap, entities, balances: s0.balances, cities: s0.cities };
++        }
+       }
+-      return s;
++      return { tileMap: s0.tileMap, entities, balances: s0.balances, cities: s0.cities };
+     }
+   }
+ }
