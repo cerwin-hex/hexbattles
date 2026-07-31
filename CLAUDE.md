@@ -65,6 +65,7 @@ Pure logic is extracted into:
 - `logic/aiStrategy.ts` — AI decision loop (`runAiTerritoryDecisionLoop`) — async, per-territory
 - `logic/aiHelpers.ts` — Decision-tree helpers (`dtSplitScore`, `dtFindMergeMove`, etc.)
 - `logic/winLossChecker.ts` — Win/loss detection
+- `logic/rangedAttack.ts` — Ranged unit targeting and shot resolution (bowmen shoot adjacent enemies/rebels instead of taking ground)
 
 ### Rendering pipeline
 
@@ -99,6 +100,7 @@ Grid generation and all game rules (entity metadata, terrain income, movement co
 - Unit upkeep: flat per-unit value from `ENTITY_META`
 - Defense upkeep: **linear scaling** — n-th tower costs `n`, n-th castle costs `5n` (not flat). Use `calcDefenseUpkeep` / `nextDefenseUpkeep` from `hexGrid.ts`
 - Territory split penalty: isolated single-hex territories are penalized each end-of-turn via `applySingleHexPenalty`
+- Units carry separate `offStrength` / `defStrength` (plus a `tier` and a `unitClass` of `infantry`/`cavalry`/`ranged`) in `ENTITY_META`; ranged units never take ground, they shoot one adjacent enemy per turn via `logic/rangedAttack.ts`
 
 ### AI turn flow
 
