@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 import { GestureHandlerRootView, ScrollView } from "react-native-gesture-handler";
+import { GameElementsSection } from "@/components/GameElementsSection";
 import { Slider } from "@/components/Slider";
 import { Toggle } from "@/components/Toggle";
 import { COLOR_PALETTE } from "@/constants/colors";
@@ -85,6 +86,13 @@ export function SettingsModal({
                 ))}
               </View>
             </View>
+
+            <GameElementsSection
+              elements={draft.elements}
+              showBeta={draft.showBetaElements}
+              onChange={(next) => update("elements", next)}
+              initiallyExpanded
+            />
 
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>Beta Elements</Text>

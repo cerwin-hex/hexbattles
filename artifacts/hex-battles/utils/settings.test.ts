@@ -41,3 +41,38 @@ describe("normalizeSettings — game elements", () => {
     expect(normalizeSettings(null)).toEqual(DEFAULT_SETTINGS);
   });
 });
+
+describe("normalizeSettings — remembered new-game choices", () => {
+  it("falls back to the defaults for a blob written before the fields existed", () => {
+    const out = normalizeSettings({ playerColor: "red" });
+    expect(out.tileCount).toBe(DEFAULT_SETTINGS.tileCount);
+    expect(out.opponentCount).toBe(DEFAULT_SETTINGS.opponentCount);
+    expect(out.difficulty).toBe(DEFAULT_SETTINGS.difficulty);
+  });
+
+  it("keeps stored choices", () => {
+    const out = normalizeSettings({
+      tileCount: 150,
+      opponentCount: 1,
+      difficulty: "super_expert",
+    });
+    expect(out.tileCount).toBe(150);
+    expect(out.opponentCount).toBe(1);
+    expect(out.difficulty).toBe("super_expert");
+  });
+
+  it("clamps tileCount to the slider's range", () => {
+    expect(normalizeSettings({ tileCount: 5 }).tileCount).toBe(40);
+    expect(normalizeSettings({ tileCount: 9999 }).tileCount).toBe(200);
+  });
+
+  it("clamps opponentCount to the number of pills", () => {
+    expect(normalizeSettings({ opponentCount: 0 }).opponentCount).toBe(1);
+    expect(normalizeSettings({ opponentCount: 12 }).opponentCount).toBe(4);
+  });
+
+  it("rejects a difficulty that is not one of the five", () => {
+    expect(normalizeSettings({ difficulty: "nightmare" as never }).difficulty).toBe("medium");
+    expect(normalizeSettings({ difficulty: null as never }).difficulty).toBe("medium");
+  });
+});

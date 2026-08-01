@@ -12,19 +12,22 @@ interface GameElementsSectionProps {
   elements: GameElements;
   showBeta: boolean;
   onChange: (next: GameElements) => void;
+  /** Start with the list open. Settings opens it; a compact host would not. */
+  initiallyExpanded?: boolean;
 }
 
 /**
- * The collapsible "Game Elements" list in the main menu. Collapsed by default
- * so the menu stays compact and the start button stays reachable without
- * scrolling; the header carries an "N of M" summary of the visible elements.
+ * The collapsible "Game Elements" list. The header carries an "N of M" summary
+ * of the visible elements, so a collapsed section still shows how many parts of
+ * the game the next new game will include.
  */
 export function GameElementsSection({
   elements,
   showBeta,
   onChange,
+  initiallyExpanded = false,
 }: GameElementsSectionProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(initiallyExpanded);
   const defs = visibleGameElements(showBeta);
   const { on, total } = enabledVisibleCount(elements, showBeta);
 
