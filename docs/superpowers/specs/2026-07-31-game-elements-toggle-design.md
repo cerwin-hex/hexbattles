@@ -319,3 +319,23 @@ units, fog of war) stay hidden until you switch on "show beta elements" in
 Settings, and they can join the list with two lines of code once they are ready.
 The AI obeys exactly the same choices you do. The rules text still describes the
 whole game.
+
+## 7. Change after implementation (2026-08-01)
+
+On-device testing showed the main menu had no scrolling body of its own, so on a
+short screen the start buttons fell off the bottom and could not be reached. Two
+changes followed:
+
+- The Game Elements list moved out of the main menu and into the Settings modal,
+  where it sits above the Beta Elements toggle that governs what it shows. It
+  opens expanded there; the collapsible header and its "N of M" summary are kept
+  behind an `initiallyExpanded` prop. Everything in sections 1-5 above still
+  holds — only the section's host changed.
+- The menu body between the pinned title and the pinned start stack is now a
+  ScrollView, so it can never overflow again regardless of what it contains.
+
+At the same time, map size, opponent count and difficulty moved from local
+component state into the persisted settings, so they are remembered between
+games and across launches like the terrain sliders. `updateSettings` now takes a
+patch rather than a whole settings object, so a control firing before hydration
+completes cannot write pre-hydration defaults back over stored settings.
