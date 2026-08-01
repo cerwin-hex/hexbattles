@@ -46,6 +46,7 @@ export function Slider({
   const startX = useSharedValue(0);
   const trackWShared = useSharedValue(0);
   const lastEmitted = useSharedValue(value);
+  const dragging = useSharedValue(false);
 
   const valueToX = useCallback(
     (v: number, width: number) => {
@@ -73,7 +74,10 @@ export function Slider({
   useAnimatedReaction(
     () => ({ v: value, w: trackWShared.value }),
     (curr) => {
-      if (curr.w > 0) {
+      // Skip while a finger is down: each step the drag emits re-registers this
+      // reaction, which would snap the thumb to the stepped position for one
+      // frame before onUpdate pulls it back to the finger.
+      if (!dragging.value && curr.w > 0) {
         const maxX = Math.max(0, curr.w - thumbSize);
         const range = max - min || 1;
         thumbX.value = ((curr.v - min) / range) * maxX;
@@ -96,8 +100,15 @@ export function Slider({
   const panGesture = Gesture.Pan()
     .activeOffsetX([-5, 5])
     .failOffsetY([-15, 15])
+    // The compact track is only 26pt tall; widen the grab area to match a
+    // comfortable touch target without changing how it looks.
+    .hitSlop(compact ? { vertical: 10 } : {})
     .onBegin(() => {
       startX.value = thumbX.value;
+      dragging.value = true;
+    })
+    .onFinalize(() => {
+      dragging.value = false;
     })
     .onUpdate((e) => {
       const maxX = trackWShared.value - thumbSize;

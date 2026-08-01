@@ -327,15 +327,30 @@ short screen the start buttons fell off the bottom and could not be reached. Two
 changes followed:
 
 - The Game Elements list moved out of the main menu and into the Settings modal,
-  where it sits above the Beta Elements toggle that governs what it shows. It
-  opens expanded there; the collapsible header and its "N of M" summary are kept
-  behind an `initiallyExpanded` prop. Sections 1-4 are unaffected — only the
-  section's host changed; acceptance criterion 1 is restated above.
+  where it sits above the Beta Elements toggle that governs what it shows. With
+  a scrolling modal to live in it no longer collapses: the rows are always
+  visible and the header keeps its "N of M" summary. Sections 1-4 are unaffected
+  — only the section's host changed; acceptance criterion 1 is restated above.
 - The menu body between the pinned title and the pinned start stack is now a
   ScrollView, so it can never overflow again regardless of what it contains.
+- The gear icon in the menu's top corner became a full-width **Settings** button
+  below AI Difficulty, now that Settings holds a choice made per new game rather
+  than only cosmetic preferences.
+- `Slider` gained a `compact` variant — shorter track, smaller readout, no end
+  labels. The four terrain sliders share one bordered block under a single
+  "Terrain" heading, roughly halving that section's height.
 
 At the same time, map size, opponent count and difficulty moved from local
 component state into the persisted settings, so they are remembered between
 games and across launches like the terrain sliders. `updateSettings` now takes a
 patch rather than a whole settings object, so a control firing before hydration
 completes cannot write pre-hydration defaults back over stored settings.
+
+One bug fell out of that persistence: `Slider` passed `[min, max]` as the
+dependency list of its `useAnimatedReaction`, which suppresses Reanimated's
+automatic closure capture, so the prepare worklet kept comparing against the
+`value` present at mount. Sliders seeded before they render were unaffected;
+Map Size, which receives its stored value when hydration lands, showed the right
+number above a thumb parked at the default. `value` is now a dependency, and the
+reaction skips while a finger is down so the re-registration it triggers on each
+emitted step cannot fight the drag.

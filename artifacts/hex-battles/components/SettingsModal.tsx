@@ -134,9 +134,15 @@ export function SettingsModal({
                     />
                   ),
                 )}
+              </View>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Neutral Cities</Text>
+              <View style={styles.terrainBlock}>
                 <Slider
                   compact
-                  label="Neutral Cities"
+                  label="On the map"
                   value={draft.cityCount}
                   min={MIN_CITY_COUNT}
                   max={MAX_CITY_COUNT}
