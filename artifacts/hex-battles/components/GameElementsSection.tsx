@@ -2,29 +2,28 @@ import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Toggle } from "@/components/Toggle";
 import {
-  enabledVisibleCount,
-  visibleGameElements,
+  GAME_ELEMENTS,
+  enabledElementCount,
   type GameElements,
 } from "@/constants/gameElements";
 
 interface GameElementsSectionProps {
   elements: GameElements;
-  showBeta: boolean;
   onChange: (next: GameElements) => void;
 }
 
 /**
  * The "Game Elements" list in Settings: one toggle per part of the game a new
  * game can be started with. The header carries an "N of M" summary so the count
- * is readable without counting the switches.
+ * is readable without counting the switches. Unfinished elements are listed
+ * like the rest, marked BETA and off until switched on.
  */
 export function GameElementsSection({
   elements,
-  showBeta,
   onChange,
 }: GameElementsSectionProps) {
-  const defs = visibleGameElements(showBeta);
-  const { on, total } = enabledVisibleCount(elements, showBeta);
+  const defs = GAME_ELEMENTS;
+  const { on, total } = enabledElementCount(elements);
 
   return (
     <View style={styles.section}>

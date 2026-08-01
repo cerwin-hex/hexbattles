@@ -303,8 +303,8 @@ Extend the logic suites:
    player *and* the AI for the whole game.
 4. Resuming works: a game resumes with the element set it was started with, and
    a save created before this feature resumes with all four elements on.
-5. Beta elements are invisible until **Show beta elements** is switched on in
-   Settings, and are off in a new game while invisible.
+5. Beta elements are listed like any other, carry a BETA label, and start off.
+   (Superseded by section 7: the original design hid them behind a setting.)
 6. `pnpm run typecheck` and `pnpm test` pass from the repository root.
 7. The AI peak-turn timing guard does not regress.
 
@@ -315,8 +315,8 @@ start a game: mounted units, improvements, the administrative burden on big
 realms, and rebels. Your choices are remembered for next time, and each game
 keeps the choices it was started with — a game begun without rebels stays
 without rebels even if you change the menu later. Unfinished features (ranged
-units, fog of war) stay hidden until you switch on "show beta elements" in
-Settings, and they can join the list with two lines of code once they are ready.
+units, fog of war) sit in the same list with a BETA label and start switched
+off, and they can join it with two lines of code once they are ready.
 The AI obeys exactly the same choices you do. The rules text still describes the
 whole game.
 
@@ -326,9 +326,8 @@ On-device testing showed the main menu had no scrolling body of its own, so on a
 short screen the start buttons fell off the bottom and could not be reached. Two
 changes followed:
 
-- The Game Elements list moved out of the main menu and into the Settings modal,
-  where it sits above the Beta Elements toggle that governs what it shows. With
-  a scrolling modal to live in it no longer collapses: the rows are always
+- The Game Elements list moved out of the main menu and into the Settings modal.
+  With a scrolling modal to live in it no longer collapses: the rows are always
   visible and the header keeps its "N of M" summary. Sections 1-4 are unaffected
   — only the section's host changed; acceptance criterion 1 is restated above.
 - The menu body between the pinned title and the pinned start stack is now a
@@ -354,3 +353,13 @@ Map Size, which receives its stored value when hydration lands, showed the right
 number above a thumb parked at the default. `value` is now a dependency, and the
 reaction skips while a finger is down so the re-registration it triggers on each
 emitted step cannot fight the drag.
+
+The **Show beta elements** setting is gone. Hiding beta elements made sense while
+the list was the first thing on the main menu; once it moved behind a Settings
+button, a setting that governs what another setting on the same screen shows was
+only indirection. Beta elements are now listed like any other, carry the BETA
+label they always had, and start switched off — which `DEFAULT_GAME_ELEMENTS`
+already did, so the guarantee that nobody meets an unfinished feature without
+choosing it is unchanged. `showBetaElements`, `visibleGameElements` and
+`elementsForNewGame` are deleted; `enabledVisibleCount` becomes
+`enabledElementCount`, counting against the whole registry.

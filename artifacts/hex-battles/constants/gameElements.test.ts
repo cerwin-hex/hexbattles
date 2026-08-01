@@ -4,13 +4,11 @@ import {
   DEFAULT_GAME_ELEMENTS,
   GAME_ELEMENTS,
   decodeGameElements,
-  elementsForNewGame,
+  enabledElementCount,
   enabledUnitTypes,
-  enabledVisibleCount,
   encodeGameElements,
   isEntityEnabled,
   normalizeGameElements,
-  visibleGameElements,
   type GameElementDef,
 } from "@/constants/gameElements";
 
@@ -19,6 +17,12 @@ import {
 const BETA_FIXTURE: readonly GameElementDef[] = GAME_ELEMENTS.map((d) =>
   d.id === "rebels" ? { ...d, beta: true } : d,
 );
+
+// Mirrors the rule DEFAULT_GAME_ELEMENTS applies, so the fixture's beta element
+// can be exercised without a beta element shipping on main.
+function buildDefaultsFor(defs: readonly GameElementDef[]): Record<string, boolean> {
+  return Object.fromEntries(defs.map((d) => [d.id, !d.beta]));
+}
 
 describe("GAME_ELEMENTS", () => {
   it("has no duplicate ids", () => {
@@ -113,27 +117,27 @@ describe("isEntityEnabled / enabledUnitTypes", () => {
   });
 });
 
-describe("beta visibility", () => {
-  it("hides beta elements until they are opted into", () => {
-    expect(visibleGameElements(false, BETA_FIXTURE).map((d) => d.id)).not.toContain("rebels");
-    expect(visibleGameElements(true, BETA_FIXTURE).map((d) => d.id)).toContain("rebels");
+describe("beta elements", () => {
+  it("starts a beta element off and every other element on", () => {
+    const defaults = buildDefaultsFor(BETA_FIXTURE);
+    expect(defaults.rebels).toBe(false);
+    expect(defaults.mounted).toBe(true);
+    expect(defaults.improvements).toBe(true);
+    expect(defaults.adminBurden).toBe(true);
   });
 
-  it("forces a hidden beta element off for a new game", () => {
-    const chosen = { ...ALL_GAME_ELEMENTS };
-    expect(elementsForNewGame(chosen, false, BETA_FIXTURE).rebels).toBe(false);
-    expect(elementsForNewGame(chosen, true, BETA_FIXTURE).rebels).toBe(true);
+  it("lists a beta element like any other — nothing is hidden", () => {
+    expect(BETA_FIXTURE.map((d) => d.id)).toContain("rebels");
+    expect(enabledElementCount({ ...ALL_GAME_ELEMENTS }, BETA_FIXTURE).total).toBe(
+      BETA_FIXTURE.length,
+    );
   });
+});
 
-  it("leaves the stored choice untouched", () => {
-    const chosen = { ...ALL_GAME_ELEMENTS };
-    elementsForNewGame(chosen, false, BETA_FIXTURE);
-    expect(chosen.rebels).toBe(true);
-  });
-
-  it("counts only the visible elements", () => {
+describe("enabledElementCount", () => {
+  it("counts the enabled elements against the whole registry", () => {
     const chosen = { ...ALL_GAME_ELEMENTS, mounted: false };
-    expect(enabledVisibleCount(chosen, false, BETA_FIXTURE)).toEqual({ on: 2, total: 3 });
-    expect(enabledVisibleCount(chosen, true, BETA_FIXTURE)).toEqual({ on: 3, total: 4 });
+    expect(enabledElementCount(chosen)).toEqual({ on: 3, total: 4 });
+    expect(enabledElementCount(ALL_GAME_ELEMENTS)).toEqual({ on: 4, total: 4 });
   });
 });

@@ -6,7 +6,7 @@ import { WelcomeModal } from '@/components/WelcomeModal';
 import { SettingsModal } from '@/components/SettingsModal';
 import { Slider } from '@/components/Slider';
 import { useSettings } from '@/contexts/SettingsContext';
-import { elementsForNewGame, encodeGameElements } from '@/constants/gameElements';
+import { encodeGameElements } from '@/constants/gameElements';
 import {
   Modal,
   Platform,
@@ -232,9 +232,7 @@ export default function MainMenu() {
         desertPct: String(settings.desertPct),
         forestPct: String(settings.forestPct),
         cityCount: String(settings.cityCount),
-        elements: encodeGameElements(
-          elementsForNewGame(settings.elements, settings.showBetaElements),
-        ),
+        elements: encodeGameElements(settings.elements),
       },
     });
   }

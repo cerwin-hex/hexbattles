@@ -21,8 +21,6 @@ export interface GameSettings {
   cityCount: number;
   /** Which parts of the game new games start with. Remembered between launches. */
   elements: GameElements;
-  /** Whether unfinished elements appear in the menu at all. */
-  showBetaElements: boolean;
   /** Map size chosen in the main menu. Remembered between launches. */
   tileCount: number;
   /** Number of AI opponents chosen in the main menu. */
@@ -39,7 +37,6 @@ export const DEFAULT_SETTINGS: GameSettings = {
   forestPct: 10,
   cityCount: 2,
   elements: DEFAULT_GAME_ELEMENTS,
-  showBetaElements: false,
   tileCount: 100,
   opponentCount: 3,
   difficulty: "medium",
@@ -79,7 +76,6 @@ export function normalizeSettings(s: Partial<GameSettings> | null | undefined): 
     forestPct: clampInt(safe.forestPct ?? DEFAULT_SETTINGS.forestPct, MIN_TERRAIN_PCT, MAX_TERRAIN_PCT),
     cityCount: clampInt(safe.cityCount ?? DEFAULT_SETTINGS.cityCount, MIN_CITY_COUNT, MAX_CITY_COUNT),
     elements: normalizeGameElements((safe as { elements?: unknown }).elements),
-    showBetaElements: safe.showBetaElements === true,
     tileCount: clampInt(safe.tileCount ?? DEFAULT_SETTINGS.tileCount, MIN_TILE_COUNT, MAX_TILE_COUNT),
     opponentCount: clampInt(
       safe.opponentCount ?? DEFAULT_SETTINGS.opponentCount,

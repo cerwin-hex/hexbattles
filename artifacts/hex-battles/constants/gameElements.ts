@@ -17,7 +17,10 @@ export interface GameElementDef {
   name: string;
   /** One-line explanation shown under the title. */
   blurb: string;
-  /** Beta elements stay hidden until the player opts into seeing them. */
+  /**
+   * An unfinished element. It is listed like any other, but carries a BETA
+   * label and starts switched off, so nobody meets it without choosing to.
+   */
   beta: boolean;
 }
 
@@ -122,35 +125,12 @@ export function enabledUnitTypes(elements: GameElements): EntityType[] {
 }
 
 /**
- * The elements the menu should list. `defs` is injectable so tests can cover
- * beta behaviour — main ships no beta element today.
+ * "N of M" for the Settings section header. `defs` is injectable so tests can
+ * cover beta behaviour — main ships no beta element today.
  */
-export function visibleGameElements(
-  showBeta: boolean,
-  defs: readonly GameElementDef[] = GAME_ELEMENTS,
-): GameElementDef[] {
-  return defs.filter((d) => showBeta || !d.beta);
-}
-
-/**
- * The set a new game actually starts with. A beta element the player cannot
- * currently see is forced off, whatever the stored choice says — but the stored
- * choice itself is left alone, so it returns when beta is switched back on.
- */
-export function elementsForNewGame(
+export function enabledElementCount(
   chosen: GameElements,
-  showBeta: boolean,
-  defs: readonly GameElementDef[] = GAME_ELEMENTS,
-): GameElements {
-  return build(defs, (d) => (!showBeta && d.beta ? false : chosen[d.id]));
-}
-
-/** "N of M" for the collapsed section header, counting visible elements only. */
-export function enabledVisibleCount(
-  chosen: GameElements,
-  showBeta: boolean,
   defs: readonly GameElementDef[] = GAME_ELEMENTS,
 ): { on: number; total: number } {
-  const visible = visibleGameElements(showBeta, defs);
-  return { on: visible.filter((d) => chosen[d.id]).length, total: visible.length };
+  return { on: defs.filter((d) => chosen[d.id]).length, total: defs.length };
 }

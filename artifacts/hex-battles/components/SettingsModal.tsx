@@ -11,7 +11,6 @@ import {
 import { GestureHandlerRootView, ScrollView } from "react-native-gesture-handler";
 import { GameElementsSection } from "@/components/GameElementsSection";
 import { Slider } from "@/components/Slider";
-import { Toggle } from "@/components/Toggle";
 import { COLOR_PALETTE } from "@/constants/colors";
 import {
   COLOR_KEYS,
@@ -89,23 +88,8 @@ export function SettingsModal({
 
             <GameElementsSection
               elements={draft.elements}
-              showBeta={draft.showBetaElements}
               onChange={(next) => update("elements", next)}
             />
-
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Beta Elements</Text>
-              <View style={styles.betaRow}>
-                <Text style={styles.betaBlurb}>
-                  Show unfinished features in the game elements list
-                </Text>
-                <Toggle
-                  value={draft.showBetaElements}
-                  accessibilityLabel="Show beta elements"
-                  onValueChange={(v) => update("showBetaElements", v)}
-                />
-              </View>
-            </View>
 
             <View style={styles.section}>
               <View style={styles.terrainHeader}>
@@ -263,19 +247,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: "#FFFFFF",
     fontFamily: "Inter_700Bold",
-  },
-  betaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  betaBlurb: {
-    flex: 1,
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    color: "#786A54",
-    lineHeight: 18,
   },
   terrainHeader: {
     flexDirection: "row",
