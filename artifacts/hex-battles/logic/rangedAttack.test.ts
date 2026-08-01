@@ -117,6 +117,7 @@ describe("resolveRangedShot", () => {
       killMarks: new Set(),
       firedUnits: new Set(),
       partialMoves: new Map(),
+      spentUnits: new Set(),
     });
     expect(r.entities.has("1,0")).toBe(false);
     expect(r.entities.get("0,0")).toBe("crossbowman");
@@ -139,6 +140,7 @@ describe("resolveRangedShot", () => {
       killMarks: new Set(),
       firedUnits: new Set(),
       partialMoves: new Map(),
+      spentUnits: new Set(),
     });
     expect(r.entities.get("1,0")).toBe("bridge");
   });
@@ -156,13 +158,14 @@ describe("resolveRangedShot", () => {
       killMarks: new Set(),
       firedUnits: new Set(),
       partialMoves: new Map(),
+      spentUnits: new Set(),
     });
     expect(map.get("1,0")!.owner).toBe("ai1");
   });
 });
 
 describe("post-shot movement clamp", () => {
-  function fire(partialMoves: Map<string, number>) {
+  function fire(partialMoves: Map<string, number>, spentUnits: Set<string> = new Set()) {
     return resolveRangedShot({
       shooterKey: "0,0",
       targetKey: "1,0",
@@ -174,12 +177,14 @@ describe("post-shot movement clamp", () => {
       killMarks: new Set(),
       firedUnits: new Set(),
       partialMoves,
+      spentUnits,
     });
   }
 
   it("writes the clamp for a shooter that has not moved yet", () => {
-    // No entry at all means "full budget" (3 for a bowman). Leaving it absent
-    // would hand the shooter all 3 points back, so the value must be written.
+    // No entry at all, and not in spentUnits, means "full budget" (3 for a
+    // bowman). Leaving it absent would hand the shooter all 3 points back, so
+    // the value must be written.
     const r = fire(new Map());
     expect(r.partialMoves.get("0,0")).toBe(POST_SHOT_MOVEMENT);
   });
@@ -196,6 +201,17 @@ describe("post-shot movement clamp", () => {
 
   it("never raises an exhausted budget", () => {
     const r = fire(new Map([["0,0", 0]]));
+    expect(r.partialMoves.get("0,0")).toBe(0);
+  });
+
+  it("clamps a spent shooter to 0, not the full budget, when partialMoves has no entry", () => {
+    // Regression guard: a unit that exhausted its movement is tracked as
+    // spentUnits.has(key) with its partialMoves entry DELETED (see
+    // resolveMovedUnitMoves). A missing entry does NOT mean "full budget" —
+    // reading it that way would hand a spent bowman a phantom point of
+    // movement back merely because it fired. effectiveRemaining must resolve
+    // this the same way the merge path does: 0, before the clamp is applied.
+    const r = fire(new Map(), new Set(["0,0"]));
     expect(r.partialMoves.get("0,0")).toBe(0);
   });
 

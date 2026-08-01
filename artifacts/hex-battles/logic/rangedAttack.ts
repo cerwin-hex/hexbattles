@@ -1,6 +1,7 @@
 import type { EntityType, HexTile, TerritoryOwner } from "@/types";
 import { ENTITY_META, isRanged, unitMovement } from "@/utils/hexGrid";
 import { HEX_EDGES, tileKey } from "@/utils/hexMath";
+import { effectiveRemaining } from "@/logic/gameLogic";
 
 /**
  * Ranged combat: a bowman shoots one adjacent enemy per turn instead of taking
@@ -67,7 +68,12 @@ export function rangedTargets(o: {
  *
  * Firing also clamps the shooter's remaining movement to POST_SHOT_MOVEMENT.
  * The clamp lives here rather than in the tap handler so the AI inherits the
- * rule for free when a later branch teaches it to shoot.
+ * rule for free when a later branch teaches it to shoot. The clamp is a cap,
+ * never a grant: a unit that already spent its budget (tracked in
+ * `spentUnits` with no `partialMoves` entry) must stay at 0, so the shooter's
+ * current budget is read via `effectiveRemaining` — the same convention the
+ * tap handler and the AI use for merges — rather than by treating a missing
+ * `partialMoves` entry as always meaning "full budget".
  */
 export function resolveRangedShot(o: {
   shooterKey: string;
@@ -77,6 +83,7 @@ export function resolveRangedShot(o: {
   killMarks: Set<string>;
   firedUnits: Set<string>;
   partialMoves: Map<string, number>;
+  spentUnits: Set<string>;
 }): {
   entities: Map<string, EntityType>;
   killMarks: Set<string>;
@@ -101,10 +108,12 @@ export function resolveRangedShot(o: {
   killMarks.add(o.targetKey);
   firedUnits.add(o.shooterKey);
 
-  // partialMoves is sparse: a missing key means the unit still has its full
-  // budget, so the clamped value must be written rather than left absent.
+  // partialMoves is sparse: a missing key means either "full budget" (untouched
+  // this turn) or "0" (already spent, tracked in spentUnits instead) — the
+  // clamped value must be written rather than left absent either way.
   const shooter = o.entities.get(o.shooterKey);
-  const remaining = o.partialMoves.get(o.shooterKey) ?? (shooter ? unitMovement(shooter) : 0);
+  const maxRange = shooter ? unitMovement(shooter) : 0;
+  const remaining = effectiveRemaining(o.shooterKey, o.partialMoves, o.spentUnits, maxRange);
   partialMoves.set(o.shooterKey, Math.min(remaining, POST_SHOT_MOVEMENT));
 
   return { entities, killMarks, firedUnits, partialMoves };

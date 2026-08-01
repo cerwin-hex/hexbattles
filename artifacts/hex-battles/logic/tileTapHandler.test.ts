@@ -1178,6 +1178,20 @@ describe("ranged firing", () => {
     expect(moves.get("0,0")).toBe(0);
   });
 
+  it("leaves an exhausted shooter at zero when it has no partialMoves entry at all", () => {
+    // This is the state the app actually produces: a unit that spends its full
+    // movement is tracked in spentUnits with its partialMoves entry DELETED
+    // (see resolveMovedUnitMoves), not left at an explicit 0. Reading a missing
+    // entry as "full budget" would hand a spent bowman a phantom point of
+    // movement back merely because it fired.
+    const params = shotParams({ spentUnits: new Set(["0,0"]) });
+    handleTileTapLogic(params);
+    const moves: Map<string, number> = (
+      params.setPartialMoves as ReturnType<typeof vi.fn>
+    ).mock.calls[0][0];
+    expect(moves.get("0,0")).toBe(0);
+  });
+
   it("cannot refresh the clamped budget by merging into a fresh bowman", () => {
     // The bowman has fired (budget clamped to 1) and now steps onto an unmoved
     // ally. resolveMovedUnitMoves takes min(remainingAfterMove, destRemaining),

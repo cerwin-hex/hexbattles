@@ -185,6 +185,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
       killMarks,
       firedUnits,
       partialMoves,
+      spentUnits,
     });
     unstable_batchedUpdates(() => {
       setEntities(shot.entities);
