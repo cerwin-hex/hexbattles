@@ -809,3 +809,40 @@ describe("ranged movement", () => {
     ).toBe(1);
   });
 });
+
+describe("a clamped ranged budget", () => {
+  // Bowman on 0,0 with a grass neighbour (cost 1) and a forest neighbour
+  // (cost 2), all inside its own territory so capture rules do not interfere.
+  function moves(budget: number): Set<string> {
+    const map = tileMap([
+      makeTile(0, 0, "player"),
+      makeTile(1, 0, "player", "grass"),
+      makeTile(0, 1, "player", "forest"),
+    ]);
+    return getValidMoves(
+      "0,0",
+      "player",
+      entities([["0,0", "shortbowman"]]),
+      map,
+      new Set<string>(),
+      budget,
+    );
+  }
+
+  it("reaches both neighbours on a full budget", () => {
+    const m = moves(3);
+    expect(m.has("1,0")).toBe(true);
+    expect(m.has("0,1")).toBe(true);
+  });
+
+  it("reaches only the cheap neighbour after a shot", () => {
+    // POST_SHOT_MOVEMENT is 1 and forest costs 2, so forest closes off.
+    const m = moves(1);
+    expect(m.has("1,0")).toBe(true);
+    expect(m.has("0,1")).toBe(false);
+  });
+
+  it("reaches nothing once the clamped point is spent", () => {
+    expect(moves(0).size).toBe(0);
+  });
+});
