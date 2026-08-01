@@ -192,37 +192,48 @@ export function resolveRangedShot(o: {
 
 The four earlier `resolveRangedShot(...)` calls in `rangedAttack.test.ts` now fail to typecheck. Add `partialMoves: new Map(),` to each object literal, next to `firedUnits: new Set(),`.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [ ] **Step 5: Run the resolver tests to verify they pass**
 
 Run: `pnpm --filter @workspace/hex-battles exec vitest run logic/rangedAttack.test.ts`
 
 Expected: PASS, including the five new tests.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Thread the map through the shot branch**
 
-```bash
-git add artifacts/hex-battles/logic/rangedAttack.ts artifacts/hex-battles/logic/rangedAttack.test.ts
-git commit -m "feat(ranged): clamp the shooter's movement when it fires"
+Making `partialMoves` required breaks `tileTapHandler.ts:180`, so the caller is part of this task — the tree must never be committed red. The ranged-shot branch in `artifacts/hex-battles/logic/tileTapHandler.ts` becomes:
+
+```ts
+  if (selectedEntityKey && validRangedTargets.has(key)) {
+    pushHistory();
+    const shot = resolveRangedShot({
+      shooterKey: selectedEntityKey,
+      targetKey: key,
+      entities,
+      tileMap: activeTileMap,
+      killMarks,
+      firedUnits,
+      partialMoves,
+    });
+    unstable_batchedUpdates(() => {
+      setEntities(shot.entities);
+      setKillMarks(shot.killMarks);
+      setFiredUnits(shot.firedUnits);
+      setPartialMoves(shot.partialMoves);
+      // Firing clamps the shooter's movement but does not spend it, so leave it
+      // selected: it may still shuffle one cheap tile.
+      setSelectedEntityKey(selectedEntityKey);
+      setSelectedTileKey(selectedEntityKey);
+      if (ribbonOpen) closeRibbon();
+    });
+    return;
+  }
 ```
 
-(The tap handler still does not compile at this point — Task 2 fixes it. Commit anyway; the branch is not pushed and Task 2 follows immediately.)
+`partialMoves` and `setPartialMoves` are already destructured from `params` at the top of `handleTileTapLogic`, and `pushHistory` already snapshots `partialMoves` (`hooks/useMoveHistory.ts:101`), so undo restores the pre-shot budget for free. `TileTapParams` needs no change. Verify all three before editing anything else.
 
----
+- [ ] **Step 7: Update the one test that asserts the old rule**
 
-## Task 2: Thread the clamped budget through the tap handler and game screen
-
-**Files:**
-- Modify: `artifacts/hex-battles/logic/tileTapHandler.ts:173-198` (the ranged-shot branch)
-- Modify: `artifacts/hex-battles/app/game.tsx` (the `handleTileTap` argument list — it already passes `partialMoves`; verify only)
-- Test: `artifacts/hex-battles/logic/tileTapHandler.test.ts`
-
-**Interfaces:**
-- Consumes: `resolveRangedShot` with the Task 1 signature, `POST_SHOT_MOVEMENT`.
-- Produces: no new exports. `TileTapParams` is unchanged — it already carries both `partialMoves` and `setPartialMoves`.
-
-- [ ] **Step 1: Update the stale test and write the failing ones**
-
-In `artifacts/hex-battles/logic/tileTapHandler.test.ts`, inside `describe("ranged firing", ...)`, **replace** the test named `"spends the shot but neither the movement nor the unit"` with:
+The shot branch now calls `setPartialMoves`, which breaks the existing test `"spends the shot but neither the movement nor the unit"` in `describe("ranged firing", ...)` of `artifacts/hex-battles/logic/tileTapHandler.test.ts`. **Replace** that whole test with:
 
 ```ts
   it("spends the shot and clamps the movement, but does not spend the unit", () => {
@@ -240,7 +251,39 @@ In `artifacts/hex-battles/logic/tileTapHandler.test.ts`, inside `describe("range
     ).mock.calls[0][0];
     expect(moves.get("0,0")).toBe(1);
   });
+```
 
+- [ ] **Step 8: Run the full suite and typecheck**
+
+Run: `pnpm --filter @workspace/hex-battles exec vitest run logic/tileTapHandler.test.ts` — expected PASS.
+
+Run: `pnpm run typecheck` (from the repo root — never inside a package) — expected clean. This is what proves no other `resolveRangedShot` call site was left behind.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add artifacts/hex-battles/logic/rangedAttack.ts artifacts/hex-battles/logic/rangedAttack.test.ts \
+        artifacts/hex-battles/logic/tileTapHandler.ts artifacts/hex-battles/logic/tileTapHandler.test.ts
+git commit -m "feat(ranged): clamp the shooter's movement when it fires"
+```
+
+---
+
+## Task 2: Cover the clamp's edges at the handler level
+
+**Files:**
+- Test: `artifacts/hex-battles/logic/tileTapHandler.test.ts`
+- Verify only (no edit expected): `artifacts/hex-battles/app/game.tsx`
+
+**Interfaces:**
+- Consumes: the Task 1 behaviour — the shot branch calls `setPartialMoves` with the clamped map.
+- Produces: no new exports. `TileTapParams` is unchanged; it already carries both `partialMoves` and `setPartialMoves`.
+
+- [ ] **Step 1: Write the failing tests**
+
+Append inside `describe("ranged firing", ...)` of `artifacts/hex-battles/logic/tileTapHandler.test.ts`:
+
+```ts
   it("does not restore movement the shooter had already spent", () => {
     // Move-then-fire is not punished twice: 3 - 2 = 1 was already left.
     const params = shotParams({ partialMoves: new Map([["0,0", 1]]) });
@@ -298,67 +341,22 @@ Then append this block at the end of the same `describe("ranged firing", ...)`, 
   });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [ ] **Step 2: Run the tests**
 
 Run: `pnpm --filter @workspace/hex-battles exec vitest run logic/tileTapHandler.test.ts`
 
-Expected: FAIL. The shot branch does not yet call `setPartialMoves`, so `.mock.calls[0]` is `undefined` in the three clamp tests. (The merge test should already pass — it asserts existing behaviour that must not regress.)
+Expected: PASS on the first run. These are characterisation tests over the wiring Task 1 shipped — they pin the edges (already-spent movement, an exhausted shooter, the merge loophole) that Task 1's single happy-path assertion does not. A failure here means Task 1 is wrong: stop and fix Task 1 rather than adjusting these expectations.
 
-- [ ] **Step 3: Thread the map through the shot branch**
-
-In `artifacts/hex-battles/logic/tileTapHandler.ts`, the ranged-shot branch becomes:
-
-```ts
-  if (selectedEntityKey && validRangedTargets.has(key)) {
-    pushHistory();
-    const shot = resolveRangedShot({
-      shooterKey: selectedEntityKey,
-      targetKey: key,
-      entities,
-      tileMap: activeTileMap,
-      killMarks,
-      firedUnits,
-      partialMoves,
-    });
-    unstable_batchedUpdates(() => {
-      setEntities(shot.entities);
-      setKillMarks(shot.killMarks);
-      setFiredUnits(shot.firedUnits);
-      setPartialMoves(shot.partialMoves);
-      // Firing clamps the shooter's movement but does not spend it, so leave it
-      // selected: it may still shuffle one cheap tile.
-      setSelectedEntityKey(selectedEntityKey);
-      setSelectedTileKey(selectedEntityKey);
-      if (ribbonOpen) closeRibbon();
-    });
-    return;
-  }
-```
-
-`partialMoves` and `setPartialMoves` are already destructured from `params` at the top of `handleTileTapLogic` — no change to the destructuring or to `TileTapParams` is needed. Verify before adding anything.
-
-- [ ] **Step 4: Verify the game screen needs no change**
+- [ ] **Step 3: Verify the game screen needs no change**
 
 Run: `grep -n "partialMoves" artifacts/hex-battles/app/game.tsx`
 
-`game.tsx` passes both `partialMoves` and `setPartialMoves` into the tap-handler params object already, so the clamp reaches React state through the existing wiring. Confirm both appear in that params object and make no edit if they do.
+`game.tsx` passes both `partialMoves` and `setPartialMoves` into the tap-handler params object already (around lines 1155 and 1242), so the clamp reaches React state through the existing wiring. Confirm both appear and make no edit if they do.
 
-- [ ] **Step 5: Run the tests to verify they pass**
-
-Run: `pnpm --filter @workspace/hex-battles exec vitest run logic/tileTapHandler.test.ts`
-
-Expected: PASS.
-
-- [ ] **Step 6: Typecheck the workspace**
-
-Run: `pnpm run typecheck` (from the repo root — never inside a package)
-
-Expected: clean. This is what proves no other `resolveRangedShot` call site was left behind.
-
-- [ ] **Step 7: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add artifacts/hex-battles/logic/tileTapHandler.ts artifacts/hex-battles/logic/tileTapHandler.test.ts
+git add artifacts/hex-battles/logic/tileTapHandler.test.ts
 git commit -m "feat(ranged): apply the post-shot movement clamp from the tap handler"
 ```
 
@@ -374,7 +372,7 @@ git commit -m "feat(ranged): apply the post-shot movement clamp from the tap han
 - Consumes: `getValidMoves(unitKey, owner, entities, tileMap, spentUnits, maxRange?, combatSpentUnits?)` from `@/utils/hexGrid`. The `maxRange` argument is the remaining budget; `useSelectionState` passes `partialMoves.get(key) ?? unitMovement(entity)` into it, which is how the clamp reaches the movement highlights.
 - Produces: nothing.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the characterisation test**
 
 Append to `artifacts/hex-battles/utils/hexGrid.test.ts`. It reuses that file's existing helpers `makeTile(q, r, owner, terrain?)`, `tileMap(tiles)` and `entities(pairs)`, and `getValidMoves` is already imported there — no new imports or helpers.
 
@@ -421,7 +419,7 @@ describe("a clamped ranged budget", () => {
 
 Run: `pnpm --filter @workspace/hex-battles exec vitest run utils/hexGrid.test.ts`
 
-Expected: PASS on the first run. This is a **characterisation test**, not a TDD cycle: `getValidMoves` already honours a budget, and the test pins down the player-visible consequence of the clamp (forest closes) so a later change to `TERRAIN_MOVE_COST` or to `POST_SHOT_MOVEMENT` cannot silently alter the rule. If it fails, stop — the clamp is not reaching the movement search and Task 2 is wrong.
+Expected: PASS on the first run. This is a **characterisation test**, not a TDD cycle: `getValidMoves` already honours a budget, and the test pins down the player-visible consequence of the clamp (forest closes) so a later change to `TERRAIN_MOVE_COST` or to `POST_SHOT_MOVEMENT` cannot silently alter the rule. If it fails, stop — the budget is not reaching the movement search and Task 1 is wrong.
 
 - [ ] **Step 3: Correct the stale comment in the old plan document**
 
@@ -462,7 +460,7 @@ Run at the end, before reporting completion. Evidence before assertions.
 - [ ] `pnpm test` — 553 passed, 9 skipped, 19 files, 0 failures
 - [ ] `pnpm run typecheck` — clean from the repo root
 - [ ] `grep -rn "resolveRangedShot" artifacts/hex-battles` — every call site passes `partialMoves`
-- [ ] `grep -rniE "keeps its movement|not the movement" docs artifacts` — no hits left
+- [ ] `grep -rniE "keeps its movement|not the movement|keep moving" --exclude-dir=node_modules --exclude-dir=.git .` — the only hits are inside the two 2026-08-01 documents, which quote the old wording to say it is superseded. Any hit in `artifacts/`, `CLAUDE.md` or the 2026-07-31 plan means a rewrite was missed.
 - [ ] `git log --oneline` — three new commits, nothing pushed
 
 ## Out of Scope
