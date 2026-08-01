@@ -61,10 +61,14 @@ apart from an untouched one — but does not return it:
 ```ts
 const partialMoves = new Map(o.partialMoves);
 const shooter = o.entities.get(o.shooterKey);
-const maxRange = shooter ? unitMovement(shooter) : 0;
-const remaining = effectiveRemaining(o.shooterKey, o.partialMoves, o.spentUnits, maxRange);
-partialMoves.set(o.shooterKey, Math.min(remaining, POST_SHOT_MOVEMENT));
+if (shooter) {
+  const maxRange = unitMovement(shooter);
+  const remaining = effectiveRemaining(o.shooterKey, o.partialMoves, o.spentUnits, maxRange);
+  partialMoves.set(o.shooterKey, Math.min(remaining, POST_SHOT_MOVEMENT));
+}
 ```
+
+If the shooter entity is missing, the guard skips the write entirely, leaving no stale entry on a tile that holds no unit.
 
 Keeping the clamp in the pure function — rather than in the tap handler — means
 the AI inherits the rule for free when a later branch teaches it to shoot. That
