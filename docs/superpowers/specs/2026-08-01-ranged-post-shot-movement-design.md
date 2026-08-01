@@ -42,8 +42,10 @@ Consequences, stated so they are not re-litigated later:
   it. A bowman with 0 movement left may still fire.
 - **Merging cannot launder the clamp.** No new rule is needed:
   `resolveMovedUnitMoves` already takes `Math.min` of the mover's and the
-  destination's remaining budgets on a merge, so a clamped bowman merging into
-  a fresh one yields 1. Rule 6's fired-flag carry-over is unaffected.
+  destination's remaining budgets on a merge, so the merged unit is never
+  fresher than the clamped one. In practice a clamped bowman spends its single
+  point stepping onto the ally, leaving 0, so the merged unit ends up spent.
+  Rule 6's fired-flag carry-over is unaffected.
 
 ## 3. Implementation
 
@@ -117,9 +119,10 @@ only the shooter's own budget, not ownership, ZoC or passability.
 - the existing regression from §5.1 of the ranged spec still holds: fire,
   exhaust the clamped movement, and a second shot is still refused
 
-`logic/gameLogic.test.ts`:
-- a clamped bowman merging into an unmoved same-track bowman yields a merged
-  unit with 1 point, not a refreshed budget
+`logic/tileTapHandler.test.ts` (merge loophole):
+- a bowman that fires and then merges into an unmoved same-track bowman cannot
+  refresh its budget: the single clamped point pays for the step, so the merged
+  unit ends spent rather than holding the destination's full 3
 
 ## 5. Documents to correct
 
