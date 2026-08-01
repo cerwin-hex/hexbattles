@@ -54,12 +54,15 @@ Consequences, stated so they are not re-litigated later:
 `POST_SHOT_MOVEMENT = 1` is a named constant in `logic/rangedAttack.ts`.
 
 `resolveRangedShot` takes `partialMoves` as an input and returns a fresh
-clamped copy alongside the collections it already returns:
+clamped copy alongside the collections it already returns. It also takes
+`spentUnits` as a required read-only input — needed to tell a spent shooter
+apart from an untouched one — but does not return it:
 
 ```ts
 const partialMoves = new Map(o.partialMoves);
 const shooter = o.entities.get(o.shooterKey);
-const remaining = o.partialMoves.get(o.shooterKey) ?? unitMovement(shooter);
+const maxRange = shooter ? unitMovement(shooter) : 0;
+const remaining = effectiveRemaining(o.shooterKey, o.partialMoves, o.spentUnits, maxRange);
 partialMoves.set(o.shooterKey, Math.min(remaining, POST_SHOT_MOVEMENT));
 ```
 
@@ -69,9 +72,17 @@ matches the file's existing contract, which states it is kept state-free so
 both callers can drive it.
 
 **The clamped value must be written, never left absent.** `partialMoves` is a
-sparse map: a missing entry means "full budget", and `tileTapHandler.ts` reads
-`partialMoves.get(key) ?? maxRange`. A bowman that fires before moving has no
-entry yet, so omitting the write would hand it its full 3 points back.
+sparse map: a missing entry means "full budget" for a unit `spentUnits` does
+not contain, and "0" for one it does — `spentUnits` is what disambiguates the
+two, which is why the budget is read through `effectiveRemaining` rather than
+a bare `?? maxRange` fallback. `tileTapHandler.ts` relies on the same
+disambiguation when computing a merge destination's remaining budget
+(`destRemaining`), because the destination may hold a spent unit; reading the
+shooter's own budget the same way, rather than with `?? maxRange`, is what
+keeps a spent bowman from being handed a phantom movement point for firing. A
+bowman that fires before moving has no `partialMoves` entry yet and is not in
+`spentUnits` either, so omitting the write would hand it its full 3 points
+back.
 
 ### 3.2 Callers
 

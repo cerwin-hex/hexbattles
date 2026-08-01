@@ -510,9 +510,9 @@ export function advanceAttacksUsed(o: {
  * Deliberately NOT folded into advanceAttacksUsed: that helper drops a unit's
  * counter when the unit becomes spent, which is harmless for cavalry (a spent
  * cavalry unit cannot act) but would hand a ranged unit a second shot, since
- * firing costs no movement and a spent bowman may still fire. The flag survives
- * moving and spending, and a merge unions it — otherwise a used shot could be
- * refreshed by merging in a fresh bowman.
+ * a spent bowman may still fire. The flag survives moving and spending, and a
+ * merge unions it — otherwise a used shot could be refreshed by merging in a
+ * fresh bowman.
  */
 export function advanceFired(o: {
   firedUnits: Set<string>;

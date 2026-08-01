@@ -108,13 +108,21 @@ export function resolveRangedShot(o: {
   killMarks.add(o.targetKey);
   firedUnits.add(o.shooterKey);
 
-  // partialMoves is sparse: a missing key means either "full budget" (untouched
-  // this turn) or "0" (already spent, tracked in spentUnits instead) — the
-  // clamped value must be written rather than left absent either way.
+  // The shooter should always be present here — rangedTargets never offers a
+  // shot without one — but if it were somehow missing, skip the partialMoves
+  // write rather than stamp a stale 0 onto a tile that holds no unit right
+  // now: if some other unit later comes to occupy that tile and merges in,
+  // it would read the stale 0 as destRemaining and be wrongly spent.
   const shooter = o.entities.get(o.shooterKey);
-  const maxRange = shooter ? unitMovement(shooter) : 0;
-  const remaining = effectiveRemaining(o.shooterKey, o.partialMoves, o.spentUnits, maxRange);
-  partialMoves.set(o.shooterKey, Math.min(remaining, POST_SHOT_MOVEMENT));
+  if (shooter) {
+    // partialMoves is sparse: a missing key means either "full budget"
+    // (untouched this turn) or "0" (already spent, tracked in spentUnits
+    // instead) — the clamped value must be written rather than left absent
+    // either way.
+    const maxRange = unitMovement(shooter);
+    const remaining = effectiveRemaining(o.shooterKey, o.partialMoves, o.spentUnits, maxRange);
+    partialMoves.set(o.shooterKey, Math.min(remaining, POST_SHOT_MOVEMENT));
+  }
 
   return { entities, killMarks, firedUnits, partialMoves };
 }
