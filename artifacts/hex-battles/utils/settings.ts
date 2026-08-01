@@ -110,7 +110,10 @@ export async function hydrateSettings(): Promise<void> {
   hydrationPromise = (async () => {
     try {
       const raw = await AsyncStorage.getItem(STORAGE_KEY);
-      if (raw) {
+      // `!hydrated` re-checked after the await: saveSettings sets it, so a
+      // menu control tapped while the read was in flight must not have its
+      // change overwritten by the older stored blob.
+      if (raw && !hydrated) {
         const parsed = JSON.parse(raw);
         cached = normalizeSettings(parsed);
       }

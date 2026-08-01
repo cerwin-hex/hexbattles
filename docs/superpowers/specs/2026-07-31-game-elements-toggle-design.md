@@ -295,9 +295,9 @@ Extend the logic suites:
 
 ## 5. Acceptance criteria
 
-1. The main menu shows a collapsed **Game Elements** row with an "N of M"
-   counter; tapping it expands four toggle rows and leaves the start button
-   reachable without scrolling on a phone-sized screen.
+1. A **Game Elements** section with an "N of M" counter lists four toggle rows,
+   and the start button stays reachable on a phone-sized screen. (Superseded by
+   section 7: the section lives in Settings, expanded, and the menu scrolls.)
 2. Element choices survive an app restart.
 3. Starting a game with an element off means that element is absent for the
    player *and* the AI for the whole game.
@@ -310,8 +310,8 @@ Extend the logic suites:
 
 ## 6. Plain-language summary
 
-The main menu gets a fold-out list where you switch parts of the game on and off
-before you start: mounted units, improvements, the administrative burden on big
+Settings gets a list where you switch parts of the game on and off before you
+start a game: mounted units, improvements, the administrative burden on big
 realms, and rebels. Your choices are remembered for next time, and each game
 keeps the choices it was started with — a game begun without rebels stays
 without rebels even if you change the menu later. Unfinished features (ranged
@@ -329,8 +329,8 @@ changes followed:
 - The Game Elements list moved out of the main menu and into the Settings modal,
   where it sits above the Beta Elements toggle that governs what it shows. It
   opens expanded there; the collapsible header and its "N of M" summary are kept
-  behind an `initiallyExpanded` prop. Everything in sections 1-5 above still
-  holds — only the section's host changed.
+  behind an `initiallyExpanded` prop. Sections 1-4 are unaffected — only the
+  section's host changed; acceptance criterion 1 is restated above.
 - The menu body between the pinned title and the pinned start stack is now a
   ScrollView, so it can never overflow again regardless of what it contains.
 
