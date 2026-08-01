@@ -184,12 +184,15 @@ export function handleTileTapLogic(params: TileTapParams): void {
       tileMap: activeTileMap,
       killMarks,
       firedUnits,
+      partialMoves,
     });
     unstable_batchedUpdates(() => {
       setEntities(shot.entities);
       setKillMarks(shot.killMarks);
       setFiredUnits(shot.firedUnits);
-      // The shooter keeps its movement, so leave it selected to move away.
+      setPartialMoves(shot.partialMoves);
+      // Firing clamps the shooter's movement but does not spend it, so leave it
+      // selected: it may still shuffle one cheap tile.
       setSelectedEntityKey(selectedEntityKey);
       setSelectedTileKey(selectedEntityKey);
       if (ribbonOpen) closeRibbon();

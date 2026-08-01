@@ -1128,15 +1128,20 @@ describe("ranged firing", () => {
     expect(params.setTerritoryBalances).not.toHaveBeenCalled();
   });
 
-  it("spends the shot but neither the movement nor the unit", () => {
+  it("spends the shot and clamps the movement, but does not spend the unit", () => {
     const params = shotParams();
     handleTileTapLogic(params);
     const fired: Set<string> = (
       params.setFiredUnits as ReturnType<typeof vi.fn>
     ).mock.calls[0][0];
     expect(fired.has("0,0")).toBe(true);
+    // Not spent: a clamped bowman still has a point to shuffle with, and a
+    // bowman with no movement left may still fire next turn.
     expect(params.setSpentUnits).not.toHaveBeenCalled();
-    expect(params.setPartialMoves).not.toHaveBeenCalled();
+    const moves: Map<string, number> = (
+      params.setPartialMoves as ReturnType<typeof vi.fn>
+    ).mock.calls[0][0];
+    expect(moves.get("0,0")).toBe(1);
   });
 
   it("keeps the shooter selected so it can move away", () => {

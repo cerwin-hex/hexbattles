@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { EntityType, HexTile, TerritoryOwner } from "@/types";
-import { rangedTargets, resolveRangedShot } from "@/logic/rangedAttack";
+import { rangedTargets, resolveRangedShot, POST_SHOT_MOVEMENT } from "@/logic/rangedAttack";
 
 function makeTile(
   q: number,
@@ -116,6 +116,7 @@ describe("resolveRangedShot", () => {
       tileMap: map,
       killMarks: new Set(),
       firedUnits: new Set(),
+      partialMoves: new Map(),
     });
     expect(r.entities.has("1,0")).toBe(false);
     expect(r.entities.get("0,0")).toBe("crossbowman");
@@ -137,6 +138,7 @@ describe("resolveRangedShot", () => {
       tileMap: map,
       killMarks: new Set(),
       firedUnits: new Set(),
+      partialMoves: new Map(),
     });
     expect(r.entities.get("1,0")).toBe("bridge");
   });
@@ -153,7 +155,54 @@ describe("resolveRangedShot", () => {
       tileMap: map,
       killMarks: new Set(),
       firedUnits: new Set(),
+      partialMoves: new Map(),
     });
     expect(map.get("1,0")!.owner).toBe("ai1");
+  });
+});
+
+describe("post-shot movement clamp", () => {
+  function fire(partialMoves: Map<string, number>) {
+    return resolveRangedShot({
+      shooterKey: "0,0",
+      targetKey: "1,0",
+      entities: new Map<string, EntityType>([
+        ["0,0", "shortbowman"],
+        ["1,0", "peasant"],
+      ]),
+      tileMap: board(),
+      killMarks: new Set(),
+      firedUnits: new Set(),
+      partialMoves,
+    });
+  }
+
+  it("writes the clamp for a shooter that has not moved yet", () => {
+    // No entry at all means "full budget" (3 for a bowman). Leaving it absent
+    // would hand the shooter all 3 points back, so the value must be written.
+    const r = fire(new Map());
+    expect(r.partialMoves.get("0,0")).toBe(POST_SHOT_MOVEMENT);
+  });
+
+  it("cuts a budget that is above the clamp", () => {
+    const r = fire(new Map([["0,0", 2]]));
+    expect(r.partialMoves.get("0,0")).toBe(1);
+  });
+
+  it("leaves a budget already at the clamp alone", () => {
+    const r = fire(new Map([["0,0", 1]]));
+    expect(r.partialMoves.get("0,0")).toBe(1);
+  });
+
+  it("never raises an exhausted budget", () => {
+    const r = fire(new Map([["0,0", 0]]));
+    expect(r.partialMoves.get("0,0")).toBe(0);
+  });
+
+  it("touches no other unit and does not mutate the input", () => {
+    const input = new Map([["0,0", 3], ["5,5", 3]]);
+    const r = fire(input);
+    expect(r.partialMoves.get("5,5")).toBe(3);
+    expect(input.get("0,0")).toBe(3);
   });
 });

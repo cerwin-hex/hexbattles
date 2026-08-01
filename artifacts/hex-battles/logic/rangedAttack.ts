@@ -1,5 +1,5 @@
 import type { EntityType, HexTile, TerritoryOwner } from "@/types";
-import { ENTITY_META, isRanged } from "@/utils/hexGrid";
+import { ENTITY_META, isRanged, unitMovement } from "@/utils/hexGrid";
 import { HEX_EDGES, tileKey } from "@/utils/hexMath";
 
 /**
@@ -9,6 +9,13 @@ import { HEX_EDGES, tileKey } from "@/utils/hexMath";
  * result to resolve. Kept pure and state-free so both the tap handler and (in
  * a later branch) the AI can drive it.
  */
+
+/**
+ * Movement a ranged unit keeps after firing. Enough to shuffle one cheap tile,
+ * not enough to kill and retreat out of reach in the same turn. Forest costs 2,
+ * so it is closed off after a shot.
+ */
+export const POST_SHOT_MOVEMENT = 1;
 
 /**
  * The adjacent tiles `shooterKey` may legally shoot right now. Empty when the
@@ -49,7 +56,7 @@ export function rangedTargets(o: {
 }
 
 /**
- * Apply one shot. Returns fresh copies of the three collections it touches and
+ * Apply one shot. Returns fresh copies of the four collections it touches and
  * mutates nothing.
  *
  * Ownership and passability are deliberately untouched, which is what lets the
@@ -57,6 +64,10 @@ export function rangedTargets(o: {
  * win/loss check. Restoring the bridge under a victim killed on a lake tile is
  * part of that guarantee: without it the tile would stop counting as territory
  * and could split the victim's land.
+ *
+ * Firing also clamps the shooter's remaining movement to POST_SHOT_MOVEMENT.
+ * The clamp lives here rather than in the tap handler so the AI inherits the
+ * rule for free when a later branch teaches it to shoot.
  */
 export function resolveRangedShot(o: {
   shooterKey: string;
@@ -65,14 +76,17 @@ export function resolveRangedShot(o: {
   tileMap: Map<string, HexTile>;
   killMarks: Set<string>;
   firedUnits: Set<string>;
+  partialMoves: Map<string, number>;
 }): {
   entities: Map<string, EntityType>;
   killMarks: Set<string>;
   firedUnits: Set<string>;
+  partialMoves: Map<string, number>;
 } {
   const entities = new Map(o.entities);
   const killMarks = new Set(o.killMarks);
   const firedUnits = new Set(o.firedUnits);
+  const partialMoves = new Map(o.partialMoves);
 
   const victim = o.entities.get(o.targetKey);
   entities.delete(o.targetKey);
@@ -87,5 +101,11 @@ export function resolveRangedShot(o: {
   killMarks.add(o.targetKey);
   firedUnits.add(o.shooterKey);
 
-  return { entities, killMarks, firedUnits };
+  // partialMoves is sparse: a missing key means the unit still has its full
+  // budget, so the clamped value must be written rather than left absent.
+  const shooter = o.entities.get(o.shooterKey);
+  const remaining = o.partialMoves.get(o.shooterKey) ?? (shooter ? unitMovement(shooter) : 0);
+  partialMoves.set(o.shooterKey, Math.min(remaining, POST_SHOT_MOVEMENT));
+
+  return { entities, killMarks, firedUnits, partialMoves };
 }
