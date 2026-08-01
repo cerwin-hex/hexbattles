@@ -91,7 +91,6 @@ export function SettingsModal({
               elements={draft.elements}
               showBeta={draft.showBetaElements}
               onChange={(next) => update("elements", next)}
-              initiallyExpanded
             />
 
             <View style={styles.section}>
@@ -108,68 +107,42 @@ export function SettingsModal({
               </View>
             </View>
 
-            <View style={styles.sliderBlock}>
-              <Slider
-                label="Mountains"
-                value={draft.mountainPct}
-                min={MIN_TERRAIN_PCT}
-                max={MAX_TERRAIN_PCT}
-                onChange={(v) => update("mountainPct", v)}
-                formatValue={(v) => `${v}%`}
-                leftLabel={`${MIN_TERRAIN_PCT}%`}
-                rightLabel={`${MAX_TERRAIN_PCT}%`}
-              />
-            </View>
-
-            <View style={styles.sliderBlock}>
-              <Slider
-                label="Lakes"
-                value={draft.lakePct}
-                min={MIN_TERRAIN_PCT}
-                max={MAX_TERRAIN_PCT}
-                onChange={(v) => update("lakePct", v)}
-                formatValue={(v) => `${v}%`}
-                leftLabel={`${MIN_TERRAIN_PCT}%`}
-                rightLabel={`${MAX_TERRAIN_PCT}%`}
-              />
-            </View>
-
-            <View style={styles.sliderBlock}>
-              <Slider
-                label="Desert"
-                value={draft.desertPct}
-                min={MIN_TERRAIN_PCT}
-                max={MAX_TERRAIN_PCT}
-                onChange={(v) => update("desertPct", v)}
-                formatValue={(v) => `${v}%`}
-                leftLabel={`${MIN_TERRAIN_PCT}%`}
-                rightLabel={`${MAX_TERRAIN_PCT}%`}
-              />
-            </View>
-
-            <View style={styles.sliderBlock}>
-              <Slider
-                label="Forest"
-                value={draft.forestPct}
-                min={MIN_TERRAIN_PCT}
-                max={MAX_TERRAIN_PCT}
-                onChange={(v) => update("forestPct", v)}
-                formatValue={(v) => `${v}%`}
-                leftLabel={`${MIN_TERRAIN_PCT}%`}
-                rightLabel={`${MAX_TERRAIN_PCT}%`}
-              />
-            </View>
-
-            <View style={styles.sliderBlock}>
-              <Slider
-                label="Neutral Cities"
-                value={draft.cityCount}
-                min={MIN_CITY_COUNT}
-                max={MAX_CITY_COUNT}
-                onChange={(v) => update("cityCount", v)}
-                leftLabel={String(MIN_CITY_COUNT)}
-                rightLabel={String(MAX_CITY_COUNT)}
-              />
+            <View style={styles.section}>
+              <View style={styles.terrainHeader}>
+                <Text style={styles.sectionLabel}>Terrain</Text>
+                <Text style={styles.terrainRange}>
+                  {`${MIN_TERRAIN_PCT}–${MAX_TERRAIN_PCT}%`}
+                </Text>
+              </View>
+              <View style={styles.terrainBlock}>
+                {([
+                  ["Mountains", "mountainPct"],
+                  ["Lakes", "lakePct"],
+                  ["Desert", "desertPct"],
+                  ["Forest", "forestPct"],
+                ] as [string, "mountainPct" | "lakePct" | "desertPct" | "forestPct"][]).map(
+                  ([label, key]) => (
+                    <Slider
+                      key={key}
+                      compact
+                      label={label}
+                      value={draft[key]}
+                      min={MIN_TERRAIN_PCT}
+                      max={MAX_TERRAIN_PCT}
+                      onChange={(v) => update(key, v)}
+                      formatValue={(v) => `${v}%`}
+                    />
+                  ),
+                )}
+                <Slider
+                  compact
+                  label="Neutral Cities"
+                  value={draft.cityCount}
+                  min={MIN_CITY_COUNT}
+                  max={MAX_CITY_COUNT}
+                  onChange={(v) => update("cityCount", v)}
+                />
+              </View>
             </View>
           </ScrollView>
         </View>
@@ -298,7 +271,23 @@ const styles = StyleSheet.create({
     color: "#786A54",
     lineHeight: 18,
   },
-  sliderBlock: {
-    // gap handled by ScrollView contentContainerStyle
+  terrainHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  terrainRange: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: "#786A54",
+  },
+  terrainBlock: {
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "#4A3C1E",
+    borderRadius: 5,
+    backgroundColor: "#1E1408",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
 });

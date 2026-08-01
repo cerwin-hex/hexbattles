@@ -268,13 +268,6 @@ export default function MainMenu() {
             >
               <Text style={styles.helpBtnText}>?</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.helpBtn}
-              onPress={() => { Haptics.selectionAsync(); setSettingsVisible(true); }}
-              activeOpacity={0.75}
-            >
-              <Text style={styles.helpBtnText}>⚙</Text>
-            </TouchableOpacity>
           </View>
           <Text style={styles.title}>HEX BATTLES</Text>
           <View style={styles.accentLine} />
@@ -343,6 +336,15 @@ export default function MainMenu() {
               ))}
             </View>
           </View>
+
+          <TouchableOpacity
+            style={styles.settingsBtn}
+            onPress={() => { Haptics.selectionAsync(); setSettingsVisible(true); }}
+            activeOpacity={0.75}
+          >
+            <Text style={styles.settingsBtnIcon}>⚙</Text>
+            <Text style={styles.settingsBtnText}>SETTINGS</Text>
+          </TouchableOpacity>
 
         </GestureScrollView>
 
@@ -547,6 +549,27 @@ const styles = StyleSheet.create({
   },
   diffTextActive: {
     color: '#C8A24A',
+  },
+  settingsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    height: 54,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: '#7A6030',
+    backgroundColor: '#2A1E0C',
+  },
+  settingsBtnIcon: {
+    fontSize: 16,
+    color: '#C8A24A',
+  },
+  settingsBtnText: {
+    fontSize: 12,
+    fontFamily: 'Cinzel_700Bold',
+    color: '#C8A24A',
+    letterSpacing: 2,
   },
   startStack: {
     gap: 10,

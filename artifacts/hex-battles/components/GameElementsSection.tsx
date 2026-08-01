@@ -1,6 +1,5 @@
-import * as Haptics from "expo-haptics";
-import React, { useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React from "react";
+import { StyleSheet, Text, View } from "react-native";
 import { Toggle } from "@/components/Toggle";
 import {
   enabledVisibleCount,
@@ -12,62 +11,46 @@ interface GameElementsSectionProps {
   elements: GameElements;
   showBeta: boolean;
   onChange: (next: GameElements) => void;
-  /** Start with the list open. Settings opens it; a compact host would not. */
-  initiallyExpanded?: boolean;
 }
 
 /**
- * The collapsible "Game Elements" list. The header carries an "N of M" summary
- * of the visible elements, so a collapsed section still shows how many parts of
- * the game the next new game will include.
+ * The "Game Elements" list in Settings: one toggle per part of the game a new
+ * game can be started with. The header carries an "N of M" summary so the count
+ * is readable without counting the switches.
  */
 export function GameElementsSection({
   elements,
   showBeta,
   onChange,
-  initiallyExpanded = false,
 }: GameElementsSectionProps) {
-  const [expanded, setExpanded] = useState(initiallyExpanded);
   const defs = visibleGameElements(showBeta);
   const { on, total } = enabledVisibleCount(elements, showBeta);
 
   return (
     <View style={styles.section}>
-      <TouchableOpacity
-        style={styles.header}
-        activeOpacity={0.75}
-        onPress={() => {
-          Haptics.selectionAsync();
-          setExpanded((e) => !e);
-        }}
-      >
-        <Text style={styles.label}>GAME ELEMENTS</Text>
-        <View style={styles.headerRight}>
-          <Text style={styles.summary}>{`${on} of ${total}`}</Text>
-          <Text style={styles.chevron}>{expanded ? "▴" : "▾"}</Text>
-        </View>
-      </TouchableOpacity>
+      <View style={styles.header}>
+        <Text style={styles.label}>Game Elements</Text>
+        <Text style={styles.summary}>{`${on} of ${total}`}</Text>
+      </View>
 
-      {expanded && (
-        <View style={styles.list}>
-          {defs.map((def) => (
-            <View key={def.id} style={styles.row}>
-              <View style={styles.rowText}>
-                <View style={styles.rowTitleLine}>
-                  <Text style={styles.rowTitle}>{def.name}</Text>
-                  {def.beta && <Text style={styles.betaChip}>BETA</Text>}
-                </View>
-                <Text style={styles.rowBlurb}>{def.blurb}</Text>
+      <View style={styles.list}>
+        {defs.map((def) => (
+          <View key={def.id} style={styles.row}>
+            <View style={styles.rowText}>
+              <View style={styles.rowTitleLine}>
+                <Text style={styles.rowTitle}>{def.name}</Text>
+                {def.beta && <Text style={styles.betaChip}>BETA</Text>}
               </View>
-              <Toggle
-                value={elements[def.id]}
-                accessibilityLabel={def.name}
-                onValueChange={(v) => onChange({ ...elements, [def.id]: v })}
-              />
+              <Text style={styles.rowBlurb}>{def.blurb}</Text>
             </View>
-          ))}
-        </View>
-      )}
+            <Toggle
+              value={elements[def.id]}
+              accessibilityLabel={def.name}
+              onValueChange={(v) => onChange({ ...elements, [def.id]: v })}
+            />
+          </View>
+        ))}
+      </View>
     </View>
   );
 }
@@ -87,19 +70,10 @@ const styles = StyleSheet.create({
     color: "#A08A60",
     letterSpacing: 2,
   },
-  headerRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
   summary: {
     fontSize: 12,
     fontFamily: "Inter_400Regular",
     color: "#786A54",
-  },
-  chevron: {
-    fontSize: 12,
-    color: "#C8A24A",
   },
   list: {
     borderWidth: 1,
