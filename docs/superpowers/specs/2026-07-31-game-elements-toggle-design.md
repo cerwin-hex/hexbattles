@@ -133,7 +133,7 @@ export function isEntityEnabled(id: EntityType, elements: GameElements): boolean
 | `mounted` | `unitPurchasablesFor` drops scout/knight; `handleTileTapLogic` refuses to buy them; the AI's three creation points skip them (`AI_UNIT_BUY_ORDER_ASC`/`_DESC` and the rebel-clearing `buyPreference` in `aiStrategy.ts`, `UNIT_TYPES` in `aiExpert.ts`). Because no cavalry can then exist, `STRENGTH_TO_CAVALRY` merges and `UNIT_UPGRADE.scout` are unreachable — that code is left untouched. |
 | `improvements` | `improvementPurchasablesFor` returns `[]`; `handleTileTapLogic` refuses the improve action; `dtFindImproveMove` (`logic/aiHelpers.ts:234`) returns `null`, which is the single choke point both AI brains use — the decision tree's priority J and the expert search's last resort. `TERRAIN_INCOME` for field/sawmill/mine is left untouched — those terrains simply never come into existence. |
 | `adminBurden` | `calcTerritoryUpkeep` (`logic/gameLogic.ts:45`) adds 0 instead of `calcAdminBurden(territory.length)`, which covers every economy path. The two display hooks that compute their own numbers — `useEconBreakdown.ts:165` and `useDevEconomicOverlays.ts:65` — take the element set too, so the panel matches the charge. `calcAdminBurden` itself is unchanged. |
-| `rebels` | `spawnRebelsForOwner` still sweeps and clears armed graves/ruins but places no rebel. Skull and ruin markers still render — they mark where units fell — they just never breed. |
+| `rebels` | `spawnRebelsForOwner` still sweeps and clears armed graves/ruins but places no rebel. Skull and ruin markers still render — they mark where units fell — they just never breed. The new-game seeding pass in `app/game.tsx` — which scatters the opening board's starting rebels, independently of `spawnRebelsForOwner` — is gated the same way, so Rebels off also means no rebels at kickoff. |
 
 `spawnRebelsForOwner` gains a trailing `spawnEnabled: boolean` parameter rather
 than being skipped at its two call sites, so the site-consumption bookkeeping
@@ -295,27 +295,71 @@ Extend the logic suites:
 
 ## 5. Acceptance criteria
 
-1. The main menu shows a collapsed **Game Elements** row with an "N of M"
-   counter; tapping it expands four toggle rows and leaves the start button
-   reachable without scrolling on a phone-sized screen.
+1. A **Game Elements** section with an "N of M" counter lists four toggle rows,
+   and the start button stays reachable on a phone-sized screen. (Superseded by
+   section 7: the section lives in Settings, expanded, and the menu scrolls.)
 2. Element choices survive an app restart.
 3. Starting a game with an element off means that element is absent for the
    player *and* the AI for the whole game.
 4. Resuming works: a game resumes with the element set it was started with, and
    a save created before this feature resumes with all four elements on.
-5. Beta elements are invisible until **Show beta elements** is switched on in
-   Settings, and are off in a new game while invisible.
+5. Beta elements are listed like any other, carry a BETA label, and start off.
+   (Superseded by section 7: the original design hid them behind a setting.)
 6. `pnpm run typecheck` and `pnpm test` pass from the repository root.
 7. The AI peak-turn timing guard does not regress.
 
 ## 6. Plain-language summary
 
-The main menu gets a fold-out list where you switch parts of the game on and off
-before you start: mounted units, improvements, the administrative burden on big
+Settings gets a list where you switch parts of the game on and off before you
+start a game: mounted units, improvements, the administrative burden on big
 realms, and rebels. Your choices are remembered for next time, and each game
 keeps the choices it was started with — a game begun without rebels stays
 without rebels even if you change the menu later. Unfinished features (ranged
-units, fog of war) stay hidden until you switch on "show beta elements" in
-Settings, and they can join the list with two lines of code once they are ready.
+units, fog of war) sit in the same list with a BETA label and start switched
+off, and they can join it with two lines of code once they are ready.
 The AI obeys exactly the same choices you do. The rules text still describes the
 whole game.
+
+## 7. Change after implementation (2026-08-01)
+
+On-device testing showed the main menu had no scrolling body of its own, so on a
+short screen the start buttons fell off the bottom and could not be reached. Two
+changes followed:
+
+- The Game Elements list moved out of the main menu and into the Settings modal.
+  With a scrolling modal to live in it no longer collapses: the rows are always
+  visible and the header keeps its "N of M" summary. Sections 1-4 are unaffected
+  — only the section's host changed; acceptance criterion 1 is restated above.
+- The menu body between the pinned title and the pinned start stack is now a
+  ScrollView, so it can never overflow again regardless of what it contains.
+- The gear icon in the menu's top corner became a full-width **Settings** button
+  below AI Difficulty, now that Settings holds a choice made per new game rather
+  than only cosmetic preferences.
+- `Slider` gained a `compact` variant — shorter track, smaller readout, no end
+  labels. The four terrain sliders share one bordered block under a single
+  "Terrain" heading, roughly halving that section's height.
+
+At the same time, map size, opponent count and difficulty moved from local
+component state into the persisted settings, so they are remembered between
+games and across launches like the terrain sliders. `updateSettings` now takes a
+patch rather than a whole settings object, so a control firing before hydration
+completes cannot write pre-hydration defaults back over stored settings.
+
+One bug fell out of that persistence: `Slider` passed `[min, max]` as the
+dependency list of its `useAnimatedReaction`, which suppresses Reanimated's
+automatic closure capture, so the prepare worklet kept comparing against the
+`value` present at mount. Sliders seeded before they render were unaffected;
+Map Size, which receives its stored value when hydration lands, showed the right
+number above a thumb parked at the default. `value` is now a dependency, and the
+reaction skips while a finger is down so the re-registration it triggers on each
+emitted step cannot fight the drag.
+
+The **Show beta elements** setting is gone. Hiding beta elements made sense while
+the list was the first thing on the main menu; once it moved behind a Settings
+button, a setting that governs what another setting on the same screen shows was
+only indirection. Beta elements are now listed like any other, carry the BETA
+label they always had, and start switched off — which `DEFAULT_GAME_ELEMENTS`
+already did, so the guarantee that nobody meets an unfinished feature without
+choosing it is unchanged. `showBetaElements`, `visibleGameElements` and
+`elementsForNewGame` are deleted; `enabledVisibleCount` becomes
+`enabledElementCount`, counting against the whole registry.

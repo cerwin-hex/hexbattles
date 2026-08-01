@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { normalizeGameElements, type GameElements } from "@/constants/gameElements";
 import type {
   Difficulty,
   EntityType,
@@ -31,6 +32,9 @@ export interface SavedGameConfig {
   numTiles: number;
   numOpponents: number;
   difficulty: Difficulty;
+  /** Absent in saves written before the Game Elements feature; those load with
+   *  DEFAULT_GAME_ELEMENTS, i.e. every shipped element on. */
+  elements?: GameElements;
 }
 
 export interface SavedGame {
@@ -100,7 +104,10 @@ export function deserializeSavedGame(json: string): SavedGame | null {
     if (!parsed || parsed.v !== 1) return null;
     return {
       tiles: parsed.tiles,
-      config: parsed.config,
+      config: {
+        ...parsed.config,
+        elements: normalizeGameElements(parsed.config.elements),
+      },
       state: {
         mutableTileMap: new Map(parsed.state.mutableTileMap),
         entities: new Map(parsed.state.entities),

@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { EntityType, HexTile, TerritoryOwner, AiState } from "@/types";
+import type { GameElements } from "@/constants/gameElements";
 import {
   findCentralTile,
   getContiguousTerritory,
@@ -24,6 +25,7 @@ interface UseDevEconomicOverlaysParams {
   cities: Set<string>;
   tileDataMap: Map<string, { cx: number; cy: number }>;
   aiStateMap: Map<string, AiState>;
+  elements: GameElements;
 }
 
 export function useDevEconomicOverlays({
@@ -35,6 +37,7 @@ export function useDevEconomicOverlays({
   cities,
   tileDataMap,
   aiStateMap,
+  elements,
 }: UseDevEconomicOverlaysParams): DevEconomicOverlay[] {
   return useMemo<DevEconomicOverlay[]>(() => {
     if (!isDeveloperModeActive) return [];
@@ -62,7 +65,7 @@ export function useDevEconomicOverlays({
           cities,
           activeTileMap,
         );
-        const upkeep = calcTerritoryUpkeep(territory, entities);
+        const upkeep = calcTerritoryUpkeep(territory, entities, elements);
         const net = income - upkeep;
         const money = net >= 0 ? `${balance}(+${net})` : `${balance}(${net})`;
         // State (only the heuristic AIs act on it; for the expert brain it is a
@@ -130,5 +133,6 @@ export function useDevEconomicOverlays({
     cities,
     tileDataMap,
     aiStateMap,
+    elements,
   ]);
 }

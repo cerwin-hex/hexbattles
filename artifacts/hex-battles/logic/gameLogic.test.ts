@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { HexTile, EntityType, TerritoryOwner } from "@/types";
+import { ALL_GAME_ELEMENTS } from "@/constants/gameElements";
 import {
   calcTerritoryUpkeep,
   applySingleHexPenalty,
@@ -606,6 +607,28 @@ describe("calcTerritoryUpkeep admin burden", () => {
       makeTile(i, 0, "player", "grass"),
     );
     expect(calcTerritoryUpkeep(tiles, new Map())).toBe(0);
+  });
+  it("charges no burden when the element is off", () => {
+    const tiles = Array.from({ length: 26 }, (_, i) =>
+      makeTile(i, 0, "player", "grass"),
+    );
+    const off = { ...ALL_GAME_ELEMENTS, adminBurden: false };
+    expect(calcTerritoryUpkeep(tiles, new Map(), off)).toBe(0);
+  });
+
+  it("still charges unit upkeep with the burden off", () => {
+    const tiles = Array.from({ length: 26 }, (_, i) =>
+      makeTile(i, 0, "player", "grass"),
+    );
+    const off = { ...ALL_GAME_ELEMENTS, adminBurden: false };
+    expect(calcTerritoryUpkeep(tiles, ents([["0,0", "peasant"]]), off)).toBe(3);
+  });
+
+  it("charges the burden when the element is explicitly on", () => {
+    const tiles = Array.from({ length: 26 }, (_, i) =>
+      makeTile(i, 0, "player", "grass"),
+    );
+    expect(calcTerritoryUpkeep(tiles, new Map(), ALL_GAME_ELEMENTS)).toBe(3);
   });
 });
 

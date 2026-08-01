@@ -19,10 +19,13 @@ import {
 } from "@/utils/hexGrid";
 import type { ArmedSites } from "@/types";
 import { STRENGTH_TO_UNIT, STRENGTH_TO_CAVALRY } from "@/constants/gameConstants";
+import { ALL_GAME_ELEMENTS, type GameElements } from "@/constants/gameElements";
 
 export function calcTerritoryUpkeep(
   territory: HexTile[],
   ents: Map<string, EntityType>,
+  /** Omitted means the full rule set — keeps every existing caller honest. */
+  elements: GameElements = ALL_GAME_ELEMENTS,
 ): number {
   let towers = 0, castles = 0, unitUpkeep = 0, bridges = 0;
   for (const t of territory) {
@@ -42,7 +45,7 @@ export function calcTerritoryUpkeep(
     calcDefenseUpkeep("tower", towers) +
     calcDefenseUpkeep("castle", castles) +
     bridges * ENTITY_META["bridge"].upkeep +
-    calcAdminBurden(territory.length)
+    (elements.adminBurden ? calcAdminBurden(territory.length) : 0)
   );
 }
 
@@ -74,8 +77,13 @@ export function applyOwnerEconomy(o: {
   ruins: Set<string>;
   /** Grant the land-tile income bonus (super_expert AI tier). */
   incomeBonus: boolean;
+  /** Omitted means the full rule set. */
+  elements?: GameElements;
 }): boolean {
-  const { owner, tileMap, entities, balances, cities, graveyard, ruins, incomeBonus } = o;
+  const {
+    owner, tileMap, entities, balances, cities, graveyard, ruins, incomeBonus,
+    elements = ALL_GAME_ELEMENTS,
+  } = o;
   let bankruptcyOccurred = false;
   const visited = new Set<string>();
   for (const tile of Array.from(tileMap.values())) {
@@ -89,7 +97,7 @@ export function applyOwnerEconomy(o: {
     const incomeModifier = incomeBonus
       ? territory.filter((t) => t.terrain !== "lake").length
       : 0;
-    const upkeep = calcTerritoryUpkeep(territory, entities);
+    const upkeep = calcTerritoryUpkeep(territory, entities, elements);
     const current = balances.get(territoryId) ?? 0;
     const delta = income + incomeModifier - upkeep;
     const newBalance = current + delta;
@@ -284,6 +292,9 @@ export function spawnRebelsForOwner(
   armedGraves: Set<string>,
   armedRuins: Set<string>,
   rng: () => number = Math.random,
+  /** When false, armed sites are still consumed and markers still cleared —
+   *  they simply never breed. Keeps the bookkeeping running with rebels off. */
+  spawnEnabled = true,
 ): void {
   const preSpread = new Map(entities);
 
@@ -294,7 +305,7 @@ export function spawnRebelsForOwner(
     graveyard.delete(key);
     if (tileMap.get(key)?.terrain === "lake") continue;
     if (entities.has(key)) continue;
-    if (rng() < 0.75) entities.set(key, "rebel");
+    if (spawnEnabled && rng() < 0.75) entities.set(key, "rebel");
   }
   for (const key of [...armedRuins]) {
     if (tileMap.get(key)?.owner !== owner) continue;
@@ -303,8 +314,10 @@ export function spawnRebelsForOwner(
     ruins.delete(key);
     if (tileMap.get(key)?.terrain === "lake") continue;
     if (entities.has(key)) continue;
-    if (rng() < 0.75) entities.set(key, "rebel");
+    if (spawnEnabled && rng() < 0.75) entities.set(key, "rebel");
   }
+
+  if (!spawnEnabled) return;
 
   for (const tile of tileMap.values()) {
     if (tile.owner !== owner) continue;

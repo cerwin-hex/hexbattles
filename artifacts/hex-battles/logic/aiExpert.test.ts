@@ -15,6 +15,7 @@ import {
 import type { AiDecisionExec, AiWorkingState } from "@/logic/aiStrategy";
 import { runOneAiTurnHeadless } from "@/logic/aiSelfPlay";
 import type { AiContext } from "@/logic/aiHelpers";
+import { ALL_GAME_ELEMENTS } from "@/constants/gameElements";
 import type { HexTile, EntityType, TerritoryOwner } from "@/types";
 import { getContiguousTerritory, getTerritoryId, getValidMoves } from "@/utils/hexGrid";
 
@@ -52,6 +53,7 @@ function makeCtx(
     partialMoves: new Map(),
     combatSpentUnits: new Set(),
     aiOwner: owner,
+    elements: ALL_GAME_ELEMENTS,
   };
 }
 
@@ -94,6 +96,31 @@ describe("evaluatePosition", () => {
     const sBig = evaluatePosition("ai1", big, new Map(), new Map(), new Set());
     const sSmall = evaluatePosition("ai1", small, new Map(), new Map(), new Set());
     expect(sBig).toBeGreaterThan(sSmall);
+  });
+
+  it("does not charge the admin burden when that element is off", () => {
+    // The economy block scores ONLY `owner`'s own territories, so an upkeep term
+    // the real economy no longer collects is not a symmetric wash — it invents a
+    // deficit on the AI's own large territory and biases the search away from
+    // buying. 25 grass tiles = 50 income; 16 peasants = 48 upkeep, so the real
+    // net is +2 (no penalty) while the phantom burden of ceil((25-20)/2) = 3
+    // would push it to -1 and trip the deficit branch.
+    const tiles: HexTile[] = [];
+    const entities = new Map<string, EntityType>();
+    for (let i = 0; i < 25; i++) {
+      tiles.push(makeTile(i, 0, "ai1"));
+      if (i < 16) entities.set(`${i},0`, "peasant");
+    }
+    const map = makeTileMap(tiles);
+    const withBurden = evaluatePosition(
+      "ai1", map, entities, new Map(), new Set(), DEFAULT_WEIGHTS,
+      { ...ALL_GAME_ELEMENTS, adminBurden: true },
+    );
+    const withoutBurden = evaluatePosition(
+      "ai1", map, entities, new Map(), new Set(), DEFAULT_WEIGHTS,
+      { ...ALL_GAME_ELEMENTS, adminBurden: false },
+    );
+    expect(withoutBurden).toBeGreaterThan(withBurden);
   });
 
   describe("idle-fort penalty (front-relevant fortification)", () => {

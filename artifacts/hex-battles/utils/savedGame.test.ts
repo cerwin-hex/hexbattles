@@ -16,6 +16,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
 }));
 
 import type { HexTile } from "@/types";
+import { ALL_GAME_ELEMENTS, DEFAULT_GAME_ELEMENTS } from "@/constants/gameElements";
 import {
   __resetForTests,
   clearSavedGame,
@@ -47,7 +48,16 @@ function makeSnapshot(): SavedGame {
   const tile2 = makeTile(1, 0, "ai1");
   return {
     tiles: [tile1, tile2],
-    config: { numTiles: 80, numOpponents: 2, difficulty: "hard" },
+    config: {
+      numTiles: 80,
+      numOpponents: 2,
+      difficulty: "hard",
+      // Deliberately not DEFAULT_GAME_ELEMENTS (currently identical to
+      // ALL_GAME_ELEMENTS — no beta element ships): if it were, the round-trip
+      // test below couldn't tell "the stored set survived" from "it was
+      // discarded and normalizeGameElements silently substituted defaults".
+      elements: { ...ALL_GAME_ELEMENTS, rebels: false },
+    },
     state: {
       mutableTileMap: new Map([
         [tile1.key, tile1],
@@ -243,5 +253,23 @@ describe("serialize / deserialize round-trip", () => {
   it("returns null for unknown schema version", () => {
     const bogus = JSON.stringify({ v: 99, tiles: [], config: {}, state: {} });
     expect(deserializeSavedGame(bogus)).toBe(null);
+  });
+});
+
+describe("saved game elements", () => {
+  it("loads a save written before the feature with the default elements", () => {
+    const json = serializeSavedGame(makeSnapshot());
+    const parsed = JSON.parse(json);
+    delete parsed.config.elements;
+    const loaded = deserializeSavedGame(JSON.stringify(parsed));
+    expect(loaded?.config.elements).toEqual(DEFAULT_GAME_ELEMENTS);
+  });
+
+  it("round-trips an element set", () => {
+    const game = makeSnapshot();
+    game.config.elements = { ...ALL_GAME_ELEMENTS, rebels: false };
+    const loaded = deserializeSavedGame(serializeSavedGame(game));
+    expect(loaded?.config.elements?.rebels).toBe(false);
+    expect(loaded?.config.elements?.mounted).toBe(true);
   });
 });

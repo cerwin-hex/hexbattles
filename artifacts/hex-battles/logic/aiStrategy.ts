@@ -31,23 +31,35 @@ import {
 import type { AiContext } from "@/logic/aiHelpers";
 import { runExpertTerritoryDecisionLoop } from "@/logic/aiExpert";
 import type { AiState, Difficulty } from "@/types";
+import {
+  ALL_GAME_ELEMENTS,
+  enabledUnitTypes,
+  isEntityEnabled,
+  type GameElements,
+} from "@/constants/gameElements";
 
 // Unit purchase candidates for the AI, derived from ENTITY_META so new units are
-// picked up automatically. The buy loops take the first affordable type meeting
+// picked up automatically, and filtered by the active elements so a disabled
+// track is never bought. The buy loops take the first affordable type meeting
 // the strength threshold. Within a strength tier, cavalry (more attacks) is
-// preferred over plain infantry, so the AI buys a Scout/Knight when it can afford
-// one and falls back to cheaper infantry otherwise.
-const aiUnitBuyOrder = (strengthDir: 1 | -1): EntityType[] =>
-  (Object.keys(ENTITY_META) as EntityType[])
-    .filter((e) => ENTITY_META[e].isUnit)
+// preferred over plain infantry, so the AI buys a Scout/Knight when it can
+// afford one and falls back to cheaper infantry otherwise.
+//
+// The `.slice()` is load-bearing: `enabledUnitTypes` hands back its memoized
+// array, and `sort` would otherwise reorder the cache in place — leaving the
+// expert search's candidate loop reading a list this function had scrambled.
+const aiUnitBuyOrder = (
+  elements: GameElements,
+  strengthDir: 1 | -1,
+): EntityType[] =>
+  enabledUnitTypes(elements)
+    .slice()
     .sort(
       (a, b) =>
         strengthDir * (ENTITY_META[a].strength - ENTITY_META[b].strength) ||
         unitMaxAttacks(b) - unitMaxAttacks(a) || // cavalry first within a tier
         ENTITY_META[a].cost - ENTITY_META[b].cost,
     );
-const AI_UNIT_BUY_ORDER_ASC: EntityType[] = aiUnitBuyOrder(1);
-const AI_UNIT_BUY_ORDER_DESC: EntityType[] = aiUnitBuyOrder(-1);
 
 export interface AiDecisionExec {
   move(from: string, to: string): Promise<boolean>;
@@ -69,6 +81,12 @@ export async function runAiTerritoryDecisionLoop(
 ): Promise<void> {
   const aiOwner = aiCtx.aiOwner;
 
+  // Resolved once per territory, never per iteration: the buy order only
+  // depends on the element set, which is fixed for the whole match, and this
+  // loop runs up to 100 times inside the AI's peak-turn budget.
+  const buyOrderAsc = aiUnitBuyOrder(aiCtx.elements, 1);
+  const buyOrderDesc = aiUnitBuyOrder(aiCtx.elements, -1);
+
   const getCT = (key: string, owner: TerritoryOwner): HexTile[] =>
     aiCtx.territoryCache
       ? aiCtx.territoryCache.get(aiCtx.tileMap, key, owner, aiCtx.entities)
@@ -86,7 +104,7 @@ export async function runAiTerritoryDecisionLoop(
     const currBal = aiCtx.balances.get(currTid) ?? 0;
 
     const currIncome = calcTerritoryIncome(currTerr, aiCtx.entities, aiCtx.cities, aiCtx.tileMap);
-    const currUpkeep = calcTerritoryUpkeep(currTerr, aiCtx.entities);
+    const currUpkeep = calcTerritoryUpkeep(currTerr, aiCtx.entities, aiCtx.elements);
 
     const canAfford = (cost: number, extraUpkeep: number = 0): boolean =>
       currBal >= cost && currBal + (currIncome - (currUpkeep + extraUpkeep)) >= 0;
@@ -253,7 +271,7 @@ export async function runAiTerritoryDecisionLoop(
       }
 
       if (!actionTaken) {
-        for (const uType of AI_UNIT_BUY_ORDER_ASC) {
+        for (const uType of buyOrderAsc) {
           if (actionTaken) break;
           if (ENTITY_META[uType].strength < eStr) continue;
           const uCost = ENTITY_META[uType].cost;
@@ -438,7 +456,7 @@ export async function runAiTerritoryDecisionLoop(
             if (mergeB) actionTaken = await exec.move(mergeB.from, mergeB.to);
           }
           if (!actionTaken) {
-            for (const uType of AI_UNIT_BUY_ORDER_ASC) {
+            for (const uType of buyOrderAsc) {
               if (actionTaken) break;
               const str = ENTITY_META[uType].strength;
               const cost = ENTITY_META[uType].cost;
@@ -675,7 +693,7 @@ export async function runAiTerritoryDecisionLoop(
         if (mergeE1) actionTaken = await exec.move(mergeE1.from, mergeE1.to);
       }
       if (!actionTaken) {
-        for (const uType of AI_UNIT_BUY_ORDER_DESC) {
+        for (const uType of buyOrderDesc) {
           if (actionTaken) break;
           const str = ENTITY_META[uType].strength;
           const cost = ENTITY_META[uType].cost;
@@ -737,7 +755,7 @@ export async function runAiTerritoryDecisionLoop(
           if (mergeE2) actionTaken = await exec.move(mergeE2.from, mergeE2.to);
         }
         if (!actionTaken) {
-          for (const uType of AI_UNIT_BUY_ORDER_ASC) {
+          for (const uType of buyOrderAsc) {
             if (actionTaken) break;
             const str = ENTITY_META[uType].strength;
             const cost = ENTITY_META[uType].cost;
@@ -793,7 +811,7 @@ export async function runAiTerritoryDecisionLoop(
           if (mergeE3) actionTaken = await exec.move(mergeE3.from, mergeE3.to);
         }
         if (!actionTaken) {
-          for (const uType of AI_UNIT_BUY_ORDER_ASC) {
+          for (const uType of buyOrderAsc) {
             if (actionTaken) break;
             const str = ENTITY_META[uType].strength;
             const cost = ENTITY_META[uType].cost;
@@ -878,8 +896,10 @@ export async function runAiTerritoryDecisionLoop(
       if (!actionTaken) {
         // Prefer buying a scout onto the rebel: its charge clears the rebel and
         // leaves it active to ride on and act again the same turn. Fall back to
-        // a peasant when the scout is unaffordable for the territory.
-        const buyPreference: EntityType[] = ["scout", "peasant"];
+        // a peasant when the scout is unaffordable — or unavailable, because
+        // mounted units are switched off for this match.
+        const buyPreference: EntityType[] = (["scout", "peasant"] as EntityType[])
+          .filter((u) => isEntityEnabled(u, aiCtx.elements));
         for (const rt of rebelTiles) {
           if (actionTaken) break;
           const rtIncome = (TERRAIN_INCOME[rt.terrain] ?? 0) + (aiCtx.cities.has(rt.key) ? CITY_BONUS : 0);
@@ -961,6 +981,9 @@ export interface AiWorkingState {
   /** Units that have struck a defender this turn (cavalry: no second strike). */
   combatSpentUnits: Set<string>;
   freeTowerUsed: Map<TerritoryOwner, Set<string>>;
+  /** Which parts of the game this match is played with. Absent means the full
+   *  rule set — self-play and the AI test harnesses rely on that default. */
+  elements?: GameElements;
 }
 
 export interface AiTurnCallbacks {
@@ -1061,6 +1084,9 @@ export async function runAiTurn(
   armedGraves: ArmedSites = new Map(),
   armedRuins: ArmedSites = new Map(),
 ): Promise<void> {
+  // Resolved once for the whole AI phase. Absent means the full rule set, which
+  // is what keeps self-play and the AI test harnesses working unchanged.
+  const elements = ws.elements ?? ALL_GAME_ELEMENTS;
 
   cbs.initStepHistory(snapFromWs(ws, armedGraves, armedRuins));
   await cbs.awaitPreAiResume();
@@ -1092,6 +1118,8 @@ export async function runAiTurn(
         ws.ruins,
         armedGraves.get(aiOwner) ?? new Set(),
         armedRuins.get(aiOwner) ?? new Set(),
+        Math.random,
+        elements.rebels,
       );
       cbs.state.setEntities(new Map(ws.entities));
       cbs.state.setGraveyard(new Set(ws.graveyard));
@@ -1122,6 +1150,7 @@ export async function runAiTurn(
         graveyard: ws.graveyard,
         ruins: ws.ruins,
         incomeBonus,
+        elements,
       });
       if (bankrupt) {
         cbs.applySingleHexPenalty(
@@ -1207,6 +1236,7 @@ export async function runAiTurn(
         get partialMoves() { return ws.partialMoves; },
         get combatSpentUnits() { return ws.combatSpentUnits; },
         get aiOwner() { return aiOwner; },
+        get elements() { return elements; },
         territoryCache: cache,
       };
 
@@ -1685,6 +1715,7 @@ export async function runAiTurn(
       graveyard: ws.graveyard,
       ruins: ws.ruins,
       incomeBonus: false,
+      elements,
     });
     if (bankrupt) {
       cbs.applySingleHexPenalty(
@@ -1713,6 +1744,8 @@ export async function runAiTurn(
       ws.ruins,
       armedGraves.get("player") ?? new Set(),
       armedRuins.get("player") ?? new Set(),
+      Math.random,
+      elements.rebels,
     );
     armedGraves.set("player", armedSitesForOwner("player", ws.tileMap, ws.graveyard));
     armedRuins.set("player", armedSitesForOwner("player", ws.tileMap, ws.ruins));

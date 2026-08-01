@@ -2073,7 +2073,7 @@ Start the app (`pnpm --filter @workspace/hex-battles run dev`, or
    and no AI ever fields one.
 5. Starting a game with Improvements off: the Build ribbon shows no Field,
    Sawmill or Mine.
-6. Starting a game with Rebels off: no skull ever breeds a rebel.
+6. Starting a game with Rebels off: the opening board has zero rebels, and none ever appear afterwards.
 7. Starting a game with Administrative Burden off: a territory above 20 tiles
    shows no burden line in the economy panel.
 8. Leaving to the menu and resuming returns to the same game with the same

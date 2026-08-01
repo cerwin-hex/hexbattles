@@ -4,12 +4,13 @@ import Animated from "react-native-reanimated";
 import { nextDefenseUpkeep, ENTITY_META, CITY_BONUS } from "@/utils/hexGrid";
 import type { HexTile, TerritoryOwner, EntityType, TerrainType } from "@/types";
 import {
-  UNIT_PURCHASABLES,
-  BUILDING_PURCHASABLES,
-  IMPROVEMENT_PURCHASABLES,
+  unitPurchasablesFor,
+  buildingPurchasablesFor,
+  improvementPurchasablesFor,
   ENTITY_PANEL_H,
   BOTTOM_BAR_H,
 } from "@/constants/gameConstants";
+import type { GameElements } from "@/constants/gameElements";
 import styles from "@/app/gameStyles";
 import { UnitIcon, CoinValue } from "@/components/UnitIcon";
 import { ImprovementIcon } from "@/components/ImprovementIcon";
@@ -32,6 +33,7 @@ interface PurchaseRibbonProps {
   setArmedImprovement: (t: TerrainType | null) => void;
   improvementAvailability: Map<TerrainType, boolean>;
   hasBridgePlacementAvailable: boolean;
+  elements: GameElements;
 }
 
 export default function PurchaseRibbon({
@@ -52,7 +54,9 @@ export default function PurchaseRibbon({
   setArmedImprovement,
   improvementAvailability,
   hasBridgePlacementAvailable,
+  elements,
 }: PurchaseRibbonProps) {
+  const improvements = improvementPurchasablesFor(elements);
   return (
     <Animated.View
       style={[
@@ -73,8 +77,8 @@ export default function PurchaseRibbon({
         contentContainerStyle={styles.ribbonContent}
       >
         {(ribbonMode === "units"
-          ? UNIT_PURCHASABLES
-          : BUILDING_PURCHASABLES
+          ? unitPurchasablesFor(elements)
+          : buildingPurchasablesFor(elements)
         ).map((item) => {
           const isArmed = armedEntityId === item.id;
           const isTower = item.id === "tower";
@@ -197,10 +201,10 @@ export default function PurchaseRibbon({
           );
         })}
 
-        {ribbonMode === "buildings" && (
+        {ribbonMode === "buildings" && improvements.length > 0 && (
           <>
             <View style={styles.ribbonDivider} />
-            {IMPROVEMENT_PURCHASABLES.map((imp) => {
+            {improvements.map((imp) => {
               const isArmed = armedImprovement === imp.target;
               const round1Locked = turn === 1;
               const noCity = !territoryHasCity;

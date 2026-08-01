@@ -1,4 +1,5 @@
 import type { EntityType, HexTile, TerrainType, TerritoryOwner } from "@/types";
+import type { GameElements } from "@/constants/gameElements";
 import { HEX_EDGES, hexDistance, tileKey } from "@/utils/hexMath";
 import {
   improveTargetFor,
@@ -26,6 +27,8 @@ export interface AiContext {
   /** Units that have struck a defender this turn (cavalry: no second strike). */
   combatSpentUnits: Set<string>;
   aiOwner: TerritoryOwner;
+  /** Which parts of the game this match is played with. */
+  elements: GameElements;
   territoryCache?: TerritoryCache;
 }
 
@@ -100,7 +103,7 @@ export function dtCaptureNegatesIncome(
   if (!anyRemaining) return true;
   const remTerr = getContiguousTerritory(simMap, anyRemaining.key, enemyOwner, simEntities);
   const remIncome = calcTerritoryIncome(remTerr, simEntities, ctx.cities, simMap);
-  const remUpkeep = calcTerritoryUpkeep(remTerr, simEntities);
+  const remUpkeep = calcTerritoryUpkeep(remTerr, simEntities, ctx.elements);
   return enemyBal + (remIncome - remUpkeep) < 0;
 }
 
@@ -230,12 +233,17 @@ export function dtFindMergeMove(
  * No `spentUnits` filter: improvements are purchases, not unit actions. The
  * decision loop cannot re-pick a tile because the executor rewrites the live
  * tile map, after which `improveTargetFor` no longer matches.
+ *
+ * This is also the single choke point for AI improvements — the decision tree's
+ * priority J and the expert search's last resort both call it — so the element
+ * gate below is all it takes to keep both brains off improvements.
  */
 export function dtFindImproveMove(
   territory: HexTile[],
   ctx: AiContext,
   balance: number,
 ): { key: string; terrain: TerrainType } | null {
+  if (!ctx.elements.improvements) return null;
   const territoryHasCity = territory.some((t) => ctx.cities.has(t.key));
   if (!territoryHasCity) return null;
   let best: { key: string; terrain: TerrainType } | null = null;

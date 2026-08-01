@@ -74,6 +74,11 @@ import {
   ENTITY_PANEL_H,
 } from "@/constants/gameConstants";
 import {
+  DEFAULT_GAME_ELEMENTS,
+  decodeGameElements,
+  type GameElements,
+} from "@/constants/gameElements";
+import {
   applySingleHexPenalty,
   autoDeployFreeTowers,
   initTerritoryBalances,
@@ -143,6 +148,7 @@ export default function GameScreen() {
     desertPct: string;
     forestPct: string;
     cityCount: string;
+    elements: string;
   }>();
 
   const clampPctParam = (v: string | undefined, fallback: number) => {
@@ -172,6 +178,17 @@ export default function GameScreen() {
   const aiDifficulty: Difficulty = resumeSnapshot
     ? resumeSnapshot.config.difficulty
     : ((params.difficulty as Difficulty) || "medium");
+  // The single element set for this game. A resumed game keeps the set it was
+  // started with and ignores the current menu and beta setting entirely.
+  const elements: GameElements = useMemo(
+    () =>
+      resumeSnapshot
+        ? (resumeSnapshot.config.elements ?? DEFAULT_GAME_ELEMENTS)
+        : decodeGameElements(params.elements),
+    // params from useLocalSearchParams are stable per nav and resumeSnapshot is captured once
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
   const mapGenOptions = useMemo(
     () =>
       resumeSnapshot
@@ -627,12 +644,16 @@ export default function GameScreen() {
       if (!owners.includes(tile.owner)) continue;
       if (tile.terrain === "mountain" || tile.terrain === "lake") continue;
       if (initialEntities.has(tile.key)) continue;
-      if (Math.random() < 0.1) {
+      // Short-circuit order matters: with rebels ON, Math.random() is still
+      // consumed once per candidate tile in the same sequence as before this
+      // gate existed, so an all-elements-on game generates a bit-identical
+      // starting board.
+      if (elements.rebels && Math.random() < 0.1) {
         initialEntities.set(tile.key, "rebel");
       }
     }
     setEntities(initialEntities);
-  }, [tiles, tileMap, resumeSnapshot]);
+  }, [tiles, tileMap, resumeSnapshot, elements]);
 
   const activeTileMap = mutableTileMap.size > 0 ? mutableTileMap : tileMap;
 
@@ -702,6 +723,7 @@ export default function GameScreen() {
         attacksUsed: new Map<string, number>(),
         combatSpentUnits: new Set<string>(),
         freeTowerUsed: new Map(freeTowerUsedTilesRef.current),
+        elements,
       };
 
       const cbs = makeAiTurnCallbacks({
@@ -743,7 +765,7 @@ export default function GameScreen() {
         cloneArmedSites(passedArmedRuins  ?? armedRuinsRef.current),
       );
     },
-    [aiOwners, checkWinLoss, awaitStep, triggerUnitAnimation],
+    [aiOwners, checkWinLoss, awaitStep, triggerUnitAnimation, elements],
   );
 
   // Once a game ends we must NEVER auto-save again, even if some handler
@@ -764,7 +786,7 @@ export default function GameScreen() {
 
     setSavedGame({
       tiles,
-      config: { numTiles, numOpponents, difficulty: aiDifficulty },
+      config: { numTiles, numOpponents, difficulty: aiDifficulty, elements },
       state: {
         mutableTileMap,
         entities,
@@ -790,6 +812,7 @@ export default function GameScreen() {
     numTiles,
     numOpponents,
     aiDifficulty,
+    elements,
     mutableTileMap,
     entities,
     territoryBalances,
@@ -863,7 +886,7 @@ export default function GameScreen() {
 
   const canBuild = selectedTerritory.length > 0;
 
-  const econBreakdown = useEconBreakdown({ selectedTerritory, entities, cities });
+  const econBreakdown = useEconBreakdown({ selectedTerritory, entities, cities, elements });
 
   const hasAffordableTerritories = affordableTerritoryTileKeys.size > 0;
   useEffect(() => {
@@ -898,6 +921,7 @@ export default function GameScreen() {
     cities,
     tileDataMap,
     aiStateMap,
+    elements,
   });
 
   // Dev: owned land-tile count per player (You + each AI), shown only in dev
@@ -1090,6 +1114,7 @@ export default function GameScreen() {
         validMoveTiles,
         armedEntityId,
         armedImprovement,
+        elements,
         selectedTileKeys,
         selectedTerritoryId,
         selectedTerritory,
@@ -1137,6 +1162,7 @@ export default function GameScreen() {
       selectedTileKeys,
       armedEntityId,
       armedImprovement,
+      elements,
       entities,
       selectedTerritoryId,
       selectedTerritory,
@@ -1471,6 +1497,7 @@ export default function GameScreen() {
         setArmedImprovement={setArmedImprovement}
         improvementAvailability={improvementAvailability}
         hasBridgePlacementAvailable={hasBridgePlacementAvailable}
+        elements={elements}
       />
 
       <TouchableOpacity
