@@ -45,9 +45,13 @@ Rules:
 4. **A shot kills when the shooter's attack exceeds the target's defense.**
    Targets that survive are not shown as targets at all — the shot is either a
    kill or not offered. The victim is removed; the tile does not change owner.
-5. **Firing costs the shot, not the movement.** A ranged unit may move, fire,
-   and keep moving with whatever budget is left, in any order. It may fire even
-   when its movement is exhausted.
+5. **Firing clamps the shooter's movement.** A ranged unit may move and fire in
+   either order, and may fire even when its movement is exhausted. But the
+   moment it fires, its remaining movement budget is cut to at most 1 point —
+   enough to shuffle onto one adjacent cheap tile, not enough to retreat out of
+   reach. Movement spent before the shot is untouched, and forest (move cost 2)
+   is closed off afterwards. See
+   `2026-08-01-ranged-post-shot-movement-design.md`.
 6. **Merging** works within the ranged track only, by tier: two Shortbowmen
    merge into a Longbowman, Shortbowman + Longbowman into a Crossbowman. Ranged
    units never merge with infantry or cavalry. If either unit has already fired,
@@ -409,7 +413,7 @@ New `logic/rangedAttack.test.ts`:
 - a second shot in the same turn is not offered;
 - **fire, then exhaust movement, then try to fire again** — the regression test
   for §5.1; the second shot must still be refused after the unit is spent;
-- the shooter keeps its movement and is not spent.
+- the shooter is not spent, and keeps the clamped 1 point of movement.
 
 Extensions to existing suites:
 
