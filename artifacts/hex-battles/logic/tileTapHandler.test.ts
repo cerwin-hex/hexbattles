@@ -1158,6 +1158,56 @@ describe("ranged firing", () => {
     expect(params.setKillMarks).not.toHaveBeenCalled();
     expect(params.setFiredUnits).not.toHaveBeenCalled();
   });
+
+  it("does not restore movement the shooter had already spent", () => {
+    // Move-then-fire is not punished twice: 3 - 2 = 1 was already left.
+    const params = shotParams({ partialMoves: new Map([["0,0", 1]]) });
+    handleTileTapLogic(params);
+    const moves: Map<string, number> = (
+      params.setPartialMoves as ReturnType<typeof vi.fn>
+    ).mock.calls[0][0];
+    expect(moves.get("0,0")).toBe(1);
+  });
+
+  it("leaves an exhausted shooter at zero", () => {
+    const params = shotParams({ partialMoves: new Map([["0,0", 0]]) });
+    handleTileTapLogic(params);
+    const moves: Map<string, number> = (
+      params.setPartialMoves as ReturnType<typeof vi.fn>
+    ).mock.calls[0][0];
+    expect(moves.get("0,0")).toBe(0);
+  });
+
+  it("cannot refresh the clamped budget by merging into a fresh bowman", () => {
+    // The bowman has fired (budget clamped to 1) and now steps onto an unmoved
+    // ally. resolveMovedUnitMoves takes min(remainingAfterMove, destRemaining),
+    // and the step itself costs the single point — so the merged Longbowman is
+    // spent, not restocked with the destination's full 3.
+    const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "player")]);
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: map,
+      selectedEntityKey: "0,0",
+      validMoveTiles: new Set(["1,0"]),
+      entities: ents([["0,0", "shortbowman"], ["1,0", "shortbowman"]]),
+      firedUnits: new Set(["0,0"]),
+      partialMoves: new Map([["0,0", 1]]),
+      liveOwnerMap: new Map([["0,0", "player"], ["1,0", "player"]]),
+    });
+    handleTileTapLogic(params);
+    const newEnts: Map<string, EntityType> = (
+      params.setEntities as ReturnType<typeof vi.fn>
+    ).mock.calls[0][0];
+    expect(newEnts.get("1,0")).toBe("longbowman");
+    const spent: Set<string> = (
+      params.setSpentUnits as ReturnType<typeof vi.fn>
+    ).mock.calls[0][0];
+    expect(spent.has("1,0")).toBe(true);
+    const moves: Map<string, number> = (
+      params.setPartialMoves as ReturnType<typeof vi.fn>
+    ).mock.calls[0][0];
+    expect(moves.has("1,0")).toBe(false);
+  });
 });
 
 // ─── Fired flag across moves ──────────────────────────────────────────────────
