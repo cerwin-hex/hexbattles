@@ -11,6 +11,7 @@ import {
 } from "@/logic/aiExpert";
 import type { AiDecisionExec, AiWorkingState } from "@/logic/aiStrategy";
 import type { AiContext } from "@/logic/aiHelpers";
+import { ALL_GAME_ELEMENTS } from "@/constants/gameElements";
 import { runOneAiTurnHeadless } from "@/logic/aiSelfPlay";
 import type { HexTile, EntityType, TerritoryOwner } from "@/types";
 import { getContiguousTerritory, getTerritoryId } from "@/utils/hexGrid";
@@ -96,6 +97,7 @@ function ctxOf(b: ReturnType<typeof buildBoard>): AiContext {
     partialMoves: new Map(),
     combatSpentUnits: new Set(),
     aiOwner: "ai1",
+    elements: ALL_GAME_ELEMENTS,
   };
 }
 

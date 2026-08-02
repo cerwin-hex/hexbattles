@@ -29,6 +29,7 @@ import {
   effectiveRemaining,
 } from "@/logic/gameLogic";
 import { resolveRangedShot } from "@/logic/rangedAttack";
+import { isEntityEnabled, type GameElements } from "@/constants/gameElements";
 
 /**
  * Checks whether the player can afford an action costing `cost` gold.
@@ -52,6 +53,8 @@ export interface TileTapParams {
   validMoveTiles: Set<string>;
   armedEntityId: EntityType | null;
   armedImprovement: TerrainType | null;
+  /** Which parts of the game this match is played with. */
+  elements: GameElements;
   selectedTileKeys: Set<string>;
   selectedTerritoryId: string | null;
   selectedTerritory: HexTile[];
@@ -117,6 +120,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
     validMoveTiles,
     armedEntityId,
     armedImprovement,
+    elements,
     selectedTileKeys,
     selectedTerritoryId,
     selectedTerritory,
@@ -448,7 +452,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
   // Improvements are purchases, not unit actions: no unit is spent, no entity is
   // created, and the terrain change alters neither ownership nor passability, so
   // no territory recalculation is needed.
-  if (armedImprovement && validImprovementTiles.has(key)) {
+  if (elements.improvements && armedImprovement && validImprovementTiles.has(key)) {
     if (!selectedTerritoryId) return;
     const targetTile = activeTileMap.get(key);
     const balance = territoryBalances.get(selectedTerritoryId) ?? 0;
@@ -487,7 +491,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
   }
 
   // ─── Armed entity placement on own territory ──────────────────────────────────
-  if (armedEntityId && selectedTileKeys.has(key)) {
+  if (armedEntityId && isEntityEnabled(armedEntityId, elements) && selectedTileKeys.has(key)) {
     const existingOnTile = entities.get(key);
     const armedIsUnit = ENTITY_META[armedEntityId].isUnit;
     const tileData = activeTileMap.get(key);
@@ -621,7 +625,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
   }
 
   // ─── Armed unit placed outside own territory (attack/capture) ──────────────────
-  if (armedEntityId && validPlacementAttackTiles.has(key)) {
+  if (armedEntityId && isEntityEnabled(armedEntityId, elements) && validPlacementAttackTiles.has(key)) {
     if (!selectedTerritoryId) return;
     const meta = ENTITY_META[armedEntityId];
     const balance = territoryBalances.get(selectedTerritoryId) ?? 0;

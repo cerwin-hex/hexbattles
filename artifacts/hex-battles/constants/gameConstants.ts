@@ -1,5 +1,11 @@
 import { ENTITY_META, IMPROVEMENTS, isRanged } from "@/utils/hexGrid";
 import type { EntityType, ImprovementMeta, UnitClass } from "@/utils/hexGrid";
+import {
+  enabledUnitTypes,
+  isEntityEnabled,
+  type GameElements,
+} from "@/constants/gameElements";
+import type { EntityMeta } from "@/types";
 
 export const BTN_H = 52;
 export const TOP_BTN_H = 40;
@@ -32,39 +38,64 @@ export const TIER_TO_UNIT: Record<UnitClass, Record<number, EntityType>> = {
   ranged:   { 1: "shortbowman", 2: "longbowman", 3: "crossbowman" },
 };
 
+// Memoized on the element object's identity, like `enabledUnitTypes`: the
+// expert search asks for this list once per candidate-generation pass, and
+// game.tsx builds exactly one element object per game.
+const aiBuyableCache = new WeakMap<GameElements, EntityType[]>();
+
 /**
  * The units the AI is allowed to buy — the single source of truth for the
- * branch's headline scope constraint, "the AI never buys ranged units". Ranged
- * units are player-only for now: the AI has no ranged behaviour, so buying one
- * would just burn gold on a unit it never fires.
+ * scope constraint "the AI never buys ranged units". Two filters compose here:
+ * the element set the player chose, and the ranged exclusion. Ranged units are
+ * player-only for now: the AI has no ranged behaviour, so buying one would just
+ * burn gold on a unit it never fires.
  *
  * Both AI buy lists derive from this — `aiUnitBuyOrder` in `logic/aiStrategy.ts`
- * and `UNIT_TYPES` in `logic/aiExpert.ts` — so the filter cannot drift out of
- * step between the difficulty tiers. Consumers that need a different order must
- * copy before sorting; the readonly type makes an in-place `.sort()` a
- * typecheck error.
+ * and the buy candidates in `logic/aiExpert.ts` — so the filter cannot drift out
+ * of step between the difficulty tiers. Callers that need a different order must
+ * copy before sorting; sorting in place would scramble the memoized array.
  */
-export const AI_BUYABLE_UNITS: readonly EntityType[] = (
-  Object.keys(ENTITY_META) as EntityType[]
-).filter((e) => ENTITY_META[e].isUnit && !isRanged(e));
+export function aiBuyableUnits(elements: GameElements): readonly EntityType[] {
+  let cached = aiBuyableCache.get(elements);
+  if (!cached) {
+    cached = enabledUnitTypes(elements).filter((e) => !isRanged(e));
+    aiBuyableCache.set(elements, cached);
+  }
+  return cached;
+}
 
-export const PURCHASABLES = (Object.keys(ENTITY_META) as EntityType[])
+export type Purchasable = { id: EntityType } & EntityMeta;
+
+export const PURCHASABLES: Purchasable[] = (Object.keys(ENTITY_META) as EntityType[])
   .filter((id) => id !== "rebel")
   .map((id) => ({
     id,
     ...ENTITY_META[id],
   }));
 
-export const UNIT_PURCHASABLES = PURCHASABLES.filter((p) => p.isUnit);
-export const BUILDING_PURCHASABLES = PURCHASABLES.filter((p) => !p.isUnit);
+/** Everything buyable under the given element set. */
+export function purchasablesFor(elements: GameElements): Purchasable[] {
+  return PURCHASABLES.filter((p) => isEntityEnabled(p.id, elements));
+}
+
+export function unitPurchasablesFor(elements: GameElements): Purchasable[] {
+  return purchasablesFor(elements).filter((p) => p.isUnit);
+}
+
+export function buildingPurchasablesFor(elements: GameElements): Purchasable[] {
+  return purchasablesFor(elements).filter((p) => !p.isUnit);
+}
 
 /**
  * Improvements shown in the Build ribbon after the buildings. Improvements are
  * deliberately absent from ENTITY_META (they are terrain, not entities), so
- * they get their own purchasable list rather than being derived from
- * PURCHASABLES.
+ * they get their own list rather than being derived from PURCHASABLES.
  */
-export const IMPROVEMENT_PURCHASABLES: readonly ImprovementMeta[] = IMPROVEMENTS;
+export function improvementPurchasablesFor(
+  elements: GameElements,
+): readonly ImprovementMeta[] {
+  return elements.improvements ? IMPROVEMENTS : [];
+}
 
 /**
  * Rows shown in the "Units & Buildings" reference tables (welcome + rules modals).

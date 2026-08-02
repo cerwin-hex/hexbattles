@@ -115,6 +115,39 @@ describe("spawnRebelsForOwner", () => {
     expect(entities.get("0,0")).toBe("rebel");   // player tile spawned
     expect(entities.get("1,0")).toBeUndefined(); // ai1 tile untouched
   });
+
+  it("places no rebel but still consumes the grave when spawning is disabled", () => {
+    const tileMap = new Map([["5,5", makeTile(5, 5, "player")]]);
+    const entities = new Map<string, EntityType>();
+    const graveyard = new Set(["5,5"]);
+    const armedGraves = new Set(["5,5"]);
+
+    spawnRebelsForOwner(
+      "player", tileMap, entities, graveyard, new Set(),
+      armedGraves, new Set(),
+      () => 0,   // rng that would always spawn
+      false,     // spawnEnabled
+    );
+
+    expect(entities.size).toBe(0);            // no rebel from the grave…
+    expect(armedGraves.has("5,5")).toBe(false); // …but still consumed
+    expect(graveyard.has("5,5")).toBe(false);   // …and the marker cleared
+  });
+
+  it("places no background rebel when spawning is disabled", () => {
+    // rng() = 0 clears every spawn threshold, so any rebel here is a bug.
+    const tileMap = new Map([["0,0", makeTile(0, 0, "player")]]);
+    const entities = new Map<string, EntityType>();
+
+    spawnRebelsForOwner(
+      "player", tileMap, entities, new Set(), new Set(),
+      new Set(), new Set(),
+      () => 0,
+      false,
+    );
+
+    expect(entities.size).toBe(0);
+  });
 });
 
 // ── Integration tests via runOneAiTurnHeadless ────────────────────────────────

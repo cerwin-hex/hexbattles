@@ -1,14 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import {
-  runAiTurn,
-  runAiTerritoryDecisionLoop,
-  AI_UNIT_BUY_ORDER_ASC,
-} from "@/logic/aiStrategy";
+import { runAiTurn, runAiTerritoryDecisionLoop } from "@/logic/aiStrategy";
 import { applySingleHexPenalty } from "@/logic/gameLogic";
-import { AI_BUYABLE_UNITS } from "@/constants/gameConstants";
+import { aiBuyableUnits } from "@/constants/gameConstants";
 import type { AiWorkingState, AiTurnCallbacks, AiDecisionExec } from "@/logic/aiStrategy";
 import type { HexTile, EntityType, TerritoryOwner, AiStepSnapshot } from "@/types";
 import type { AiContext } from "@/logic/aiHelpers";
+import { ALL_GAME_ELEMENTS, type GameElements } from "@/constants/gameElements";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -476,6 +473,7 @@ function makeAiCtx(
   aiOwner: TerritoryOwner,
   entities: Map<string, EntityType> = new Map(),
   balances: Map<string, number> = new Map(),
+  elements: GameElements = ALL_GAME_ELEMENTS,
 ): AiContext {
   return {
     tileMap: makeTileMap(tiles),
@@ -486,6 +484,7 @@ function makeAiCtx(
     partialMoves: new Map(),
     combatSpentUnits: new Set(),
     aiOwner,
+    elements,
   };
 }
 
@@ -557,6 +556,34 @@ describe("runAiTerritoryDecisionLoop", () => {
     expect(outside).toBe(true);
   });
 
+  it("buys infantry instead of cavalry when mounted units are off", async () => {
+    // Same fixture as "buys a unit when the territory income can cover its
+    // upkeep", which buys a Scout. With mounted units switched off the only
+    // affordable choice left is the peasant.
+    const tiles = [
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai1"),
+      makeTile(2, 0, "player"),
+    ];
+    const balances = new Map([["0,0", 50]]);
+    const aiCtx = makeAiCtx(tiles, "ai1", new Map(), balances, {
+      ...ALL_GAME_ELEMENTS,
+      mounted: false,
+    });
+
+    let bought = false;
+    const exec = makeExec({
+      buy: vi.fn(async () => { bought = true; return true; }),
+    });
+
+    await runAiTerritoryDecisionLoop("0,0", aiCtx, exec, () => !bought, "hard");
+
+    expect(exec.buy).toHaveBeenCalledTimes(1);
+    const [unitType] = (exec.buy as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(unitType).not.toBe("scout");
+    expect(unitType).not.toBe("knight");
+  });
+
   it("prefers buying a scout onto a rebel when the territory can afford it", async () => {
     // AI owns a 4-tile row with a rebel squatting on (3,0) and no units to move
     // onto it, so Priority G buys directly. Income = 6 (three non-rebel grass)
@@ -585,6 +612,35 @@ describe("runAiTerritoryDecisionLoop", () => {
     expect(unitType).toBe("scout");
     expect(targetKey).toBe("3,0");
     expect(outside).toBe(false);
+  });
+
+  it("buys a peasant onto a rebel when mounted units are off", async () => {
+    // Mirrors "prefers buying a scout onto a rebel when the territory can
+    // afford it" (the buyPreference path), with cavalry unavailable.
+    const tiles = [
+      makeTile(0, 0, "ai1"),
+      makeTile(1, 0, "ai1"),
+      makeTile(2, 0, "ai1"),
+      makeTile(3, 0, "ai1"),
+    ];
+    const entities = new Map<string, EntityType>([["3,0", "rebel"]]);
+    const balances = new Map([["0,0", 20]]);
+    const aiCtx = makeAiCtx(tiles, "ai1", entities, balances, {
+      ...ALL_GAME_ELEMENTS,
+      mounted: false,
+    });
+
+    let bought = false;
+    const exec = makeExec({
+      buy: vi.fn(async () => { bought = true; return true; }),
+    });
+
+    await runAiTerritoryDecisionLoop("0,0", aiCtx, exec, () => !bought, "hard");
+
+    expect(exec.buy).toHaveBeenCalledTimes(1);
+    const [unitType, targetKey] = (exec.buy as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(unitType).toBe("peasant");
+    expect(targetKey).toBe("3,0");
   });
 
   it("falls back to a peasant on a rebel when a scout is too costly to sustain", async () => {
@@ -979,24 +1035,30 @@ describe("runAiTerritoryDecisionLoop", () => {
 // ─── AI purchase candidates ───────────────────────────────────────────────────
 
 describe("AI purchase candidates", () => {
-  // AI_BUYABLE_UNITS is the single gate behind the branch's headline scope
-  // constraint, "the AI never buys ranged units". Both the heuristic buy order
-  // and expert's UNIT_TYPES derive from it, so asserting on it here covers
+  // `aiBuyableUnits` is the single gate behind the scope constraint "the AI
+  // never buys ranged units". Both the heuristic buy order and the expert
+  // search's buy candidates derive from it, so asserting on it here covers
   // every difficulty rather than only the one whose list is exported.
-  it("never offers a ranged unit to the AI", () => {
+  it("never offers a ranged unit to the AI, even with every element on", () => {
     for (const id of ["shortbowman", "longbowman", "crossbowman"] as const) {
-      expect(AI_BUYABLE_UNITS).not.toContain(id);
+      expect(aiBuyableUnits(ALL_GAME_ELEMENTS)).not.toContain(id);
     }
   });
 
   it("offers every infantry and cavalry unit to the AI", () => {
     for (const id of ["peasant", "warrior", "swordsman", "scout", "knight"] as const) {
-      expect(AI_BUYABLE_UNITS).toContain(id);
+      expect(aiBuyableUnits(ALL_GAME_ELEMENTS)).toContain(id);
     }
   });
 
-  it("derives the heuristic buy order from the shared list", () => {
-    expect([...AI_UNIT_BUY_ORDER_ASC].sort()).toEqual([...AI_BUYABLE_UNITS].sort());
+  // The element filter and the ranged exclusion compose: switching a track off
+  // must not re-admit the track the AI is never allowed to buy.
+  it("drops cavalry when mounted units are off and still drops ranged", () => {
+    const list = aiBuyableUnits({ ...ALL_GAME_ELEMENTS, mounted: false });
+    expect(list).not.toContain("scout");
+    expect(list).not.toContain("knight");
+    expect(list).not.toContain("shortbowman");
+    expect(list).toContain("peasant");
   });
 });
 

@@ -6,6 +6,7 @@ import { WelcomeModal } from '@/components/WelcomeModal';
 import { SettingsModal } from '@/components/SettingsModal';
 import { Slider } from '@/components/Slider';
 import { useSettings } from '@/contexts/SettingsContext';
+import { encodeGameElements } from '@/constants/gameElements';
 import {
   Modal,
   Platform,
@@ -16,6 +17,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { ScrollView as GestureScrollView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Difficulty } from '@/types';
 import {
@@ -24,11 +26,12 @@ import {
   hydrateSavedGame,
   isHydrated,
 } from '@/utils/savedGame';
+import { MAX_TILE_COUNT, MIN_TILE_COUNT } from '@/utils/settings';
 import { INFO_TABLE_ROWS } from '@/constants/gameConstants';
 import { UnitIcon } from '@/components/UnitIcon';
 
-const TILE_MIN = 40;
-const TILE_MAX = 200;
+const TILE_MIN = MIN_TILE_COUNT;
+const TILE_MAX = MAX_TILE_COUNT;
 
 // Reference table for the rules modal — single source derived from ENTITY_META.
 const UNIT_ROWS = INFO_TABLE_ROWS;
@@ -189,9 +192,9 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
 export default function MainMenu() {
   const insets = useSafeAreaInsets();
   const { settings, updateSettings } = useSettings();
-  const [tileCount, setTileCount] = useState(100);
-  const [opponentCount, setOpponentCount] = useState(3);
-  const [difficulty, setDifficulty] = useState<Difficulty>('medium');
+  // Map size, opponents and difficulty live in settings so they survive both a
+  // trip into a game and an app restart.
+  const { tileCount, opponentCount, difficulty } = settings;
   const [rulesVisible, setRulesVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [hasSaved, setHasSaved] = useState<boolean>(() => hasSavedGameSync());
@@ -231,6 +234,7 @@ export default function MainMenu() {
         desertPct: String(settings.desertPct),
         forestPct: String(settings.forestPct),
         cityCount: String(settings.cityCount),
+        elements: encodeGameElements(settings.elements),
       },
     });
   }
@@ -264,26 +268,23 @@ export default function MainMenu() {
             >
               <Text style={styles.helpBtnText}>?</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.helpBtn}
-              onPress={() => { Haptics.selectionAsync(); setSettingsVisible(true); }}
-              activeOpacity={0.75}
-            >
-              <Text style={styles.helpBtnText}>⚙</Text>
-            </TouchableOpacity>
           </View>
           <Text style={styles.title}>HEX BATTLES</Text>
           <View style={styles.accentLine} />
         </View>
 
-        <View style={styles.sections}>
+        <GestureScrollView
+          style={styles.sectionsScroll}
+          contentContainerStyle={styles.sections}
+          showsVerticalScrollIndicator={false}
+        >
           <Slider
             label="Map Size"
             value={tileCount}
             min={TILE_MIN}
             max={TILE_MAX}
             step={10}
-            onChange={setTileCount}
+            onChange={(v) => updateSettings({ tileCount: v })}
             formatValue={(v) => `${v} Tiles`}
             leftLabel={String(TILE_MIN)}
             rightLabel={String(TILE_MAX)}
@@ -296,7 +297,7 @@ export default function MainMenu() {
                 <TouchableOpacity
                   key={n}
                   style={[styles.pill, opponentCount === n && styles.pillActive]}
-                  onPress={() => { Haptics.selectionAsync(); setOpponentCount(n); }}
+                  onPress={() => { Haptics.selectionAsync(); updateSettings({ opponentCount: n }); }}
                   activeOpacity={0.7}
                 >
                   <Text style={[styles.pillText, opponentCount === n && styles.pillTextActive]}>
@@ -320,7 +321,7 @@ export default function MainMenu() {
                 <TouchableOpacity
                   key={d}
                   style={[styles.diffPill, difficulty === d && styles.diffPillActive]}
-                  onPress={() => { Haptics.selectionAsync(); setDifficulty(d); }}
+                  onPress={() => { Haptics.selectionAsync(); updateSettings({ difficulty: d }); }}
                   activeOpacity={0.7}
                 >
                   {top && (
@@ -336,7 +337,16 @@ export default function MainMenu() {
             </View>
           </View>
 
-        </View>
+          <TouchableOpacity
+            style={styles.settingsBtn}
+            onPress={() => { Haptics.selectionAsync(); setSettingsVisible(true); }}
+            activeOpacity={0.75}
+          >
+            <Text style={styles.settingsBtnIcon}>⚙</Text>
+            <Text style={styles.settingsBtnText}>SETTINGS</Text>
+          </TouchableOpacity>
+
+        </GestureScrollView>
 
         <View style={styles.startStack}>
           {hasSaved && (
@@ -462,8 +472,17 @@ const styles = StyleSheet.create({
     marginTop: 4,
     alignSelf: 'center',
   },
+  sectionsScroll: {
+    // Must flex, or the ScrollView sizes itself to its content and overflows
+    // the screen instead of scrolling.
+    flex: 1,
+  },
   sections: {
     gap: 28,
+    // Centred like before on tall screens; scrolls from the top on short ones.
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingVertical: 24,
   },
   section: {
     gap: 10,
@@ -530,6 +549,27 @@ const styles = StyleSheet.create({
   },
   diffTextActive: {
     color: '#C8A24A',
+  },
+  settingsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    height: 54,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: '#7A6030',
+    backgroundColor: '#2A1E0C',
+  },
+  settingsBtnIcon: {
+    fontSize: 16,
+    color: '#C8A24A',
+  },
+  settingsBtnText: {
+    fontSize: 12,
+    fontFamily: 'Cinzel_700Bold',
+    color: '#C8A24A',
+    letterSpacing: 2,
   },
   startStack: {
     gap: 10,

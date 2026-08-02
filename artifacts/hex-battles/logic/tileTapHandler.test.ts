@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import type { HexTile, EntityType, TerritoryOwner } from "@/types";
 import { handleTileTapLogic, type TileTapParams } from "@/logic/tileTapHandler";
+import { ALL_GAME_ELEMENTS } from "@/constants/gameElements";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -84,6 +85,7 @@ function makeParams(overrides: Partial<TileTapParams> = {}): TileTapParams {
         onDone?.(),
     ),
     closeRibbon: vi.fn(),
+    elements: ALL_GAME_ELEMENTS,
     ...overrides,
   };
 }
@@ -1034,6 +1036,15 @@ describe("improvement placement", () => {
     handleTileTapLogic(params);
     expect(params.setMutableTileMap).not.toHaveBeenCalled();
   });
+
+  it("refuses an improvement when improvements are off", () => {
+    const params = improveParams({
+      elements: { ...ALL_GAME_ELEMENTS, improvements: false },
+    });
+    handleTileTapLogic(params);
+    expect(params.setMutableTileMap).not.toHaveBeenCalled();
+    expect(params.setTerritoryBalances).not.toHaveBeenCalled();
+  });
 });
 
 // ─── Founding a building on an improved tile ──────────────────────────────────
@@ -1313,5 +1324,79 @@ describe("kill markers", () => {
       params.setKillMarks as ReturnType<typeof vi.fn>
     ).mock.calls[0][0];
     expect(marks.has("1,0")).toBe(false);
+  });
+});
+
+// ─── Game elements gate purchases ──────────────────────────────────────────────
+// Defence in depth: the purchase ribbon already hides disabled buttons, but the
+// tap handler must also refuse a stale armed selection for a switched-off part
+// of the game.
+
+describe("game elements gate purchases", () => {
+  it("refuses to place a scout when mounted units are off", () => {
+    const params = makeParams({
+      armedEntityId: "scout",
+      selectedTileKeys: new Set(["0,0"]),
+      selectedTerritoryId: "0,0",
+      selectedTerritory: [makeTile(0, 0, "player")],
+      territoryBalances: new Map([["0,0", 100]]),
+      elements: { ...ALL_GAME_ELEMENTS, mounted: false },
+    });
+    handleTileTapLogic(params);
+    expect(params.setEntities).not.toHaveBeenCalled();
+    expect(params.setTerritoryBalances).not.toHaveBeenCalled();
+  });
+
+  it("still places a peasant when mounted units are off", () => {
+    const params = makeParams({
+      armedEntityId: "peasant",
+      selectedTileKeys: new Set(["0,0"]),
+      selectedTerritoryId: "0,0",
+      selectedTerritory: [makeTile(0, 0, "player")],
+      territoryBalances: new Map([["0,0", 100]]),
+      elements: { ...ALL_GAME_ELEMENTS, mounted: false },
+    });
+    handleTileTapLogic(params);
+    expect(params.setEntities).toHaveBeenCalled();
+  });
+
+  it("refuses to place a bowman when ranged units are off", () => {
+    const params = makeParams({
+      armedEntityId: "shortbowman",
+      selectedTileKeys: new Set(["0,0"]),
+      selectedTerritoryId: "0,0",
+      selectedTerritory: [makeTile(0, 0, "player")],
+      territoryBalances: new Map([["0,0", 100]]),
+      elements: { ...ALL_GAME_ELEMENTS, ranged: false },
+    });
+    handleTileTapLogic(params);
+    expect(params.setEntities).not.toHaveBeenCalled();
+    expect(params.setTerritoryBalances).not.toHaveBeenCalled();
+  });
+
+  it("places a bowman when ranged units are on", () => {
+    const params = makeParams({
+      armedEntityId: "shortbowman",
+      selectedTileKeys: new Set(["0,0"]),
+      selectedTerritoryId: "0,0",
+      selectedTerritory: [makeTile(0, 0, "player")],
+      territoryBalances: new Map([["0,0", 100]]),
+      elements: ALL_GAME_ELEMENTS,
+    });
+    handleTileTapLogic(params);
+    expect(params.setEntities).toHaveBeenCalled();
+  });
+
+  it("places a scout when mounted units are on", () => {
+    const params = makeParams({
+      armedEntityId: "scout",
+      selectedTileKeys: new Set(["0,0"]),
+      selectedTerritoryId: "0,0",
+      selectedTerritory: [makeTile(0, 0, "player")],
+      territoryBalances: new Map([["0,0", 100]]),
+      elements: ALL_GAME_ELEMENTS,
+    });
+    handleTileTapLogic(params);
+    expect(params.setEntities).toHaveBeenCalled();
   });
 });

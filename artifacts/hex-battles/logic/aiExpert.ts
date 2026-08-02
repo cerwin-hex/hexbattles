@@ -21,8 +21,13 @@ import {
   IMPROVED_TERRAINS,
 } from "@/utils/hexGrid";
 import { calcTerritoryIncome, calcTerritoryUpkeep, mergeResult } from "@/logic/gameLogic";
-import { AI_BUYABLE_UNITS } from "@/constants/gameConstants";
+import { aiBuyableUnits } from "@/constants/gameConstants";
 import { dtCountClusters, dtFindImproveMove } from "@/logic/aiHelpers";
+import {
+  ALL_GAME_ELEMENTS,
+  enabledUnitTypes,
+  type GameElements,
+} from "@/constants/gameElements";
 import type { AiContext } from "@/logic/aiHelpers";
 import type { AiDecisionExec } from "@/logic/aiStrategy";
 
@@ -277,6 +282,12 @@ function tileValue(
 /**
  * Score a board position from one owner's perspective. Higher is better.
  * Pure: reads only the supplied state.
+ *
+ * `elements` must match the match's rule set, because the economy block below
+ * scores ONLY `owner`'s own territories — it is not a symmetric term. Charging
+ * upkeep the real economy does not collect therefore invents a one-sided
+ * pessimism about the AI's own position. Trailing and optional so the existing
+ * evaluator tests, which pin weights rather than elements, need no edits.
  */
 export function evaluatePosition(
   owner: TerritoryOwner,
@@ -285,6 +296,7 @@ export function evaluatePosition(
   balances: Map<string, number>,
   cities: Set<string>,
   w: EvalWeights = DEFAULT_WEIGHTS,
+  elements: GameElements = ALL_GAME_ELEMENTS,
 ): number {
   // ── Economy: income, reserves, per-territory deficit penalty ──
   let income = 0;
@@ -307,7 +319,7 @@ export function evaluatePosition(
     bufferShortfall += Math.max(0, w.bufferThreshold - bal);
     const terrIncome = calcTerritoryIncome(terr, entities, cities, tileMap);
     income += terrIncome;
-    const net = terrIncome - calcTerritoryUpkeep(terr, entities);
+    const net = terrIncome - calcTerritoryUpkeep(terr, entities, elements);
     // Asymmetric: only deficits are penalised; a profitable army is free.
     if (net < 0) {
       // Tempo: a deficit whose reserves cover it for `deficitGraceTurns` turns is
@@ -773,11 +785,6 @@ export function opponentBestResponse(
 // (moves, buys, builds, upgrades, removes) so expert has no blind spots.
 // ════════════════════════════════════════════════════════════════════════════
 
-// Which units expert may buy comes from the one shared list, so the ranged
-// exclusion cannot drift between expert and the other difficulties. Copied
-// because the shared list is readonly and must keep its own order.
-const UNIT_TYPES: EntityType[] = [...AI_BUYABLE_UNITS];
-
 export function generateCandidateActions(
   ctx: AiContext,
   territory: HexTile[],
@@ -789,7 +796,7 @@ export function generateCandidateActions(
   const terrKeys = new Set(territory.map((t) => t.key));
 
   const income = calcTerritoryIncome(territory, ctx.entities, ctx.cities, ctx.tileMap);
-  const upkeep = calcTerritoryUpkeep(territory, ctx.entities);
+  const upkeep = calcTerritoryUpkeep(territory, ctx.entities, ctx.elements);
   const canAfford = (cost: number, extraUpkeep = 0): boolean =>
     balanceForTid >= cost && balanceForTid + (income - (upkeep + extraUpkeep)) >= 0;
 
@@ -941,7 +948,9 @@ export function generateCandidateActions(
       ? innerPlacements.filter((t) => distToEnemy(t.key) <= FRONT_BUILD_REACH)
       : innerPlacements;
   const placeInner = frontProximal.length > 0 ? frontProximal : innerPlacements;
-  for (const uType of UNIT_TYPES) {
+  // `aiBuyableUnits` is memoized on the element object's identity, so asking
+  // for it here costs a WeakMap lookup rather than a rebuild per candidate pass.
+  for (const uType of aiBuyableUnits(ctx.elements)) {
     if (buyCount >= capPerKind) break;
     const cost = ENTITY_META[uType].cost;
     const upk = ENTITY_META[uType].upkeep;
@@ -1175,7 +1184,7 @@ export async function runExpertTerritoryDecisionLoop(
   const owner = ctx.aiOwner;
   const search = SEARCH_OVERRIDE ?? DEFAULT_SEARCH;
   const score = (st: SimState): number =>
-    evaluatePosition(owner, st.tileMap, st.entities, st.balances, st.cities, weights);
+    evaluatePosition(owner, st.tileMap, st.entities, st.balances, st.cities, weights, ctx.elements);
   const maxIters = MAX_ITERS_OVERRIDE ?? DEFAULT_MAX_ITERS;
   let iter = 0;
   while (iter++ < maxIters) {
