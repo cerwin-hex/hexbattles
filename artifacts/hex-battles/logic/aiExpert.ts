@@ -7,9 +7,8 @@ import {
   CITY_BONUS,
   getContiguousTerritory,
   getTerritoryId,
-  getValidMoves,
   getMaxEnemyZoC,
-  getMoveCost,
+  getMoveField,
   recalculateTerritoriesForCapture,
   unitMovement,
   unitMaxAttacks,
@@ -847,8 +846,17 @@ export function generateCandidateActions(
   // so we don't even offer it as a candidate. (`territoryThreatened` is a hoisted
   // function declaration, safe to call here.)
   const defending = territoryThreatened(ctx.tileMap, ctx.entities, territory, owner);
-  const mergeRetainsMove = (uk: string, ue: EntityType, mk: string, destE: EntityType): boolean => {
-    const remAfter = (ctx.partialMoves.get(uk) ?? unitMovement(ue)) - getMoveCost(uk, mk, ctx.tileMap);
+  // `moveCost` is the cost half of the same field the destination came from, so
+  // the leftover movement is measured against the route the unit could really
+  // walk rather than a straight line it may not be allowed to take.
+  const mergeRetainsMove = (
+    uk: string,
+    ue: EntityType,
+    mk: string,
+    destE: EntityType,
+    moveCost: Map<string, number>,
+  ): boolean => {
+    const remAfter = (ctx.partialMoves.get(uk) ?? unitMovement(ue)) - (moveCost.get(mk) ?? Infinity);
     const destRem = ctx.partialMoves.get(mk) ?? unitMovement(destE);
     return Math.min(remAfter, destRem) > 0;
   };
@@ -864,7 +872,7 @@ export function generateCandidateActions(
     if (totalMoveCount >= globalMoveCeiling) break;
     let perUnit = 0;
     const range = ctx.partialMoves.get(uk) ?? unitMovement(ue);
-    const vm = getValidMoves(uk, owner, ctx.entities, ctx.tileMap, ctx.spentUnits, range, ctx.combatSpentUnits);
+    const { reachable: vm, cost: vmCost } = getMoveField(uk, owner, ctx.entities, ctx.tileMap, ctx.spentUnits, range, ctx.combatSpentUnits);
     // A unit already on the front never needs a forward reposition; only idle
     // rear units (not enemy-adjacent) get advance candidates.
     const uAdvanceEligible = enemyCoords.length > 0 && !onFront(uk);
@@ -897,7 +905,7 @@ export function generateCandidateActions(
         // to a border tile (interior shuffles never improve the position).
         const isMerge =
           !!destE && destE !== "bridge" && !!mergeResult(ue, destE) &&
-          (defending || mergeRetainsMove(uk, ue, mk, destE));
+          (defending || mergeRetainsMove(uk, ue, mk, destE, vmCost));
         const isRebelClear = destE === "rebel";
         const isBorderReposition = borderTiles.some((b) => b.key === mk) && !destE;
         if (isMerge || isRebelClear || isBorderReposition) {

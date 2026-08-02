@@ -9,7 +9,7 @@ import {
   improveCostFor,
   getContiguousTerritory,
   getTerritoryId,
-  getMoveCost,
+  getMoveField,
   recalculateTerritories,
   recalculateTerritoriesForCapture,
   unitMovement,
@@ -250,8 +250,21 @@ export function handleTileTapLogic(params: TileTapParams): void {
     }
 
     const maxRange = unitMovement(movingUnit);
-    const stepsUsed = getMoveCost(selectedEntityKey, key, activeTileMap, entities);
     const prevRemaining = partialMoves.get(selectedEntityKey) ?? maxRange;
+    // Re-run the very search that authorised this tap (same pre-move board, same
+    // budget) so the unit is charged for the route it could actually have
+    // walked. A tile that this search cannot reach was never a legal move, so
+    // treat it as unaffordable rather than letting an absent cost go through.
+    const { cost: moveCosts } = getMoveField(
+      selectedEntityKey,
+      "player",
+      entities,
+      activeTileMap,
+      spentUnits,
+      prevRemaining,
+      combatSpentUnits,
+    );
+    const stepsUsed = moveCosts.get(key) ?? Infinity;
     const remainingAfterMove = Math.max(0, prevRemaining - stepsUsed);
 
     // Combat move: capturing any non-owned tile (neutral OR enemy) OR overwriting a

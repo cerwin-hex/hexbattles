@@ -5,7 +5,7 @@ import {
   getTerritoryId,
   getValidMoves,
   getMaxEnemyZoC,
-  getMoveCost,
+  getMoveField,
   ENTITY_META,
   UNIT_UPGRADE,
   TERRAIN_INCOME,
@@ -1362,8 +1362,22 @@ export async function runAiTurn(
         ws.partialMoves = new Map(ws.partialMoves);
         {
           const maxRange = unitMovement(unitEntity);
-          const stepsUsed = getMoveCost(fromKey, toKey, prevTileMapSnapshot, prevEntitiesSnapshot);
           const prevRemaining = ws.partialMoves.get(fromKey) ?? maxRange;
+          // Costed off the PRE-move snapshots: `ws.entities` has already been
+          // rewritten above, so a search from `fromKey` would start on an empty
+          // tile. Same search that offered the move, so the AI is charged for
+          // the route it could actually have walked — no phantom movement left
+          // over from a shortcut through enemy ground.
+          const { cost: moveCosts } = getMoveField(
+            fromKey,
+            aiOwner,
+            prevEntitiesSnapshot,
+            prevTileMapSnapshot,
+            ws.spentUnits,
+            prevRemaining,
+            ws.combatSpentUnits,
+          );
+          const stepsUsed = moveCosts.get(toKey) ?? Infinity;
           const remainingAfterMove = Math.max(0, prevRemaining - stepsUsed);
           const destRemaining = effectiveRemaining(toKey, ws.partialMoves, ws.spentUnits, maxRange);
           ws.partialMoves.delete(fromKey);

@@ -243,6 +243,33 @@ describe("unit move", () => {
     expect(partial.has("1,0")).toBe(false);
   });
 
+  it("charges the detour a unit really walked, not the straight line through enemy ground", () => {
+    // Scout (5 movement) at (0,0) heading for (2,0). The straight line runs
+    // through the enemy tile (1,0), which a unit may never pass through, so the
+    // only legal route is the 3-step detour (1,-1) → (2,-1) → (2,0) and the
+    // scout must arrive with 2 movement left, not 3.
+    const map = tileMap([
+      makeTile(0, 0, "player"),
+      makeTile(1, 0, "ai1"),
+      makeTile(2, 0, "player"),
+      makeTile(1, -1, "player"),
+      makeTile(2, -1, "player"),
+    ]);
+    const params = makeParams({
+      key: "2,0",
+      activeTileMap: map,
+      selectedEntityKey: "0,0",
+      validMoveTiles: new Set(["2,0"]),
+      entities: ents([["0,0", "scout"]]),
+      liveOwnerMap: new Map([...map.keys()].map((k) => [k, map.get(k)!.owner])),
+    });
+    handleTileTapLogic(params);
+    const partial: Map<string, number> = (
+      params.setPartialMoves as ReturnType<typeof vi.fn>
+    ).mock.calls[0][0];
+    expect(partial.get("2,0")).toBe(2);
+  });
+
   it("marks unit spent when capturing an empty enemy tile (combat)", () => {
     const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "ai1")];
     const map = tileMap(tiles);

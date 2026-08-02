@@ -336,6 +336,33 @@ describe("dtFindMergeMove", () => {
     expect(result?.to).toBe("1,0");
   });
 
+  it("lets a cavalry unit walk its real range to reach the merge partner", () => {
+    // Scouts move 5, not the 3 an infantry unit gets. The partner sits 4 tiles
+    // away — out of reach only if the search assumes the infantry budget.
+    const tiles = [
+      ...Array.from({ length: 5 }, (_, q) => makeTile(q, 0, "ai1")),
+      makeTile(5, 0, "ai2"),
+    ];
+    const ctx = makeCtx(tiles, [["0,0", "scout"], ["4,0", "scout"]]);
+    const units: [string, EntityType][] = [["0,0", "scout"], ["4,0", "scout"]];
+    const result = dtFindMergeMove(2, new Set(["5,0"]), units, ctx);
+    expect(result).toEqual({ from: "0,0", to: "4,0" });
+  });
+
+  it("credits the merge partner with its own full range, not an infantry budget", () => {
+    // Scout steps 1 tile onto its neighbour, so the knight keeps min(4, 5) = 4
+    // movement and reaches a target 4 tiles out. Assuming the partner had only
+    // 3 left would leave the knight one tile short.
+    const tiles = [
+      ...Array.from({ length: 5 }, (_, q) => makeTile(q, 0, "ai1")),
+      makeTile(5, 0, "ai2"),
+    ];
+    const ctx = makeCtx(tiles, [["0,0", "scout"], ["1,0", "scout"]]);
+    const units: [string, EntityType][] = [["0,0", "scout"], ["1,0", "scout"]];
+    const result = dtFindMergeMove(2, new Set(["5,0"]), units, ctx);
+    expect(result).toEqual({ from: "0,0", to: "1,0" });
+  });
+
   it("returns null when merged unit would exceed str 3", () => {
     // advanced (str 2) + advanced (str 2) = 4 > 3 — not allowed
     const tiles = [makeTile(0, 0, "ai1"), makeTile(1, 0, "ai1"), makeTile(2, 0, "neutral")];

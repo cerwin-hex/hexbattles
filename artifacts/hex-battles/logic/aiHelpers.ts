@@ -7,7 +7,8 @@ import {
   getContiguousTerritory,
   getTerritoryId,
   getValidMoves,
-  getMoveCost,
+  getMoveField,
+  unitMovement,
   TerritoryCache,
 } from "@/utils/hexGrid";
 import {
@@ -209,12 +210,17 @@ export function dtFindMergeMove(
       // a ZoC threshold at one call site (`dtFindMergeMove(zoc + 1, …)`) and an
       // enemy unit's offense at another.
       if (!mergedType || ENTITY_META[mergedType].offStrength < requiredStr) continue;
-      const range1 = ctx.partialMoves.get(uk1) ?? 3;
-      const vm1 = getValidMoves(uk1, ctx.aiOwner, ctx.entities, ctx.tileMap, ctx.spentUnits, range1, ctx.combatSpentUnits);
+      // A unit with no partial entry is at its own full budget — which is 5 for
+      // the cavalry track, not the infantry 3. Hard-coding 3 hid every merge
+      // that needed a scout's or knight's extra reach.
+      const range1 = ctx.partialMoves.get(uk1) ?? unitMovement(ue1);
+      const { reachable: vm1, cost: cost1 } = getMoveField(uk1, ctx.aiOwner, ctx.entities, ctx.tileMap, ctx.spentUnits, range1, ctx.combatSpentUnits);
       if (!vm1.has(uk2)) continue;
-      const stepsUsed = getMoveCost(uk1, uk2, ctx.tileMap);
+      // Cost comes from the same search that just vouched for the move, so the
+      // merged unit's leftover movement reflects the route it would really walk.
+      const stepsUsed = cost1.get(uk2) ?? Infinity;
       const remainingAfterMerge = Math.max(0, range1 - stepsUsed);
-      const destRemaining = ctx.partialMoves.get(uk2) ?? 3;
+      const destRemaining = ctx.partialMoves.get(uk2) ?? unitMovement(ue2);
       const mergedRemaining = Math.min(remainingAfterMerge, destRemaining);
       const tempEntities = new Map(ctx.entities);
       tempEntities.delete(uk1);

@@ -360,6 +360,26 @@ function bfsInsert(queue: Array<{ key: string; cost: number }>, item: { key: str
   queue.splice(lo, 0, item);
 }
 
+/**
+ * Where a unit may go and what getting there costs — the two halves of one
+ * search, so they can never disagree.
+ *
+ * They must not: a unit is charged for the route it actually walked, and the
+ * only authority on which routes exist is this traversal. Computing the cost
+ * from a separate, looser search (plain terrain distance, say) charges a unit
+ * for a shortcut it was never allowed to take, and it arrives with movement it
+ * should have spent.
+ */
+export interface MoveField {
+  /** Tiles the unit may legally end its move on. */
+  reachable: Set<string>;
+  /**
+   * Cheapest legal path cost per tile. Keyed by exactly `reachable` — tiles the
+   * search merely passed through, or reached but rejected, are absent.
+   */
+  cost: Map<string, number>;
+}
+
 export function getValidMoves(
   unitKey: string,
   owner: TerritoryOwner,
@@ -369,13 +389,27 @@ export function getValidMoves(
   maxRange?: number,
   combatSpentUnits?: Set<string>,
 ): Set<string> {
+  return getMoveField(unitKey, owner, entities, tileMap, spentUnits, maxRange, combatSpentUnits)
+    .reachable;
+}
+
+export function getMoveField(
+  unitKey: string,
+  owner: TerritoryOwner,
+  entities: Map<string, EntityType>,
+  tileMap: Map<string, HexTile>,
+  spentUnits: Set<string>,
+  maxRange?: number,
+  combatSpentUnits?: Set<string>,
+): MoveField {
   const result = new Set<string>();
-  if (spentUnits.has(unitKey)) return result;
+  const empty: MoveField = { reachable: result, cost: new Map() };
+  if (spentUnits.has(unitKey)) return empty;
 
   const unitTile = tileMap.get(unitKey);
-  if (!unitTile) return result;
+  if (!unitTile) return empty;
   const unitEntity = entities.get(unitKey);
-  if (!unitEntity) return result;
+  if (!unitEntity) return empty;
   const unitStrength = ENTITY_META[unitEntity].offStrength;
   // Cavalry combat gating: a cavalry unit can never enter a building tile, and
   // once it has struck a defender (tracked via combatSpentUnits) it can no
@@ -388,7 +422,7 @@ export function getValidMoves(
   const takesGround = canCapture(unitEntity);
   // When no explicit budget is passed, fall back to the unit's full movement.
   const range = maxRange ?? unitMovement(unitEntity);
-  if (range <= 0) return result;
+  if (range <= 0) return empty;
 
   const bestCost = new Map<string, number>([[unitKey, 0]]);
   const queue: Array<{ key: string; cost: number }> = [{ key: unitKey, cost: 0 }];
@@ -455,7 +489,14 @@ export function getValidMoves(
     }
   }
 
-  return result;
+  // `bestCost` also holds tiles that were only walked through, and tiles the
+  // search reached but rejected (an enemy tile that out-ZoCs the unit, a rebel a
+  // struck cavalry may not hit). Narrow it to the legal destinations so a cost
+  // lookup can never quietly succeed for a move that was never on offer.
+  const cost = new Map<string, number>();
+  for (const k of result) cost.set(k, bestCost.get(k)!);
+
+  return { reachable: result, cost };
 }
 
 /**
@@ -507,37 +548,6 @@ export function getPlacementAttackTiles(
     }
   }
   return result;
-}
-
-export function getMoveCost(
-  fromKey: string,
-  toKey: string,
-  tileMap: Map<string, HexTile>,
-  entities?: Map<string, EntityType>,
-): number {
-  if (fromKey === toKey) return 0;
-  const bestCost = new Map<string, number>([[fromKey, 0]]);
-  const queue: Array<{ key: string; cost: number }> = [{ key: fromKey, cost: 0 }];
-  while (queue.length > 0) {
-    const { key: curr, cost } = queue.shift()!;
-    if ((bestCost.get(curr) ?? Infinity) < cost) continue;
-    if (curr === toKey) return cost;
-    const [cq, cr] = curr.split(',').map(Number);
-    for (const { dir: [dq, dr] } of HEX_EDGES) {
-      const nk = tileKey(cq + dq, cr + dr);
-      const neighbor = tileMap.get(nk);
-      if (!neighbor || neighbor.terrain === 'mountain') continue;
-      if (neighbor.terrain === 'lake' && !isLakePassable(nk, entities)) continue;
-      const moveCost = TERRAIN_MOVE_COST[neighbor.terrain] ?? 1;
-      const newCost = cost + moveCost;
-      const prev = bestCost.get(nk) ?? Infinity;
-      if (newCost < prev) {
-        bestCost.set(nk, newCost);
-        bfsInsert(queue, { key: nk, cost: newCost });
-      }
-    }
-  }
-  return Infinity;
 }
 
 export function recalculateTerritories(

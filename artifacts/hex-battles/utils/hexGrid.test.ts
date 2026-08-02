@@ -11,7 +11,7 @@ import {
   getMaxEnemyZoC,
   getValidMoves,
   getPlacementAttackTiles,
-  getMoveCost,
+  getMoveField,
   getContiguousTerritory,
   getTerritoryId,
   generateHexGrid,
@@ -421,33 +421,109 @@ describe("getValidMoves", () => {
   });
 });
 
-// ─── getMoveCost ─────────────────────────────────────────────────────────────
+// ─── getMoveField ────────────────────────────────────────────────────────────
 
-describe("getMoveCost", () => {
-  it("returns 0 for same tile", () => {
-    const map = tileMap([makeTile(0, 0, "player")]);
-    expect(getMoveCost("0,0", "0,0", map)).toBe(0);
-  });
-
-  it("returns 1 for adjacent grass tiles", () => {
+describe("getMoveField", () => {
+  it("charges 1 for an adjacent grass tile", () => {
     const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "player")]);
-    expect(getMoveCost("0,0", "1,0", map)).toBe(1);
+    const ents = entities([["0,0", "warrior"]]);
+    const { cost } = getMoveField("0,0", "player", ents, map, new Set());
+    expect(cost.get("1,0")).toBe(1);
   });
 
-  it("returns 2 for one forest tile step", () => {
+  it("charges 2 for one forest step", () => {
     const map = tileMap([
       makeTile(0, 0, "player"),
       makeTile(1, 0, "player", "forest"),
     ]);
-    expect(getMoveCost("0,0", "1,0", map)).toBe(2);
+    const ents = entities([["0,0", "warrior"]]);
+    const { cost } = getMoveField("0,0", "player", ents, map, new Set());
+    expect(cost.get("1,0")).toBe(2);
   });
 
-  it("returns Infinity through mountain", () => {
+  it("never reaches a tile behind a mountain with no way around", () => {
     const map = tileMap([
       makeTile(0, 0, "player"),
       makeTile(1, 0, "player", "mountain"),
     ]);
-    expect(getMoveCost("0,0", "1,0", map)).toBe(Infinity);
+    const ents = entities([["0,0", "warrior"]]);
+    const { reachable, cost } = getMoveField("0,0", "player", ents, map, new Set());
+    expect(reachable.has("1,0")).toBe(false);
+    expect(cost.has("1,0")).toBe(false);
+  });
+
+  it("costs only the tiles the unit may actually end on", () => {
+    // A mountain is passed by nobody, so it never appears in the cost map even
+    // though its neighbours do.
+    const map = tileMap([
+      makeTile(0, 0, "player"),
+      makeTile(1, 0, "player", "mountain"),
+      makeTile(0, 1, "player"),
+    ]);
+    const ents = entities([["0,0", "warrior"]]);
+    const { reachable, cost } = getMoveField("0,0", "player", ents, map, new Set());
+    expect(reachable.has("0,1")).toBe(true);
+    expect([...cost.keys()].sort()).toEqual([...reachable].sort());
+  });
+
+  it("charges the detour, not the straight line, when an enemy tile blocks the way", () => {
+    // (0,0) scout → (2,0). The cheapest terrain path is straight through the
+    // enemy tile (1,0) for 2, but a unit may never PASS THROUGH enemy ground:
+    // the only legal route is the 3-step detour (1,-1) → (2,-1) → (2,0).
+    const map = tileMap([
+      makeTile(0, 0, "player"),
+      makeTile(1, 0, "ai1"),
+      makeTile(2, 0, "player"),
+      makeTile(1, -1, "player"),
+      makeTile(2, -1, "player"),
+    ]);
+    const ents = entities([["0,0", "scout"]]);
+    const { reachable, cost } = getMoveField("0,0", "player", ents, map, new Set(), 5);
+    expect(reachable.has("2,0")).toBe(true);
+    expect(cost.get("2,0")).toBe(3);
+    // The enemy tile itself is still a legal one-step capture.
+    expect(cost.get("1,0")).toBe(1);
+  });
+
+  it("charges the detour around a rebel-held tile", () => {
+    // Own tiles may be walked through, but not one a rebel is standing on.
+    const map = tileMap([
+      makeTile(0, 0, "player"),
+      makeTile(1, 0, "player"),
+      makeTile(2, 0, "player"),
+      makeTile(1, -1, "player"),
+      makeTile(2, -1, "player"),
+    ]);
+    const ents = entities([["0,0", "scout"], ["1,0", "rebel"]]);
+    const { cost } = getMoveField("0,0", "player", ents, map, new Set(), 5);
+    expect(cost.get("2,0")).toBe(3);
+  });
+
+  it("charges the straight line when the intervening tile is friendly and empty", () => {
+    const map = tileMap([
+      makeTile(0, 0, "player"),
+      makeTile(1, 0, "player"),
+      makeTile(2, 0, "player"),
+      makeTile(1, -1, "player"),
+      makeTile(2, -1, "player"),
+    ]);
+    const ents = entities([["0,0", "scout"]]);
+    const { cost } = getMoveField("0,0", "player", ents, map, new Set(), 5);
+    expect(cost.get("2,0")).toBe(2);
+  });
+
+  it("agrees with getValidMoves on which tiles are reachable", () => {
+    const map = tileMap([
+      makeTile(0, 0, "player"),
+      makeTile(1, 0, "ai1"),
+      makeTile(2, 0, "player"),
+      makeTile(1, -1, "player"),
+      makeTile(2, -1, "player"),
+    ]);
+    const ents = entities([["0,0", "scout"]]);
+    const { reachable } = getMoveField("0,0", "player", ents, map, new Set(), 5);
+    const moves = getValidMoves("0,0", "player", ents, map, new Set(), 5);
+    expect([...reachable].sort()).toEqual([...moves].sort());
   });
 });
 
