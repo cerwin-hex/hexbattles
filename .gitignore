@@ -44,7 +44,9 @@ Thumbs.db
 .cursor/rules/nx-rules.mdc
 .github/instructions/nx.instructions.md
 
-# Replit
+# Tooling caches and local state (pnpm store, agent skills, task state).
+# Originally added for Replit; the Replit integration is gone but these are
+# still machine-local and must never be committed.
 .cache/
 .local/
 
