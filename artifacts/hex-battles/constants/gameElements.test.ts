@@ -105,9 +105,10 @@ describe("isEntityEnabled / enabledUnitTypes", () => {
   });
 
   it("lists only enabled units and never a building", () => {
-    const off = { ...ALL_GAME_ELEMENTS, mounted: false };
+    const off = { ...ALL_GAME_ELEMENTS, mounted: false, ranged: false };
     expect(enabledUnitTypes(off)).toEqual(["peasant", "warrior", "swordsman"]);
     expect(enabledUnitTypes(ALL_GAME_ELEMENTS)).toContain("knight");
+    expect(enabledUnitTypes(ALL_GAME_ELEMENTS)).toContain("longbowman");
     expect(enabledUnitTypes(ALL_GAME_ELEMENTS)).not.toContain("tower");
   });
 
@@ -136,8 +137,9 @@ describe("beta elements", () => {
 
 describe("enabledElementCount", () => {
   it("counts the enabled elements against the whole registry", () => {
+    const total = GAME_ELEMENTS.length;
     const chosen = { ...ALL_GAME_ELEMENTS, mounted: false };
-    expect(enabledElementCount(chosen)).toEqual({ on: 3, total: 4 });
-    expect(enabledElementCount(ALL_GAME_ELEMENTS)).toEqual({ on: 4, total: 4 });
+    expect(enabledElementCount(chosen)).toEqual({ on: total - 1, total });
+    expect(enabledElementCount(ALL_GAME_ELEMENTS)).toEqual({ on: total, total });
   });
 });

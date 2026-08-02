@@ -48,6 +48,7 @@ function makeParams(overrides: Partial<EndTurnParams> = {}): EndTurnParams {
     setCombatSpentUnits: vi.fn(),
     setPartialMoves: vi.fn(),
     setAttacksUsed: vi.fn(),
+    setFiredUnits: vi.fn(),
     setIsAiTurn: vi.fn(),
     checkWinLoss: vi.fn().mockReturnValue(false),
     runAiTurn: vi.fn(),
@@ -124,5 +125,17 @@ describe("AI turn hand-off", () => {
     const params = makeParams({ turn: 2, checkWinLoss: vi.fn().mockReturnValue(true) });
     handleEndTurnLogic(params);
     expect(params.runAiTurn).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Ranged kill markers ──────────────────────────────────────────────────────
+
+describe("ranged kill markers", () => {
+  it("does not clear ranged kill markers at end of turn", () => {
+    // The marker must survive the AI phase and disappear at the start of the
+    // player's NEXT turn, which is runAiTurn's job, not this handler's.
+    const params = makeParams();
+    handleEndTurnLogic(params);
+    expect((params as { setKillMarks?: unknown }).setKillMarks).toBeUndefined();
   });
 });

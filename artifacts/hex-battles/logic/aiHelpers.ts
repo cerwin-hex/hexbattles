@@ -201,7 +201,11 @@ export function dtFindMergeMove(
       const [uk1, ue1] = units[i];
       const [uk2, ue2] = units[j];
       const mergedType = mergeResult(ue1, ue2);
-      if (!mergedType || ENTITY_META[mergedType].strength < requiredStr) continue;
+      // Offense, not defense: every caller ends in a move onto `targetKeys`, so
+      // the merged unit has to out-attack what holds that tile. `requiredStr` is
+      // a ZoC threshold at one call site (`dtFindMergeMove(zoc + 1, …)`) and an
+      // enemy unit's offense at another.
+      if (!mergedType || ENTITY_META[mergedType].offStrength < requiredStr) continue;
       const range1 = ctx.partialMoves.get(uk1) ?? 3;
       const vm1 = getValidMoves(uk1, ctx.aiOwner, ctx.entities, ctx.tileMap, ctx.spentUnits, range1, ctx.combatSpentUnits);
       if (!vm1.has(uk2)) continue;

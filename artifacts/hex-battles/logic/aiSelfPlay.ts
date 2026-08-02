@@ -100,6 +100,7 @@ function makeHeadlessCbs(): AiTurnCallbacks {
       // advance is a no-op here.
       advanceTurn: noop,
       setArmedGraves: noop,
+      setKillMarks: noop,
     },
     refs: {
       getAiStateMap: () => aiStateMap,

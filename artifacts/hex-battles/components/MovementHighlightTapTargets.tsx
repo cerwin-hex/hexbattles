@@ -1,21 +1,21 @@
 import React from "react";
 import { G, Polygon } from "react-native-svg";
 import { hexCornersString } from "@/utils/hexMath";
-import type { EntityType } from "@/types";
+import {
+  areMovementHighlightTapTargetsEqual,
+  type MovementHighlightTapTargetsEqualProps,
+} from "@/components/layerEquality";
 
-export interface MovementHighlightTapTargetsProps {
-  validMoveTiles: Set<string>;
-  validBridgePlacementTiles: Set<string>;
-  validPlacementAttackTiles: Set<string>;
-  armedEntityId: EntityType | null;
-  tileDataMap: Map<string, { cx: number; cy: number }>;
-  HEX_SIZE: number;
-}
+// The prop list lives with the equality function it is compared by, so a new
+// prop cannot be added without deciding how the memo compares it.
+export type MovementHighlightTapTargetsProps =
+  MovementHighlightTapTargetsEqualProps;
 
 function MovementHighlightTapTargetsInner({
   validMoveTiles,
   validBridgePlacementTiles,
   validPlacementAttackTiles,
+  validRangedTargets,
   armedEntityId,
   tileDataMap,
   HEX_SIZE,
@@ -29,6 +29,19 @@ function MovementHighlightTapTargetsInner({
           return (
             <Polygon
               key={`move-tap-${key}`}
+              points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
+              fill="transparent"
+            />
+          );
+        })}
+
+      {validRangedTargets.size > 0 &&
+        Array.from(validRangedTargets).map((key) => {
+          const pos = tileDataMap.get(key);
+          if (!pos) return null;
+          return (
+            <Polygon
+              key={`shot-tap-${key}`}
               points={hexCornersString(pos.cx, pos.cy, HEX_SIZE)}
               fill="transparent"
             />
@@ -61,20 +74,6 @@ function MovementHighlightTapTargetsInner({
           );
         })}
     </G>
-  );
-}
-
-function areMovementHighlightTapTargetsEqual(
-  prev: MovementHighlightTapTargetsProps,
-  next: MovementHighlightTapTargetsProps,
-): boolean {
-  return (
-    prev.validMoveTiles === next.validMoveTiles &&
-    prev.validBridgePlacementTiles === next.validBridgePlacementTiles &&
-    prev.validPlacementAttackTiles === next.validPlacementAttackTiles &&
-    prev.armedEntityId === next.armedEntityId &&
-    prev.tileDataMap === next.tileDataMap &&
-    prev.HEX_SIZE === next.HEX_SIZE
   );
 }
 

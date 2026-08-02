@@ -14,18 +14,21 @@ import {
   recalculateTerritoriesForCapture,
   unitMovement,
   unitMaxAttacks,
-  cavalryMoveKind,
+  moveKind,
 } from "@/utils/hexGrid";
 import {
   advanceAttacksUsed,
   advanceCombatSpent,
+  advanceFired,
   applySingleHexPenalty,
   canImproveTile,
+  classifyOwnTilePlacement,
   isChargeAttack,
   mergeResult,
   resolveMovedUnitMoves,
   effectiveRemaining,
 } from "@/logic/gameLogic";
+import { resolveRangedShot } from "@/logic/rangedAttack";
 import { isEntityEnabled, type GameElements } from "@/constants/gameElements";
 
 /**
@@ -61,6 +64,9 @@ export interface TileTapParams {
   turn: number;
   graveyard: Set<string>;
   ruins: Set<string>;
+  killMarks: Set<string>;
+  firedUnits: Set<string>;
+  validRangedTargets: Set<string>;
   liveOwnerMap: Map<string, TerritoryOwner>;
   combatSpentUnits: Set<string>;
   spentUnits: Set<string>;
@@ -83,6 +89,8 @@ export interface TileTapParams {
   setSelectedTileKey: (k: string | null) => void;
   setGraveyard: (s: Set<string>) => void;
   setRuins: (s: Set<string>) => void;
+  setKillMarks: (s: Set<string>) => void;
+  setFiredUnits: (s: Set<string>) => void;
   setArmedEntityId: (id: EntityType | null) => void;
   setArmedImprovement: (t: TerrainType | null) => void;
   setFreeTowerUsedTiles: Dispatch<SetStateAction<Map<TerritoryOwner, Set<string>>>>;
@@ -122,6 +130,9 @@ export function handleTileTapLogic(params: TileTapParams): void {
     turn,
     graveyard,
     ruins,
+    killMarks,
+    firedUnits,
+    validRangedTargets,
     liveOwnerMap,
     combatSpentUnits,
     spentUnits,
@@ -144,6 +155,8 @@ export function handleTileTapLogic(params: TileTapParams): void {
     setSelectedTileKey,
     setGraveyard,
     setRuins,
+    setKillMarks,
+    setFiredUnits,
     setArmedEntityId,
     setArmedImprovement,
     setFreeTowerUsedTiles,
@@ -160,6 +173,37 @@ export function handleTileTapLogic(params: TileTapParams): void {
   lastTileTapMs.current = now;
   if (isAiTurn || gameResult !== null) return;
   const tile = activeTileMap.get(key);
+
+  // ─── Ranged shot ─────────────────────────────────────────────────────────────
+  // A ranged unit's targets are never valid move tiles (it cannot take ground),
+  // so this branch and the move branch below can never both match the same tap.
+  // A shot changes no ownership and no passability, so it needs none of the
+  // territory recalculation the move branch does.
+  if (selectedEntityKey && validRangedTargets.has(key)) {
+    pushHistory();
+    const shot = resolveRangedShot({
+      shooterKey: selectedEntityKey,
+      targetKey: key,
+      entities,
+      tileMap: activeTileMap,
+      killMarks,
+      firedUnits,
+      partialMoves,
+      spentUnits,
+    });
+    unstable_batchedUpdates(() => {
+      setEntities(shot.entities);
+      setKillMarks(shot.killMarks);
+      setFiredUnits(shot.firedUnits);
+      setPartialMoves(shot.partialMoves);
+      // Firing clamps the shooter's movement but does not spend it, so leave it
+      // selected: it may still shuffle one cheap tile.
+      setSelectedEntityKey(selectedEntityKey);
+      setSelectedTileKey(selectedEntityKey);
+      if (ribbonOpen) closeRibbon();
+    });
+    return;
+  }
 
   // ─── Unit move ───────────────────────────────────────────────────────────────
   if (selectedEntityKey && validMoveTiles.has(key)) {
@@ -251,10 +295,19 @@ export function handleTileTapLogic(params: TileTapParams): void {
       spent: moved.spent,
     });
 
+    // The "has fired" flag rides along separately from the attack counter: it
+    // must survive becoming spent, since a spent bowman may still shoot.
+    const newFiredUnits = advanceFired({
+      firedUnits,
+      fromKey: selectedEntityKey,
+      toKey: key,
+      isMerge,
+    });
+
     // Combat-lock the unit when it strikes a defender (cavalry: blocks a second
     // strike while it may still take one open tile) or finishes its combat.
     const isEntityStrike =
-      isCombatMove && cavalryMoveKind(existingUnit) === "entity";
+      isCombatMove && moveKind(existingUnit) === "entity";
     const newCombatSpentUnits = advanceCombatSpent({
       combatSpentUnits,
       fromKey: selectedEntityKey,
@@ -284,10 +337,12 @@ export function handleTileTapLogic(params: TileTapParams): void {
 
       const newGraveyard = new Set(graveyard);
       const newRuins = new Set(ruins);
-      // A unit stepping onto a grave/ruin tile clears the marker for good — it
-      // must not reappear once the unit moves on again.
+      const newKillMarks = new Set(killMarks);
+      // A unit stepping onto a grave/ruin/kill-marked tile clears the marker for
+      // good — it must not reappear once the unit moves on again.
       newGraveyard.delete(key);
       newRuins.delete(key);
+      newKillMarks.delete(key);
       applySingleHexPenalty(
         activeTileMap,
         newTileMap,
@@ -318,9 +373,11 @@ export function handleTileTapLogic(params: TileTapParams): void {
         setCombatSpentUnits(newCombatSpentUnits);
         setPartialMoves(newPartialMoves);
         setAttacksUsed(newAttacksUsed);
+        setFiredUnits(newFiredUnits);
         setTerritoryBalances(newBalances);
         setGraveyard(newGraveyard);
         setRuins(newRuins);
+        setKillMarks(newKillMarks);
         setLiveOwnerMap(newLiveOwnerMap);
         checkWinLoss(newTileMap);
       });
@@ -437,52 +494,30 @@ export function handleTileTapLogic(params: TileTapParams): void {
   if (armedEntityId && isEntityEnabled(armedEntityId, elements) && selectedTileKeys.has(key)) {
     const existingOnTile = entities.get(key);
     const armedIsUnit = ENTITY_META[armedEntityId].isUnit;
-    const existingIsAllyUnit =
-      !!existingOnTile &&
-      existingOnTile !== "rebel" &&
-      existingOnTile !== "city" &&
-      existingOnTile !== "bridge" &&
-      ENTITY_META[existingOnTile].isUnit &&
-      activeTileMap.get(key)?.owner === "player";
-    const mergeBuyInto =
-      armedIsUnit && existingIsAllyUnit
-        ? mergeResult(armedEntityId, existingOnTile!)
-        : null;
+    const tileData = activeTileMap.get(key);
+    // The shared rule — mirrored by the purchase dots in MovementHighlightLayer,
+    // which is why it lives in gameLogic rather than here. It covers occupancy,
+    // merging, rebel/building overruns, bridges and lakes; cities and graveyards
+    // are ours to add below.
+    const placement = classifyOwnTilePlacement({
+      armedEntityId,
+      occupant: existingOnTile,
+      tileOwner: tileData?.owner,
+      terrain: tileData?.terrain ?? "grass",
+    });
+    const mergeBuyInto = placement.mergeInto;
     const canMerge = mergeBuyInto !== null;
-    const canOverwriteRebel = armedIsUnit && existingOnTile === "rebel";
+    const canOverwriteRebel = placement.overwritesRebel;
     // A charge unit (maxAttacks > 1) bought directly onto a rebel spends one
     // attack but stays active so it can charge on and attack again, mirroring
     // the buy-into-attack capture path. Other units are spent immediately.
     const isChargeRebelOverwrite =
       canOverwriteRebel && unitMaxAttacks(armedEntityId) > 1;
-    const existingIsBuilding =
-      !!existingOnTile &&
-      !ENTITY_META[existingOnTile].isUnit &&
-      existingOnTile !== "rebel";
-    const existingBuildingIsOwn =
-      existingIsBuilding && activeTileMap.get(key)?.owner === "player";
-    const canOverwriteBuilding =
-      armedIsUnit &&
-      existingIsBuilding &&
-      !existingBuildingIsOwn &&
-      ENTITY_META[armedEntityId].strength >=
-        ENTITY_META[existingOnTile as EntityType].strength;
-    const canPlaceOnBridge =
-      armedIsUnit &&
-      existingOnTile === "bridge" &&
-      activeTileMap.get(key)?.owner === "player";
     // Cities live in a separate Set from entities, so an empty city tile has
     // no entity. Block any non-unit armed entity (city/tower/castle/bridge)
     // from being placed on a city — only units may stand on cities.
     const alreadyOccupied =
-      (!!existingOnTile && !canMerge && !canOverwriteRebel && !canOverwriteBuilding && !canPlaceOnBridge) ||
-      (!armedIsUnit && cities.has(key));
-    // Don't allow placement on lake tiles unless there's a bridge (bridges are placed via validBridgePlacementTiles path)
-    const tileData = activeTileMap.get(key);
-    if (tileData?.terrain === "lake" && existingOnTile !== "bridge") {
-      triggerErrorFlash(key);
-      return;
-    }
+      placement.blocked || (!armedIsUnit && cities.has(key));
     if (!alreadyOccupied && selectedTerritoryId) {
       const meta = ENTITY_META[armedEntityId];
       const balance = territoryBalances.get(selectedTerritoryId) ?? 0;
@@ -615,7 +650,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
       // defender also combat-locks them (no second strike); taking an open enemy
       // tile leaves them free to strike later. Other units (and cities) spend.
       const isChargePlacement = !isCity && unitMaxAttacks(armedEntityId) > 1;
-      const isEntityStrike = cavalryMoveKind(entities.get(key)) === "entity";
+      const isEntityStrike = moveKind(entities.get(key)) === "entity";
       const newCombatSpent2 =
         !isChargePlacement || isEntityStrike
           ? new Set([...combatSpentUnits, key])
@@ -662,12 +697,14 @@ export function handleTileTapLogic(params: TileTapParams): void {
           );
         const newGraveyard2 = new Set(graveyard);
         const newRuins2 = new Set(ruins);
-        // Capturing a grave/ruin tile by buying a unit onto it clears the marker
-        // for good, same as walking onto it. Buildings don't (the rule is about
-        // active units), so guard on meta.isUnit.
+        const newKillMarks2 = new Set(killMarks);
+        // Capturing a grave/ruin/kill-marked tile by buying a unit onto it
+        // clears the marker for good, same as walking onto it. Buildings don't
+        // (the rule is about active units), so guard on meta.isUnit.
         if (meta.isUnit) {
           newGraveyard2.delete(key);
           newRuins2.delete(key);
+          newKillMarks2.delete(key);
         }
         applySingleHexPenalty(
           activeTileMap,
@@ -684,6 +721,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
         setTerritoryBalances(newBalances);
         setGraveyard(newGraveyard2);
         setRuins(newRuins2);
+        setKillMarks(newKillMarks2);
         setLiveOwnerMap(newLiveOwnerMap);
         checkWinLoss(newTileMap);
       }, 0);

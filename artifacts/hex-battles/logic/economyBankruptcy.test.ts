@@ -74,6 +74,7 @@ function runPlayerEndTurn(state: RoundState, turn: number): RoundState {
     setCombatSpentUnits: vi.fn(),
     setPartialMoves: vi.fn(),
     setAttacksUsed: vi.fn(),
+    setFiredUnits: vi.fn(),
     setIsAiTurn: vi.fn(),
     checkWinLoss: vi.fn().mockReturnValue(false),
     runAiTurn: vi.fn(),

@@ -7,11 +7,13 @@ import {
   applyOwnerEconomy,
   initTerritoryBalances,
   mergeResult,
+  classifyOwnTilePlacement,
   resolveMovedUnitMoves,
   effectiveRemaining,
   isChargeAttack,
   advanceAttacksUsed,
   advanceCombatSpent,
+  advanceFired,
   calcTerritoryIncome,
   tileEconomicIncome,
   canImproveTile,
@@ -124,6 +126,7 @@ describe("mergeResult", () => {
 
   it("infantry: warrior + warrior is illegal (no strength-4 unit)", () => {
     expect(mergeResult("warrior", "warrior")).toBeNull();
+    expect(mergeResult("swordsman", "peasant")).toBeNull();
   });
 
   it("cavalry: scout + scout = knight (own upgrade track, strength 2)", () => {
@@ -139,17 +142,82 @@ describe("mergeResult", () => {
     expect(mergeResult("scout", "peasant")).toBeNull();
     expect(mergeResult("peasant", "scout")).toBeNull();
     expect(mergeResult("knight", "warrior")).toBeNull();
+    expect(mergeResult("warrior", "knight")).toBeNull();
   });
 
-  it("buildings never merge", () => {
+  it("buildings and markers never merge", () => {
     expect(mergeResult("tower", "tower")).toBeNull();
     expect(mergeResult("peasant", "tower")).toBeNull();
+    expect(mergeResult("peasant", "rebel")).toBeNull();
   });
 
   it("two scout merges in sequence: scout+scout = knight (str 2), then knight cannot merge further", () => {
     const step1 = mergeResult("scout", "scout");
     expect(step1).toBe("knight");
     expect(mergeResult("knight", "scout")).toBeNull();
+  });
+});
+
+// ─── classifyOwnTilePlacement ─────────────────────────────────────────────────
+
+describe("classifyOwnTilePlacement", () => {
+  function classify(
+    armedEntityId: EntityType,
+    occupant?: EntityType,
+    opts: { tileOwner?: TerritoryOwner; terrain?: HexTile["terrain"] } = {},
+  ) {
+    return classifyOwnTilePlacement({
+      armedEntityId,
+      occupant,
+      tileOwner: opts.tileOwner ?? "player",
+      terrain: opts.terrain ?? "grass",
+    });
+  }
+
+  it("an empty tile takes any purchase", () => {
+    expect(classify("shortbowman").blocked).toBe(false);
+    expect(classify("peasant").blocked).toBe(false);
+    expect(classify("tower").blocked).toBe(false);
+  });
+
+  it("a ranged unit cannot overrun a rebel — it takes no ground", () => {
+    const p = classify("shortbowman", "rebel");
+    expect(p.blocked).toBe(true);
+    expect(p.overwritesRebel).toBe(false);
+  });
+
+  it("a capturing unit overruns a rebel", () => {
+    const p = classify("peasant", "rebel");
+    expect(p.blocked).toBe(false);
+    expect(p.overwritesRebel).toBe(true);
+  });
+
+  it("only same-track units that merge are placeable on an ally", () => {
+    expect(classify("shortbowman", "shortbowman").mergeInto).toBe("longbowman");
+    expect(classify("shortbowman", "peasant").blocked).toBe(true);
+    expect(classify("peasant", "shortbowman").blocked).toBe(true);
+    // Same track, but tier 1 + tier 3 overflows the track — no merge, no dot.
+    expect(classify("shortbowman", "crossbowman").blocked).toBe(true);
+  });
+
+  it("a ranged unit cannot take an enemy building", () => {
+    expect(classify("shortbowman", "tower", { tileOwner: "ai1" }).blocked).toBe(true);
+    expect(
+      classify("swordsman", "tower", { tileOwner: "ai1" }).overwritesBuilding,
+    ).toBe(true);
+  });
+
+  it("our own buildings are never overwritten", () => {
+    expect(classify("swordsman", "tower").blocked).toBe(true);
+  });
+
+  it("a lake tile carries a unit only through a bridge", () => {
+    expect(classify("peasant", undefined, { terrain: "lake" }).blocked).toBe(true);
+    const bridged = classify("peasant", "bridge", { terrain: "lake" });
+    expect(bridged.blocked).toBe(false);
+    expect(bridged.standsOnBridge).toBe(true);
+    // A building cannot be founded on the bridge a unit may stand on.
+    expect(classify("tower", "bridge", { terrain: "lake" }).blocked).toBe(true);
   });
 });
 
@@ -839,5 +907,77 @@ describe("applyOwnerEconomy", () => {
     });
     expect(r.balances.get("0,0")).toBe(2); // player credited
     expect(r.balances.get("5,5")).toBe(0); // ai1 untouched
+  });
+});
+
+// ─── Ranged merging ───────────────────────────────────────────────────────────
+
+describe("ranged merging", () => {
+  it("merges along the ranged track by tier", () => {
+    expect(mergeResult("shortbowman", "shortbowman")).toBe("longbowman");
+    expect(mergeResult("shortbowman", "longbowman")).toBe("crossbowman");
+    expect(mergeResult("longbowman", "longbowman")).toBeNull();
+    expect(mergeResult("crossbowman", "shortbowman")).toBeNull();
+  });
+
+  it("never merges with another track", () => {
+    expect(mergeResult("shortbowman", "peasant")).toBeNull();
+    expect(mergeResult("shortbowman", "scout")).toBeNull();
+  });
+});
+
+// ─── Fired flag carry ─────────────────────────────────────────────────────────
+
+describe("advanceFired", () => {
+  it("carries the fired flag to the destination", () => {
+    const r = advanceFired({
+      firedUnits: new Set(["0,0"]),
+      fromKey: "0,0",
+      toKey: "1,0",
+      isMerge: false,
+    });
+    expect(r.has("0,0")).toBe(false);
+    expect(r.has("1,0")).toBe(true);
+  });
+
+  it("keeps the flag even when the unit runs out of movement", () => {
+    // Unlike advanceAttacksUsed, becoming spent must NOT clear it: a ranged
+    // unit can fire with zero movement left, so a dropped flag would hand it a
+    // second shot.
+    const r = advanceFired({
+      firedUnits: new Set(["0,0"]),
+      fromKey: "0,0",
+      toKey: "1,0",
+      isMerge: false,
+    });
+    expect(r.has("1,0")).toBe(true);
+  });
+
+  it("unions the flag on a merge", () => {
+    const fromFired = advanceFired({
+      firedUnits: new Set(["0,0"]),
+      fromKey: "0,0",
+      toKey: "1,0",
+      isMerge: true,
+    });
+    expect(fromFired.has("1,0")).toBe(true);
+
+    const destFired = advanceFired({
+      firedUnits: new Set(["1,0"]),
+      fromKey: "0,0",
+      toKey: "1,0",
+      isMerge: true,
+    });
+    expect(destFired.has("1,0")).toBe(true);
+  });
+
+  it("clears the destination when neither unit had fired", () => {
+    const r = advanceFired({
+      firedUnits: new Set(),
+      fromKey: "0,0",
+      toKey: "1,0",
+      isMerge: false,
+    });
+    expect(r.has("1,0")).toBe(false);
   });
 });

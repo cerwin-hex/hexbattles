@@ -2,31 +2,22 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { ENTITY_META } from "@/utils/hexGrid";
-import type { EntityType, HexTile, TerrainType } from "@/types";
+import { classifyOwnTilePlacement } from "@/logic/gameLogic";
+import {
+  areMovementHighlightLayerEqual,
+  type MovementHighlightLayerEqualProps,
+} from "@/components/layerEquality";
 
-export interface MovementHighlightLayerProps {
-  validMoveTiles: Set<string>;
-  validBridgePlacementTiles: Set<string>;
-  validImprovementTiles: Set<string>;
-  validPlacementAttackTiles: Set<string>;
-  selectedTileKeys: Set<string>;
-  armedEntityId: EntityType | null;
-  armedImprovement: TerrainType | null;
-  entities: Map<string, EntityType>;
-  activeTileMap: Map<string, HexTile>;
-  graveyard: Set<string>;
-  fortificationDots: Set<string>;
-  tileDataMap: Map<string, { cx: number; cy: number }>;
-  boardW: number;
-  boardH: number;
-  HEX_SIZE: number;
-}
+// The prop list lives with the equality function it is compared by, so a new
+// prop cannot be added without deciding how the memo compares it.
+export type MovementHighlightLayerProps = MovementHighlightLayerEqualProps;
 
 function MovementHighlightLayerInner({
   validMoveTiles,
   validBridgePlacementTiles,
   validImprovementTiles,
   validPlacementAttackTiles,
+  validRangedTargets,
   selectedTileKeys,
   armedEntityId,
   armedImprovement,
@@ -56,6 +47,24 @@ function MovementHighlightLayerInner({
               cy={pos.cy}
               r={HEX_SIZE * 0.18}
               fill={isAttackMove ? "rgba(220,40,40,0.85)" : "rgba(255,220,0,0.85)"}
+            />
+          );
+        })}
+
+        {Array.from(validRangedTargets).map((key) => {
+          const pos = tileDataMap.get(key);
+          if (!pos) return null;
+          // A stroked ring, not a filled dot: a shot is not a move, and the two
+          // must never be confused at a glance.
+          return (
+            <Circle
+              key={`shot-ring-${key}`}
+              cx={pos.cx}
+              cy={pos.cy}
+              r={HEX_SIZE * 0.34}
+              fill="none"
+              stroke="rgba(220,40,40,0.95)"
+              strokeWidth={HEX_SIZE * 0.09}
             />
           );
         })}
@@ -94,24 +103,26 @@ function MovementHighlightLayerInner({
           armedEntityId !== "bridge" &&
           Array.from(selectedTileKeys).map((key) => {
             const pos = tileDataMap.get(key);
-            if (!pos) return null;
-            if (armedEntityId && !ENTITY_META[armedEntityId].isUnit) {
-              if (entities.get(key) || graveyard.has(key) || fortificationDots.has(key))
-                return null;
-            }
-            if (armedEntityId && ENTITY_META[armedEntityId].isUnit) {
-              const existingEntity = entities.get(key);
-              if (
-                existingEntity &&
-                !ENTITY_META[existingEntity].isUnit &&
-                existingEntity !== "rebel" &&
-                existingEntity !== "bridge" &&
-                activeTileMap.get(key)?.owner === "player"
-              )
-                return null;
-            }
-            const isRebelTarget =
-              ENTITY_META[armedEntityId].isUnit && entities.get(key) === "rebel";
+            const tile = activeTileMap.get(key);
+            if (!pos || !tile) return null;
+            // The same rule the tap handler acts on, so a dot never invites a
+            // tap that only error-flashes: a bowman gets no dot on a rebel it
+            // cannot overrun, and no unit gets one on a unit it cannot merge with.
+            const placement = classifyOwnTilePlacement({
+              armedEntityId,
+              occupant: entities.get(key),
+              tileOwner: tile.owner,
+              terrain: tile.terrain,
+            });
+            if (placement.blocked) return null;
+            // Graveyards block buildings only, and are the handler's own check
+            // rather than part of the shared rule.
+            if (
+              !ENTITY_META[armedEntityId].isUnit &&
+              (graveyard.has(key) || fortificationDots.has(key))
+            )
+              return null;
+            const isRebelTarget = placement.overwritesRebel;
             return (
               <Circle
                 key={`place-dot-${key}`}
@@ -139,29 +150,6 @@ function MovementHighlightLayerInner({
           })}
       </Svg>
     </View>
-  );
-}
-
-function areMovementHighlightLayerEqual(
-  prev: MovementHighlightLayerProps,
-  next: MovementHighlightLayerProps,
-): boolean {
-  return (
-    prev.validMoveTiles === next.validMoveTiles &&
-    prev.validBridgePlacementTiles === next.validBridgePlacementTiles &&
-    prev.validImprovementTiles === next.validImprovementTiles &&
-    prev.validPlacementAttackTiles === next.validPlacementAttackTiles &&
-    prev.selectedTileKeys === next.selectedTileKeys &&
-    prev.armedEntityId === next.armedEntityId &&
-    prev.armedImprovement === next.armedImprovement &&
-    prev.entities === next.entities &&
-    prev.activeTileMap === next.activeTileMap &&
-    prev.graveyard === next.graveyard &&
-    prev.fortificationDots === next.fortificationDots &&
-    prev.tileDataMap === next.tileDataMap &&
-    prev.boardW === next.boardW &&
-    prev.boardH === next.boardH &&
-    prev.HEX_SIZE === next.HEX_SIZE
   );
 }
 

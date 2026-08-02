@@ -3,11 +3,17 @@ import {
   areHexTileLayerEqual,
   areBorderEdgeLayerEqual,
   areCityOverlayLayerEqual,
+  areMovementHighlightLayerEqual,
+  areMovementHighlightTapTargetsEqual,
+  areGraveyardLayerEqual,
   type HexTileLayerEqualProps,
   type BorderEdgeLayerEqualProps,
   type CityOverlayLayerEqualProps,
+  type MovementHighlightLayerEqualProps,
+  type MovementHighlightTapTargetsEqualProps,
+  type GraveyardLayerEqualProps,
 } from "@/components/layerEquality";
-import type { HexTile, BorderEdge } from "@/types";
+import type { HexTile, BorderEdge, EntityType } from "@/types";
 
 // ─── areHexTileLayerEqual ────────────────────────────────────────────────────
 
@@ -246,5 +252,208 @@ describe("areCityOverlayLayerEqual", () => {
     const base = makeCityOverlayLayerProps({ cities, activeTileMap, tileDataMap, HEX_SIZE: 30 });
     const next = makeCityOverlayLayerProps({ cities, activeTileMap, tileDataMap, HEX_SIZE: 40 });
     expect(areCityOverlayLayerEqual(base, next)).toBe(false);
+  });
+});
+
+// ─── areMovementHighlightLayerEqual ──────────────────────────────────────────
+
+function makeMovementHighlightLayerProps(
+  overrides: Partial<MovementHighlightLayerEqualProps> = {},
+): MovementHighlightLayerEqualProps {
+  return {
+    validMoveTiles: new Set<string>(),
+    validBridgePlacementTiles: new Set<string>(),
+    validImprovementTiles: new Set<string>(),
+    validPlacementAttackTiles: new Set<string>(),
+    validRangedTargets: new Set<string>(),
+    selectedTileKeys: new Set<string>(),
+    armedEntityId: null,
+    armedImprovement: null,
+    entities: new Map<string, EntityType>(),
+    activeTileMap: new Map<string, HexTile>(),
+    graveyard: new Set<string>(),
+    fortificationDots: new Set<string>(),
+    tileDataMap: new Map<string, { cx: number; cy: number }>(),
+    boardW: 300,
+    boardH: 400,
+    HEX_SIZE: 30,
+    ...overrides,
+  };
+}
+
+describe("areMovementHighlightLayerEqual", () => {
+  it("returns true when all props are identical references", () => {
+    const props = makeMovementHighlightLayerProps();
+    expect(areMovementHighlightLayerEqual(props, props)).toBe(true);
+  });
+
+  it("returns true when every ref and scalar is shared", () => {
+    const shared = makeMovementHighlightLayerProps();
+    const next = makeMovementHighlightLayerProps({ ...shared });
+    expect(areMovementHighlightLayerEqual(shared, next)).toBe(true);
+  });
+
+  it("returns false when validRangedTargets reference changes", () => {
+    const base = makeMovementHighlightLayerProps();
+    const next = makeMovementHighlightLayerProps({
+      ...base,
+      validRangedTargets: new Set<string>(),
+    });
+    expect(areMovementHighlightLayerEqual(base, next)).toBe(false);
+  });
+
+  it("returns false when validRangedTargets gains a target", () => {
+    const base = makeMovementHighlightLayerProps();
+    const next = makeMovementHighlightLayerProps({
+      ...base,
+      validRangedTargets: new Set(["1,2"]),
+    });
+    expect(areMovementHighlightLayerEqual(base, next)).toBe(false);
+  });
+
+  it("returns true when only validRangedTargets is the same non-empty ref", () => {
+    const validRangedTargets = new Set(["1,2", "3,4"]);
+    const base = makeMovementHighlightLayerProps({ validRangedTargets });
+    const next = makeMovementHighlightLayerProps({ ...base });
+    expect(areMovementHighlightLayerEqual(base, next)).toBe(true);
+  });
+
+  it("returns false when validMoveTiles reference changes", () => {
+    const base = makeMovementHighlightLayerProps();
+    const next = makeMovementHighlightLayerProps({
+      ...base,
+      validMoveTiles: new Set<string>(),
+    });
+    expect(areMovementHighlightLayerEqual(base, next)).toBe(false);
+  });
+
+  it("returns false when HEX_SIZE changes", () => {
+    const base = makeMovementHighlightLayerProps();
+    const next = makeMovementHighlightLayerProps({ ...base, HEX_SIZE: 40 });
+    expect(areMovementHighlightLayerEqual(base, next)).toBe(false);
+  });
+});
+
+// ─── areMovementHighlightTapTargetsEqual ─────────────────────────────────────
+
+function makeMovementHighlightTapTargetsProps(
+  overrides: Partial<MovementHighlightTapTargetsEqualProps> = {},
+): MovementHighlightTapTargetsEqualProps {
+  return {
+    validMoveTiles: new Set<string>(),
+    validBridgePlacementTiles: new Set<string>(),
+    validPlacementAttackTiles: new Set<string>(),
+    validRangedTargets: new Set<string>(),
+    armedEntityId: null,
+    tileDataMap: new Map<string, { cx: number; cy: number }>(),
+    HEX_SIZE: 30,
+    ...overrides,
+  };
+}
+
+describe("areMovementHighlightTapTargetsEqual", () => {
+  it("returns true when all props are identical references", () => {
+    const props = makeMovementHighlightTapTargetsProps();
+    expect(areMovementHighlightTapTargetsEqual(props, props)).toBe(true);
+  });
+
+  it("returns true when every ref and scalar is shared", () => {
+    const shared = makeMovementHighlightTapTargetsProps();
+    const next = makeMovementHighlightTapTargetsProps({ ...shared });
+    expect(areMovementHighlightTapTargetsEqual(shared, next)).toBe(true);
+  });
+
+  it("returns false when validRangedTargets reference changes", () => {
+    const base = makeMovementHighlightTapTargetsProps();
+    const next = makeMovementHighlightTapTargetsProps({
+      ...base,
+      validRangedTargets: new Set(["0,0"]),
+    });
+    expect(areMovementHighlightTapTargetsEqual(base, next)).toBe(false);
+  });
+
+  it("returns true when only validRangedTargets is the same non-empty ref", () => {
+    const validRangedTargets = new Set(["0,0"]);
+    const base = makeMovementHighlightTapTargetsProps({ validRangedTargets });
+    const next = makeMovementHighlightTapTargetsProps({ ...base });
+    expect(areMovementHighlightTapTargetsEqual(base, next)).toBe(true);
+  });
+
+  it("returns false when armedEntityId changes", () => {
+    const base = makeMovementHighlightTapTargetsProps();
+    const next = makeMovementHighlightTapTargetsProps({
+      ...base,
+      armedEntityId: "tower",
+    });
+    expect(areMovementHighlightTapTargetsEqual(base, next)).toBe(false);
+  });
+});
+
+// ─── areGraveyardLayerEqual ──────────────────────────────────────────────────
+
+function makeGraveyardLayerProps(
+  overrides: Partial<GraveyardLayerEqualProps> = {},
+): GraveyardLayerEqualProps {
+  return {
+    graveyard: new Set<string>(),
+    ruins: new Set<string>(),
+    killMarks: new Set<string>(),
+    entities: new Map<string, EntityType>(),
+    tileDataMap: new Map<string, { cx: number; cy: number }>(),
+    HEX_SIZE: 30,
+    ...overrides,
+  };
+}
+
+describe("areGraveyardLayerEqual", () => {
+  it("returns true when all props are identical references", () => {
+    const props = makeGraveyardLayerProps();
+    expect(areGraveyardLayerEqual(props, props)).toBe(true);
+  });
+
+  it("returns true when every ref and scalar is shared", () => {
+    const shared = makeGraveyardLayerProps();
+    const next = makeGraveyardLayerProps({ ...shared });
+    expect(areGraveyardLayerEqual(shared, next)).toBe(true);
+  });
+
+  it("returns false when killMarks reference changes", () => {
+    const base = makeGraveyardLayerProps();
+    const next = makeGraveyardLayerProps({
+      ...base,
+      killMarks: new Set<string>(),
+    });
+    expect(areGraveyardLayerEqual(base, next)).toBe(false);
+  });
+
+  it("returns false when killMarks gains a mark", () => {
+    const base = makeGraveyardLayerProps();
+    const next = makeGraveyardLayerProps({
+      ...base,
+      killMarks: new Set(["2,3"]),
+    });
+    expect(areGraveyardLayerEqual(base, next)).toBe(false);
+  });
+
+  it("returns true when only killMarks is the same non-empty ref", () => {
+    const killMarks = new Set(["2,3"]);
+    const base = makeGraveyardLayerProps({ killMarks });
+    const next = makeGraveyardLayerProps({ ...base });
+    expect(areGraveyardLayerEqual(base, next)).toBe(true);
+  });
+
+  it("returns false when graveyard reference changes", () => {
+    const base = makeGraveyardLayerProps();
+    const next = makeGraveyardLayerProps({
+      ...base,
+      graveyard: new Set<string>(),
+    });
+    expect(areGraveyardLayerEqual(base, next)).toBe(false);
+  });
+
+  it("returns false when ruins reference changes", () => {
+    const base = makeGraveyardLayerProps();
+    const next = makeGraveyardLayerProps({ ...base, ruins: new Set<string>() });
+    expect(areGraveyardLayerEqual(base, next)).toBe(false);
   });
 });

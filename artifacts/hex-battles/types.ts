@@ -1,6 +1,6 @@
 export type TerrainType = 'grass' | 'desert' | 'mountain' | 'lake' | 'forest' | 'field' | 'sawmill' | 'mine';
 export type TerritoryOwner = 'neutral' | 'player' | 'ai1' | 'ai2' | 'ai3' | 'ai4' | 'ai5';
-export type EntityType = 'peasant' | 'warrior' | 'swordsman' | 'scout' | 'knight' | 'tower' | 'castle' | 'city' | 'rebel' | 'bridge';
+export type EntityType = 'peasant' | 'warrior' | 'swordsman' | 'scout' | 'knight' | 'shortbowman' | 'longbowman' | 'crossbowman' | 'tower' | 'castle' | 'city' | 'rebel' | 'bridge';
 
 /**
  * Grave/ruin sites that have stood since the start of an owner's previous turn,
@@ -24,12 +24,28 @@ export interface HexTile {
   isCity: boolean;
 }
 
+/**
+ * Which track a unit belongs to. The track decides what a unit may merge with
+ * and which tile-entry rules apply to it. Buildings and markers have no class.
+ */
+export type UnitClass = 'infantry' | 'cavalry' | 'ranged';
+
 export interface EntityMeta {
   name: string;
   cost: number;
   upkeep: number;
   isUnit: boolean;
-  strength: number;
+  /** Strength used when this entity attacks, captures or shoots. */
+  offStrength: number;
+  /** Strength this entity projects in defense — the value ZoC is built from. */
+  defStrength: number;
+  /**
+   * Merge/upgrade rank inside the unit's own track. Two units merge into the
+   * unit whose tier is the sum of theirs. 0 for non-combat entities.
+   */
+  tier: number;
+  /** Units only; drives the merge track and the tile-entry rules. */
+  unitClass?: UnitClass;
   /** Max movement budget per turn. Defaults to DEFAULT_MOVEMENT (3) when absent. */
   movement?: number;
   /** Max combat actions per turn. Defaults to 1 when absent; >1 enables the charge ability. */
@@ -70,6 +86,8 @@ export type MoveHistorySnapshot = {
   freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
   graveyard: Set<string>;
   ruins: Set<string>;
+  killMarks: Set<string>;
+  firedUnits: Set<string>;
   selectedTileKey: string | null;
 };
 

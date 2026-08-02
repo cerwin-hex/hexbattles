@@ -4,13 +4,13 @@ import {
   HexTile,
   TerritoryOwner,
   ENTITY_META,
+  canCapture,
   calcDefenseUpkeep,
   getContiguousTerritory,
   getTerritoryId,
   TERRAIN_INCOME,
   CITY_BONUS,
   unitMaxAttacks,
-  isCavalry,
   calcAdminBurden,
   HEX_EDGES,
   tileKey,
@@ -18,7 +18,7 @@ import {
   improveTargetFor,
 } from "@/utils/hexGrid";
 import type { ArmedSites } from "@/types";
-import { STRENGTH_TO_UNIT, STRENGTH_TO_CAVALRY } from "@/constants/gameConstants";
+import { TIER_TO_UNIT } from "@/constants/gameConstants";
 import { ALL_GAME_ELEMENTS, type GameElements } from "@/constants/gameElements";
 
 export function calcTerritoryUpkeep(
@@ -364,20 +364,91 @@ export function initTerritoryBalances(
  * units may merge — replacing the old per-unit `unitCanMerge` + strength-only
  * `mergedUnitType`, neither of which could enforce same-track pairing. Returns
  * the merged unit type, or null when the merge is illegal: two units merge only
- * within the same track — both infantry or both
- * cavalry, never mixed — and only when their combined strength maps to a unit
- * in that track (so warrior + warrior, scout + knight, etc. all return null).
+ * within the same track — both infantry, both cavalry or both ranged, never
+ * mixed — and only when their combined tier maps to a unit in that track (so
+ * warrior + warrior, scout + knight, etc. all return null). Entities without a
+ * unit class (buildings, markers) never merge.
  *
- * Invariant: when non-null, the result's strength equals strA + strB, because
- * each STRENGTH_TO_* table maps n to a unit of strength n.
+ * Invariant: when non-null, the result's tier equals tierA + tierB, because
+ * each TIER_TO_UNIT track maps n to the unit of tier n.
  */
 export function mergeResult(a: EntityType, b: EntityType): EntityType | null {
-  if (!ENTITY_META[a].isUnit || !ENTITY_META[b].isUnit) return null;
-  const aCav = isCavalry(a);
-  if (aCav !== isCavalry(b)) return null;
-  const total = ENTITY_META[a].strength + ENTITY_META[b].strength;
-  const table = aCav ? STRENGTH_TO_CAVALRY : STRENGTH_TO_UNIT;
-  return table[total] ?? null;
+  const ca = ENTITY_META[a].unitClass;
+  const cb = ENTITY_META[b].unitClass;
+  if (!ca || ca !== cb) return null;
+  const total = ENTITY_META[a].tier + ENTITY_META[b].tier;
+  return TIER_TO_UNIT[ca][total] ?? null;
+}
+
+/** How an armed purchase resolves on one tile of the player's own territory. */
+export interface OwnTilePlacement {
+  /** The unit this purchase merges into, or null when it is not a merge. */
+  mergeInto: EntityType | null;
+  /** The purchase overruns a rebel that stands inside our own territory. */
+  overwritesRebel: boolean;
+  /** The purchase takes an enemy building that lost the strength contest. */
+  overwritesBuilding: boolean;
+  /** The purchase puts a unit on one of our own bridges. */
+  standsOnBridge: boolean;
+  /** Nothing legal can be bought here, whatever the balance says. */
+  blocked: boolean;
+}
+
+/**
+ * Whether — and how — the armed entity may be bought onto a tile of the
+ * player's own territory. The single source of truth for that rule, shared by
+ * the tap handler (which acts on it) and the highlight layer (which draws it);
+ * they drifted apart once already, leaving purchase dots on tiles that only
+ * error-flash when tapped.
+ *
+ * Gold, cities and graveyards are deliberately out of scope: the caller owns
+ * those, because the highlight layer cannot see all of them.
+ */
+export function classifyOwnTilePlacement(o: {
+  armedEntityId: EntityType;
+  occupant: EntityType | undefined;
+  tileOwner: TerritoryOwner | undefined;
+  terrain: TerrainType;
+}): OwnTilePlacement {
+  const { armedEntityId, occupant, tileOwner, terrain } = o;
+  const armedIsUnit = ENTITY_META[armedEntityId].isUnit;
+  const occupantIsAllyUnit =
+    !!occupant &&
+    occupant !== "rebel" &&
+    occupant !== "city" &&
+    occupant !== "bridge" &&
+    ENTITY_META[occupant].isUnit &&
+    tileOwner === "player";
+  const mergeInto =
+    armedIsUnit && occupantIsAllyUnit ? mergeResult(armedEntityId, occupant) : null;
+  const overwritesRebel =
+    armedIsUnit && canCapture(armedEntityId) && occupant === "rebel";
+  const occupantIsBuilding =
+    !!occupant && !ENTITY_META[occupant].isUnit && occupant !== "rebel";
+  const overwritesBuilding =
+    armedIsUnit &&
+    canCapture(armedEntityId) &&
+    occupantIsBuilding &&
+    tileOwner !== "player" &&
+    ENTITY_META[armedEntityId].offStrength >= ENTITY_META[occupant].defStrength;
+  const standsOnBridge =
+    armedIsUnit && occupant === "bridge" && tileOwner === "player";
+  // A lake tile carries a purchase only through a bridge, and only for a unit —
+  // an armed bridge is placed through its own path, never this one.
+  const lakeBlocked = terrain === "lake" && occupant !== "bridge";
+  return {
+    mergeInto,
+    overwritesRebel,
+    overwritesBuilding,
+    standsOnBridge,
+    blocked:
+      lakeBlocked ||
+      (!!occupant &&
+        !mergeInto &&
+        !overwritesRebel &&
+        !overwritesBuilding &&
+        !standsOnBridge),
+  };
 }
 
 /**
@@ -443,6 +514,31 @@ export function advanceAttacksUsed(o: {
     const now = o.isCombatMove ? used + 1 : used;
     if (now > 0) next.set(o.toKey, now);
   }
+  return next;
+}
+
+/**
+ * Move the "has fired this turn" flag from `fromKey` to `toKey`.
+ *
+ * Deliberately NOT folded into advanceAttacksUsed: that helper drops a unit's
+ * counter when the unit becomes spent, which is harmless for cavalry (a spent
+ * cavalry unit cannot act) but would hand a ranged unit a second shot, since
+ * a spent bowman may still fire. The flag survives moving and spending, and a
+ * merge unions it — otherwise a used shot could be refreshed by merging in a
+ * fresh bowman.
+ */
+export function advanceFired(o: {
+  firedUnits: Set<string>;
+  fromKey: string;
+  toKey: string;
+  isMerge: boolean;
+}): Set<string> {
+  const next = new Set(o.firedUnits);
+  const moverFired = next.has(o.fromKey);
+  const destFired = o.isMerge && next.has(o.toKey);
+  next.delete(o.fromKey);
+  if (moverFired || destFired) next.add(o.toKey);
+  else next.delete(o.toKey);
   return next;
 }
 

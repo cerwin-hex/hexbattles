@@ -23,6 +23,12 @@ import {
   IMPROVED_TERRAINS,
   calcAdminBurden,
   ADMIN_BURDEN_THRESHOLD,
+  isCavalry,
+  isRanged,
+  canCapture,
+  militaryValue,
+  moveKind,
+  unitMovement,
 } from "@/utils/hexGrid";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -47,24 +53,95 @@ function entities(pairs: [string, EntityType][]): Map<string, EntityType> {
 // ─── ENTITY_META ──────────────────────────────────────────────────────────────
 
 describe("ENTITY_META", () => {
-  it("peasant has strength 1", () => expect(ENTITY_META.peasant.strength).toBe(1));
-  it("warrior has strength 2", () => expect(ENTITY_META.warrior.strength).toBe(2));
-  it("swordsman has strength 3", () => expect(ENTITY_META.swordsman.strength).toBe(3));
+  it("peasant has strength 1", () => {
+    expect(ENTITY_META.peasant.offStrength).toBe(1);
+    expect(ENTITY_META.peasant.defStrength).toBe(1);
+  });
+  it("warrior has strength 2", () => {
+    expect(ENTITY_META.warrior.offStrength).toBe(2);
+    expect(ENTITY_META.warrior.defStrength).toBe(2);
+  });
+  it("swordsman has strength 3", () => {
+    expect(ENTITY_META.swordsman.offStrength).toBe(3);
+    expect(ENTITY_META.swordsman.defStrength).toBe(3);
+  });
   it("rebel is not a unit", () => expect(ENTITY_META.rebel.isUnit).toBe(false));
   it("city has zero upkeep", () => expect(ENTITY_META.city.upkeep).toBe(0));
-  it("bridge has zero strength", () => expect(ENTITY_META.bridge.strength).toBe(0));
+  it("bridge has zero strength", () => {
+    expect(ENTITY_META.bridge.offStrength).toBe(0);
+    expect(ENTITY_META.bridge.defStrength).toBe(0);
+  });
   it("scout is a fast cavalry unit with the charge ability", () => {
     expect(ENTITY_META.scout.isUnit).toBe(true);
-    expect(ENTITY_META.scout.strength).toBe(1);
+    expect(ENTITY_META.scout.offStrength).toBe(1);
+    expect(ENTITY_META.scout.defStrength).toBe(1);
     expect(ENTITY_META.scout.movement).toBe(5);
     expect(ENTITY_META.scout.maxAttacks).toBe(2);
   });
   it("knight is a fast cavalry unit with the charge ability", () => {
-    expect(ENTITY_META.knight.strength).toBe(2);
+    expect(ENTITY_META.knight.offStrength).toBe(2);
+    expect(ENTITY_META.knight.defStrength).toBe(2);
     expect(ENTITY_META.knight.movement).toBe(5);
     expect(ENTITY_META.knight.maxAttacks).toBe(2);
   });
   it("scouts upgrade to knights", () => expect(UNIT_UPGRADE.scout).toBe("knight"));
+});
+
+describe("offense/defense split", () => {
+  // Every entity that existed before the ranged track must keep a single
+  // effective strength: the split is a refactor for them, not a rule change.
+  const PRE_RANGED = [
+    "peasant", "warrior", "swordsman", "scout", "knight",
+    "tower", "castle", "bridge", "rebel", "city",
+  ] as const;
+
+  it("keeps offense equal to defense for every pre-ranged entity", () => {
+    for (const id of PRE_RANGED) {
+      expect(ENTITY_META[id].offStrength).toBe(ENTITY_META[id].defStrength);
+    }
+  });
+
+  it("tags each unit with its class", () => {
+    expect(ENTITY_META.peasant.unitClass).toBe("infantry");
+    expect(ENTITY_META.scout.unitClass).toBe("cavalry");
+    expect(ENTITY_META.tower.unitClass).toBeUndefined();
+    expect(isCavalry("knight")).toBe(true);
+    expect(isCavalry("swordsman")).toBe(false);
+    expect(canCapture("swordsman")).toBe(true);
+  });
+
+  it("gives every unit a tier matching its old strength", () => {
+    expect(ENTITY_META.peasant.tier).toBe(1);
+    expect(ENTITY_META.warrior.tier).toBe(2);
+    expect(ENTITY_META.swordsman.tier).toBe(3);
+    expect(ENTITY_META.scout.tier).toBe(1);
+    expect(ENTITY_META.knight.tier).toBe(2);
+  });
+
+  it("reports military value as the larger of the two strengths", () => {
+    expect(militaryValue("swordsman")).toBe(3);
+    expect(militaryValue("bridge")).toBe(0);
+  });
+
+  // mergeResult dropped its explicit isUnit guard and now relies entirely on
+  // non-units having no unitClass. That correspondence is load-bearing: a unit
+  // added without a class would silently become unmergeable.
+  it("gives a unitClass to exactly the units", () => {
+    for (const id of Object.keys(ENTITY_META) as EntityType[]) {
+      expect(ENTITY_META[id].isUnit).toBe(ENTITY_META[id].unitClass !== undefined);
+    }
+  });
+});
+
+describe("moveKind", () => {
+  it("classifies destinations independently of the mover", () => {
+    expect(moveKind(undefined)).toBe("empty");
+    expect(moveKind("bridge")).toBe("empty");
+    expect(moveKind("city")).toBe("empty");
+    expect(moveKind("rebel")).toBe("entity");
+    expect(moveKind("peasant")).toBe("entity");
+    expect(moveKind("tower")).toBe("building");
+  });
 });
 
 // ─── TERRAIN_INCOME ───────────────────────────────────────────────────────────
@@ -647,5 +724,125 @@ describe("IMPROVEMENTS catalogue", () => {
     expect(improveTargetFor("mountain")).toBeNull();
     expect(improveTargetFor("lake")).toBeNull();
     expect(improveTargetFor("field")).toBeNull();
+  });
+});
+
+// ─── Ranged units ─────────────────────────────────────────────────────────────
+
+describe("ranged units", () => {
+  it("prices them like cavalry, extrapolated to tier 3", () => {
+    expect(ENTITY_META.shortbowman.cost).toBe(12);
+    expect(ENTITY_META.shortbowman.upkeep).toBe(4);
+    expect(ENTITY_META.longbowman.cost).toBe(24);
+    expect(ENTITY_META.longbowman.upkeep).toBe(12);
+    expect(ENTITY_META.crossbowman.cost).toBe(36);
+    expect(ENTITY_META.crossbowman.upkeep).toBe(36);
+  });
+
+  it("gives them high offense and low defense", () => {
+    expect(ENTITY_META.shortbowman.offStrength).toBe(2);
+    expect(ENTITY_META.shortbowman.defStrength).toBe(0);
+    expect(ENTITY_META.longbowman.offStrength).toBe(3);
+    expect(ENTITY_META.longbowman.defStrength).toBe(1);
+    expect(ENTITY_META.crossbowman.offStrength).toBe(4);
+    expect(ENTITY_META.crossbowman.defStrength).toBe(2);
+  });
+
+  it("moves at the infantry default", () => {
+    expect(unitMovement("shortbowman")).toBe(3);
+    expect(unitMovement("crossbowman")).toBe(3);
+  });
+
+  it("cannot take ground", () => {
+    expect(canCapture("shortbowman")).toBe(false);
+    expect(canCapture("longbowman")).toBe(false);
+    expect(canCapture("crossbowman")).toBe(false);
+    expect(isRanged("peasant")).toBe(false);
+  });
+
+  it("upgrades along its own track", () => {
+    expect(UNIT_UPGRADE.shortbowman).toBe("longbowman");
+    expect(UNIT_UPGRADE.longbowman).toBe("crossbowman");
+    expect(UNIT_UPGRADE.crossbowman).toBeUndefined();
+  });
+
+  it("projects no zone of control at tier 1", () => {
+    // A Shortbowman has 0 defense, so it neither holds its own tile nor
+    // supports a neighbour: any strength-1 attacker can walk in.
+    const map = tileMap([makeTile(0, 0, "ai1"), makeTile(1, 0, "ai1")]);
+    const ents = new Map<string, EntityType>([["0,0", "shortbowman"]]);
+    expect(getMaxEnemyZoC("0,0", "player", ents, map)).toBe(0);
+    expect(getMaxEnemyZoC("1,0", "player", ents, map)).toBe(0);
+  });
+});
+
+describe("ranged movement", () => {
+  it("offers friendly ground but no neutral, enemy or rebel tile", () => {
+    // 0,0 owned bowman; 1,0 own empty; 0,1 neutral; -1,0 enemy; 1,-1 own rebel
+    const map = tileMap([
+      makeTile(0, 0, "player"),
+      makeTile(1, 0, "player"),
+      makeTile(0, 1, "neutral"),
+      makeTile(-1, 0, "ai1"),
+      makeTile(1, -1, "player"),
+    ]);
+    const ents = new Map<string, EntityType>([
+      ["0,0", "crossbowman"],
+      ["1,-1", "rebel"],
+    ]);
+    const moves = getValidMoves("0,0", "player", ents, map, new Set());
+    expect(moves.has("1,0")).toBe(true);
+    expect(moves.has("0,1")).toBe(false);
+    expect(moves.has("-1,0")).toBe(false);
+    expect(moves.has("1,-1")).toBe(false);
+  });
+
+  it("is never buyable straight into an attack", () => {
+    const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "neutral")]);
+    const tiles = [map.get("0,0")!];
+    const own = new Set(["0,0"]);
+    expect(
+      getPlacementAttackTiles("crossbowman", tiles, own, map, new Map()).size,
+    ).toBe(0);
+    expect(
+      getPlacementAttackTiles("peasant", tiles, own, map, new Map()).size,
+    ).toBe(1);
+  });
+});
+
+describe("a clamped ranged budget", () => {
+  // Bowman on 0,0 with a grass neighbour (cost 1) and a forest neighbour
+  // (cost 2), all inside its own territory so capture rules do not interfere.
+  function moves(budget: number): Set<string> {
+    const map = tileMap([
+      makeTile(0, 0, "player"),
+      makeTile(1, 0, "player", "grass"),
+      makeTile(0, 1, "player", "forest"),
+    ]);
+    return getValidMoves(
+      "0,0",
+      "player",
+      entities([["0,0", "shortbowman"]]),
+      map,
+      new Set<string>(),
+      budget,
+    );
+  }
+
+  it("reaches both neighbours on a full budget", () => {
+    const m = moves(3);
+    expect(m.has("1,0")).toBe(true);
+    expect(m.has("0,1")).toBe(true);
+  });
+
+  it("reaches only the cheap neighbour after a shot", () => {
+    // POST_SHOT_MOVEMENT is 1 and forest costs 2, so forest closes off.
+    const m = moves(1);
+    expect(m.has("1,0")).toBe(true);
+    expect(m.has("0,1")).toBe(false);
+  });
+
+  it("reaches nothing once the clamped point is spent", () => {
+    expect(moves(0).size).toBe(0);
   });
 });

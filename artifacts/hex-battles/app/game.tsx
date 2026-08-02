@@ -344,13 +344,25 @@ export default function GameScreen() {
   // At most one thing is armed at a time. Every arming path in the app goes
   // through these two setters, so the invariant lives in exactly one place and
   // children keep their existing `setArmedEntityId(null)` call shape.
+  //
+  // Arming also clears the unit selection, making "a unit is selected" and "a
+  // purchase is armed" mutually exclusive. Without that, a selected unit's
+  // highlights and the armed purchase's highlights can both claim the same
+  // enemy tile — and the tap handler's unit branches outrank both buy branches,
+  // so the purchase highlight would be a lie about what tapping does. Only
+  // arming clears it: disarming (`null`) must leave the selection alone,
+  // because completing or cancelling a purchase should not also deselect.
+  // Clearing selectedEntityKey does not disturb selectedTileKey, so the
+  // territory selection the purchase highlights are computed from survives.
   const setArmedEntityId = useCallback((id: EntityType | null) => {
     setArmedEntityIdState(id);
     setArmedImprovementState(null);
+    if (id !== null) setSelectedEntityKey(null);
   }, []);
   const setArmedImprovement = useCallback((t: TerrainType | null) => {
     setArmedImprovementState(t);
     setArmedEntityIdState(null);
+    if (t !== null) setSelectedEntityKey(null);
   }, []);
   const lastTileTapMs = useRef(0);
   const [entities, setEntities] = useState<Map<string, EntityType>>(new Map());
@@ -373,6 +385,14 @@ export default function GameScreen() {
   const aiTurnRef = useRef<boolean>(false);
   const [graveyard, setGraveyard] = useState<Set<string>>(new Set());
   const [ruins, setRuins] = useState<Set<string>>(new Set());
+  // Tiles where a ranged shot killed something. Purely visual — a kill mark
+  // never spawns a rebel. Cleared at the start of the player's next turn
+  // (aiStrategy.runAiTurn), NOT at end of turn, so it stays visible while the
+  // AI phase plays out.
+  const [killMarks, setKillMarks] = useState<Set<string>>(new Set());
+  // Ranged units that have already fired this turn; reset with every other
+  // per-turn budget at end of turn.
+  const [firedUnits, setFiredUnits] = useState<Set<string>>(new Set());
   // cities is completely separate from entities — a permanent Set of tile keys
   // that have a city (pre-placed OR player/AI built). Units can freely occupy
   // city tiles without touching this set. Cities are never removed once placed.
@@ -598,6 +618,8 @@ export default function GameScreen() {
       setLiveOwnerMap(s.liveOwnerMap);
       setGraveyard(s.graveyard);
       setRuins(s.ruins);
+      setKillMarks(s.killMarks);
+      setFiredUnits(s.firedUnits);
       setCities(s.cities);
       setFreeTowerUsedTiles(s.freeTowerUsedTiles);
       // Absent in saves written before arming was persisted; empty is safe and
@@ -620,10 +642,12 @@ export default function GameScreen() {
     setCombatSpentUnits(new Set());
     setPartialMoves(new Map());
     setAttacksUsed(new Map());
+    setFiredUnits(new Set());
     setMutableTileMap(new Map(tileMap));
     setLiveOwnerMap(new Map());
     setGraveyard(new Set());
     setRuins(new Set());
+    setKillMarks(new Set());
     setFreeTowerUsedTiles(new Map());
 
     const initialEntities = new Map<string, EntityType>();
@@ -732,6 +756,7 @@ export default function GameScreen() {
         setTerritoryBalances,
         setGraveyard,
         setRuins,
+        setKillMarks,
         setLiveOwnerMap,
         setCities,
         setFreeTowerUsedTiles,
@@ -799,6 +824,8 @@ export default function GameScreen() {
         cities,
         graveyard,
         ruins,
+        killMarks,
+        firedUnits,
         // Refs, not state: this effect only runs on the player's turn, by which
         // point runAiTurn has already published the freshly armed buckets.
         armedGraveyard: armedGraveyardRef.current,
@@ -824,6 +851,8 @@ export default function GameScreen() {
     cities,
     graveyard,
     ruins,
+    killMarks,
+    firedUnits,
     freeTowerUsedTiles,
     turn,
     isAiTurn,
@@ -837,6 +866,7 @@ export default function GameScreen() {
     selectedTileKeys,
     selectedTerritoryDefenseCounts,
     validMoveTiles,
+    validRangedTargets,
     validBridgePlacementTiles,
     hasBridgePlacementAvailable,
     validImprovementTiles,
@@ -858,6 +888,7 @@ export default function GameScreen() {
     spentUnits,
     combatSpentUnits,
     partialMoves,
+    firedUnits,
     territoryBalances,
     cities,
     freeTowerUsedTiles,
@@ -960,6 +991,8 @@ export default function GameScreen() {
     freeTowerUsedTiles,
     graveyard,
     ruins,
+    killMarks,
+    firedUnits,
     selectedTileKey,
     isAiTurn,
     gameResult,
@@ -977,6 +1010,8 @@ export default function GameScreen() {
     setFreeTowerUsedTiles,
     setGraveyard,
     setRuins,
+    setKillMarks,
+    setFiredUnits,
     setSelectedTileKey,
     setSelectedEntityKey,
     setArmedEntityId,
@@ -1112,6 +1147,7 @@ export default function GameScreen() {
         activeTileMap,
         selectedEntityKey,
         validMoveTiles,
+        validRangedTargets,
         armedEntityId,
         armedImprovement,
         elements,
@@ -1124,6 +1160,8 @@ export default function GameScreen() {
         turn,
         graveyard,
         ruins,
+        killMarks,
+        firedUnits,
         liveOwnerMap,
         combatSpentUnits,
         spentUnits,
@@ -1146,6 +1184,8 @@ export default function GameScreen() {
         setSelectedTileKey,
         setGraveyard,
         setRuins,
+        setKillMarks,
+        setFiredUnits,
         setArmedEntityId,
         setArmedImprovement,
         setFreeTowerUsedTiles,
@@ -1170,6 +1210,7 @@ export default function GameScreen() {
       ribbonOpen,
       selectedEntityKey,
       validMoveTiles,
+      validRangedTargets,
       validBridgePlacementTiles,
       validImprovementTiles,
       validPlacementAttackTiles,
@@ -1182,6 +1223,8 @@ export default function GameScreen() {
       gameResult,
       graveyard,
       ruins,
+      killMarks,
+      firedUnits,
       turn,
       freeTowerUsedTiles,
       cities,
@@ -1224,6 +1267,7 @@ export default function GameScreen() {
       setCombatSpentUnits,
       setPartialMoves,
       setAttacksUsed,
+      setFiredUnits,
       setIsAiTurn,
       checkWinLoss,
       runAiTurn,
@@ -1366,6 +1410,7 @@ export default function GameScreen() {
                 validMoveTiles={validMoveTiles}
                 validBridgePlacementTiles={validBridgePlacementTiles}
                 validPlacementAttackTiles={validPlacementAttackTiles}
+                validRangedTargets={validRangedTargets}
                 armedEntityId={armedEntityId}
                 tileDataMap={tileDataMap}
                 HEX_SIZE={HEX_SIZE}
@@ -1393,6 +1438,7 @@ export default function GameScreen() {
             <GraveyardLayer
               graveyard={graveyard}
               ruins={ruins}
+              killMarks={killMarks}
               entities={entities}
               tileDataMap={tileDataMap}
               HEX_SIZE={HEX_SIZE}
@@ -1453,6 +1499,7 @@ export default function GameScreen() {
               validBridgePlacementTiles={validBridgePlacementTiles}
               validImprovementTiles={validImprovementTiles}
               validPlacementAttackTiles={validPlacementAttackTiles}
+              validRangedTargets={validRangedTargets}
               selectedTileKeys={selectedTileKeys}
               armedEntityId={armedEntityId}
               armedImprovement={armedImprovement}
@@ -1614,12 +1661,14 @@ export default function GameScreen() {
           entities={entities}
           activeTileMap={activeTileMap}
           spentUnits={spentUnits}
+          firedUnits={firedUnits}
           territoryBalances={territoryBalances}
           isAiTurn={isAiTurn}
           gameResult={gameResult}
           botInset={botInset}
           pushHistory={pushHistory}
           setEntities={setEntities}
+          setFiredUnits={setFiredUnits}
           setTerritoryBalances={setTerritoryBalances}
           setSelectedEntityKey={setSelectedEntityKey}
           onRemoveOverride={

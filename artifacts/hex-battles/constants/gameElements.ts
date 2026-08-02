@@ -9,7 +9,12 @@ import { ENTITY_META } from "@/utils/hexGrid";
  * derives from the registry. Features living on an unmerged branch add their
  * own entry when they merge, so this file never carries dead ids.
  */
-export type GameElementId = "mounted" | "improvements" | "adminBurden" | "rebels";
+export type GameElementId =
+  | "mounted"
+  | "ranged"
+  | "improvements"
+  | "adminBurden"
+  | "rebels";
 
 export interface GameElementDef {
   id: GameElementId;
@@ -30,6 +35,15 @@ export const GAME_ELEMENTS: readonly GameElementDef[] = [
     name: "Mounted Units",
     blurb: "Scouts and knights that ride far and strike on the move",
     beta: false,
+  },
+  {
+    // Beta: the shooting rules are playable but unbalanced, and no AI
+    // difficulty knows how to buy or fire a bowman yet, so a game with ranged
+    // units on is a game the AI plays a unit track short.
+    id: "ranged",
+    name: "Ranged Units",
+    blurb: "Bowmen that shoot a neighbour instead of taking ground",
+    beta: true,
   },
   {
     id: "improvements",
@@ -100,6 +114,9 @@ export function decodeGameElements(s: string | undefined): GameElements {
 const ENTITY_ELEMENT: Partial<Record<EntityType, GameElementId>> = {
   scout: "mounted",
   knight: "mounted",
+  shortbowman: "ranged",
+  longbowman: "ranged",
+  crossbowman: "ranged",
 };
 
 export function isEntityEnabled(id: EntityType, elements: GameElements): boolean {

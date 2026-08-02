@@ -1,6 +1,10 @@
-import { ENTITY_META, IMPROVEMENTS } from "@/utils/hexGrid";
-import type { EntityType, ImprovementMeta } from "@/utils/hexGrid";
-import { isEntityEnabled, type GameElements } from "@/constants/gameElements";
+import { ENTITY_META, IMPROVEMENTS, isRanged } from "@/utils/hexGrid";
+import type { EntityType, ImprovementMeta, UnitClass } from "@/utils/hexGrid";
+import {
+  enabledUnitTypes,
+  isEntityEnabled,
+  type GameElements,
+} from "@/constants/gameElements";
 import type { EntityMeta } from "@/types";
 
 export const BTN_H = 52;
@@ -22,20 +26,43 @@ export const ORDERED_EDGES: ReadonlyArray<{
   { dir: [1, -1], verts: [5, 0] },
 ];
 
-export const STRENGTH_TO_UNIT: Record<number, EntityType> = {
-  1: "peasant",
-  2: "warrior",
-  3: "swordsman",
+/**
+ * Merge tables, one per unit track. Two units of the same track merge into the
+ * unit whose tier equals the sum of theirs; a missing entry means the merge is
+ * illegal. Keyed by tier rather than by strength so a track whose strengths do
+ * not equal its tiers (ranged) merges correctly.
+ */
+export const TIER_TO_UNIT: Record<UnitClass, Record<number, EntityType>> = {
+  infantry: { 1: "peasant", 2: "warrior", 3: "swordsman" },
+  cavalry:  { 1: "scout",   2: "knight" },
+  ranged:   { 1: "shortbowman", 2: "longbowman", 3: "crossbowman" },
 };
 
-// Cavalry merge track, parallel to STRENGTH_TO_UNIT. Cavalry keeps its own
-// upgrade line, so two scouts (strength 1) merge into a knight (strength 2)
-// rather than collapsing into an infantry unit. There is no strength-3 cavalry,
-// so only scout + scout is a valid cavalry merge.
-export const STRENGTH_TO_CAVALRY: Record<number, EntityType> = {
-  1: "scout",
-  2: "knight",
-};
+// Memoized on the element object's identity, like `enabledUnitTypes`: the
+// expert search asks for this list once per candidate-generation pass, and
+// game.tsx builds exactly one element object per game.
+const aiBuyableCache = new WeakMap<GameElements, EntityType[]>();
+
+/**
+ * The units the AI is allowed to buy — the single source of truth for the
+ * scope constraint "the AI never buys ranged units". Two filters compose here:
+ * the element set the player chose, and the ranged exclusion. Ranged units are
+ * player-only for now: the AI has no ranged behaviour, so buying one would just
+ * burn gold on a unit it never fires.
+ *
+ * Both AI buy lists derive from this — `aiUnitBuyOrder` in `logic/aiStrategy.ts`
+ * and the buy candidates in `logic/aiExpert.ts` — so the filter cannot drift out
+ * of step between the difficulty tiers. Callers that need a different order must
+ * copy before sorting; sorting in place would scramble the memoized array.
+ */
+export function aiBuyableUnits(elements: GameElements): readonly EntityType[] {
+  let cached = aiBuyableCache.get(elements);
+  if (!cached) {
+    cached = enabledUnitTypes(elements).filter((e) => !isRanged(e));
+    aiBuyableCache.set(elements, cached);
+  }
+  return cached;
+}
 
 export type Purchasable = { id: EntityType } & EntityMeta;
 
@@ -79,7 +106,8 @@ export const INFO_TABLE_ROWS = PURCHASABLES.map((p) => ({
   name: p.name,
   cost: p.cost,
   upkeep: p.upkeep,
-  strength: p.strength,
+  offStrength: p.offStrength,
+  defStrength: p.defStrength,
 }));
 
 /**

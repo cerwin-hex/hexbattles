@@ -15,7 +15,7 @@ import {
   unitMovement,
   unitMaxAttacks,
   isCavalry,
-  cavalryMoveKind,
+  moveKind,
   improveCostFor,
   IMPROVED_TERRAINS,
 } from "@/utils/hexGrid";
@@ -30,6 +30,7 @@ import {
 } from "@/logic/aiHelpers";
 import type { AiContext } from "@/logic/aiHelpers";
 import { runExpertTerritoryDecisionLoop } from "@/logic/aiExpert";
+import { aiBuyableUnits } from "@/constants/gameConstants";
 import type { AiState, Difficulty } from "@/types";
 import {
   ALL_GAME_ELEMENTS,
@@ -38,25 +39,27 @@ import {
   type GameElements,
 } from "@/constants/gameElements";
 
-// Unit purchase candidates for the AI, derived from ENTITY_META so new units are
-// picked up automatically, and filtered by the active elements so a disabled
-// track is never bought. The buy loops take the first affordable type meeting
-// the strength threshold. Within a strength tier, cavalry (more attacks) is
-// preferred over plain infantry, so the AI buys a Scout/Knight when it can
-// afford one and falls back to cheaper infantry otherwise.
+// Unit purchase candidates for the AI, ordered for the buy loops, which take the
+// first affordable type meeting the strength threshold. Within a tier, cavalry
+// (more attacks) is preferred over plain infantry, so the AI buys a Scout/Knight
+// when it can afford one and falls back to cheaper infantry otherwise.
 //
-// The `.slice()` is load-bearing: `enabledUnitTypes` hands back its memoized
+// WHICH units the AI may buy is not decided here — `aiBuyableUnits` owns that
+// (the element set and the ranged exclusion), shared with the expert search's
+// buy candidates.
+//
+// The `.slice()` is load-bearing: `aiBuyableUnits` hands back its memoized
 // array, and `sort` would otherwise reorder the cache in place — leaving the
 // expert search's candidate loop reading a list this function had scrambled.
 const aiUnitBuyOrder = (
   elements: GameElements,
-  strengthDir: 1 | -1,
+  tierDir: 1 | -1,
 ): EntityType[] =>
-  enabledUnitTypes(elements)
+  aiBuyableUnits(elements)
     .slice()
     .sort(
       (a, b) =>
-        strengthDir * (ENTITY_META[a].strength - ENTITY_META[b].strength) ||
+        tierDir * (ENTITY_META[a].tier - ENTITY_META[b].tier) ||
         unitMaxAttacks(b) - unitMaxAttacks(a) || // cavalry first within a tier
         ENTITY_META[a].cost - ENTITY_META[b].cost,
     );
@@ -111,7 +114,7 @@ export async function runAiTerritoryDecisionLoop(
 
     const currMaxStr = currTerr.reduce((best, t) => {
       const e = aiCtx.entities.get(t.key);
-      return e && ENTITY_META[e].isUnit ? Math.max(best, ENTITY_META[e].strength) : best;
+      return e && ENTITY_META[e].isUnit ? Math.max(best, ENTITY_META[e].defStrength) : best;
     }, 0);
 
     const currBorderTiles = currTerr.filter((t) => {
@@ -139,7 +142,9 @@ export async function runAiTerritoryDecisionLoop(
       }
     }
 
-    let strongerEnemy: { key: string; entity: EntityType; strength: number; owner: TerritoryOwner } | null = null;
+    // `offStrength` here is the threat this enemy unit poses to our tiles, so the
+    // AI's own defences are sized against it (see PRIORITY 2's defStrength checks).
+    let strongerEnemy: { key: string; entity: EntityType; offStrength: number; owner: TerritoryOwner } | null = null;
     for (const bt of currBorderTiles) {
       const [bq, br] = bt.key.split(",").map(Number);
       for (const [ek, ee] of aiCtx.entities) {
@@ -148,9 +153,9 @@ export async function runAiTerritoryDecisionLoop(
         if (!et || et.owner === aiOwner || et.owner === "neutral") continue;
         if (!adjacentEnemyTileKeys.has(ek)) continue;
         const [eq, er] = ek.split(",").map(Number);
-        if (hexDistance(bq, br, eq, er) <= 3 && ENTITY_META[ee].strength > currMaxStr) {
-          if (!strongerEnemy || ENTITY_META[ee].strength > strongerEnemy.strength) {
-            strongerEnemy = { key: ek, entity: ee, strength: ENTITY_META[ee].strength, owner: et.owner as TerritoryOwner };
+        if (hexDistance(bq, br, eq, er) <= 3 && ENTITY_META[ee].offStrength > currMaxStr) {
+          if (!strongerEnemy || ENTITY_META[ee].offStrength > strongerEnemy.offStrength) {
+            strongerEnemy = { key: ek, entity: ee, offStrength: ENTITY_META[ee].offStrength, owner: et.owner as TerritoryOwner };
           }
         }
       }
@@ -180,7 +185,7 @@ export async function runAiTerritoryDecisionLoop(
           const mt = aiCtx.tileMap.get(mk);
           if (!mt || mt.owner !== eOwner) continue;
           const zoc = getMaxEnemyZoC(mk, aiOwner, aiCtx.entities, aiCtx.tileMap);
-          if (ENTITY_META[ue].strength <= zoc) continue;
+          if (ENTITY_META[ue].offStrength <= zoc) continue;
           if (mt.terrain === "lake") continue;
           const score = dtSplitScore(mk, eOwner, aiCtx);
           const neg = dtCaptureNegatesIncome(mk, eOwner, aiCtx);
@@ -207,7 +212,7 @@ export async function runAiTerritoryDecisionLoop(
             })
             .map((t) => t.key),
         );
-        const merge = dtFindMergeMove(strongerEnemy.strength, splitTargets, availUnits, aiCtx);
+        const merge = dtFindMergeMove(strongerEnemy.offStrength, splitTargets, availUnits, aiCtx);
         if (merge) actionTaken = await exec.move(merge.from, merge.to);
       }
       if (!actionTaken) {
@@ -218,7 +223,7 @@ export async function runAiTerritoryDecisionLoop(
             const mt = aiCtx.tileMap.get(mk);
             if (!mt || mt.owner !== eOwner) continue;
             const zoc = getMaxEnemyZoC(mk, aiOwner, aiCtx.entities, aiCtx.tileMap);
-            if (ENTITY_META[ue].strength <= zoc) continue;
+            if (ENTITY_META[ue].offStrength <= zoc) continue;
             if (mt.terrain === "lake") continue;
             const simMap = new Map(aiCtx.tileMap);
             simMap.set(mk, { ...mt, owner: aiOwner });
@@ -229,7 +234,7 @@ export async function runAiTerritoryDecisionLoop(
               const comp = getContiguousTerritory(simMap, t.key, eOwner, aiCtx.entities);
               const hasE = comp.some((ct) => {
                 const ce = aiCtx.entities.get(ct.key);
-                return ce && ENTITY_META[ce].strength > 0;
+                return ce && ENTITY_META[ce].defStrength > 0;
               });
               if (hasE) totalSz += comp.length;
               for (const ct of comp) vis2.add(ct.key);
@@ -243,7 +248,7 @@ export async function runAiTerritoryDecisionLoop(
 
     // ══ PRIORITY 2 (DEFENDING): Defend against the stronger enemy unit ══
     if (!actionTaken && currAiState === "defending" && strongerEnemy) {
-      const eStr = strongerEnemy.strength;
+      const eStr = strongerEnemy.offStrength;
       const [seqE, serE] = strongerEnemy.key.split(",").map(Number);
 
       for (const t of currTerr) {
@@ -251,7 +256,7 @@ export async function runAiTerritoryDecisionLoop(
         const e = aiCtx.entities.get(t.key);
         if (!e || ENTITY_META[e].isUnit) continue;
         const up = UNIT_UPGRADE[e];
-        if (!up || ENTITY_META[up].strength < eStr) continue;
+        if (!up || ENTITY_META[up].defStrength < eStr) continue;
         const upgCost = ENTITY_META[up].cost - ENTITY_META[e].cost;
         const dUpk = ENTITY_META[up].upkeep - ENTITY_META[e].upkeep;
         if (canAfford(upgCost, dUpk)) actionTaken = await exec.upgrade(t.key, up, upgCost);
@@ -263,7 +268,7 @@ export async function runAiTerritoryDecisionLoop(
           const [uq, ur] = uk.split(",").map(Number);
           if (hexDistance(uq, ur, seqE, serE) > 5) continue;
           const up = UNIT_UPGRADE[ue];
-          if (!up || ENTITY_META[up].strength < eStr) continue;
+          if (!up || ENTITY_META[up].defStrength < eStr) continue;
           const upgCost = ENTITY_META[up].cost - ENTITY_META[ue].cost;
           const dUpk = ENTITY_META[up].upkeep - ENTITY_META[ue].upkeep;
           if (canAfford(upgCost, dUpk)) actionTaken = await exec.upgrade(uk, up, upgCost);
@@ -273,7 +278,7 @@ export async function runAiTerritoryDecisionLoop(
       if (!actionTaken) {
         for (const uType of buyOrderAsc) {
           if (actionTaken) break;
-          if (ENTITY_META[uType].strength < eStr) continue;
+          if (ENTITY_META[uType].defStrength < eStr) continue;
           const uCost = ENTITY_META[uType].cost;
           const uUpk = ENTITY_META[uType].upkeep;
           if (!canAfford(uCost, uUpk)) continue;
@@ -298,13 +303,13 @@ export async function runAiTerritoryDecisionLoop(
       if (!actionTaken) {
         for (const bType of (["castle", "tower"] as EntityType[])) {
           if (actionTaken) break;
-          if (ENTITY_META[bType].strength < eStr) continue;
+          if (ENTITY_META[bType].defStrength < eStr) continue;
           const bCost = ENTITY_META[bType].cost;
           const bUpk = ENTITY_META[bType].upkeep;
           if (!canAfford(bCost, bUpk)) continue;
           if (bType === "castle" && !currTerr.some((t) => {
             const e = aiCtx.entities.get(t.key);
-            return !!e && ENTITY_META[e].isUnit && ENTITY_META[e].strength >= 2;
+            return !!e && ENTITY_META[e].isUnit && ENTITY_META[e].defStrength >= 2;
           })) continue;
           const rawPlacements = currTerr.filter((t) => {
             if (t.terrain === "mountain" || t.terrain === "lake") return false;
@@ -324,13 +329,13 @@ export async function runAiTerritoryDecisionLoop(
       if (!actionTaken) {
         for (const bType of (["tower", "castle"] as EntityType[])) {
           if (actionTaken) break;
-          if (ENTITY_META[bType].strength < eStr - 1) continue;
+          if (ENTITY_META[bType].defStrength < eStr - 1) continue;
           const bCost = ENTITY_META[bType].cost;
           const bUpk = ENTITY_META[bType].upkeep;
           if (!canAfford(bCost, bUpk)) continue;
           if (bType === "castle" && !currTerr.some((t) => {
             const e = aiCtx.entities.get(t.key);
-            return !!e && ENTITY_META[e].isUnit && ENTITY_META[e].strength >= 2;
+            return !!e && ENTITY_META[e].isUnit && ENTITY_META[e].defStrength >= 2;
           })) continue;
           const rawPlacements = currTerr.filter((t) => {
             if (t.terrain === "mountain" || t.terrain === "lake") return false;
@@ -358,7 +363,7 @@ export async function runAiTerritoryDecisionLoop(
           const mt = aiCtx.tileMap.get(mk);
           if (!mt || mt.owner === aiOwner || mt.owner === "neutral") continue;
           const zoc = getMaxEnemyZoC(mk, aiOwner, aiCtx.entities, aiCtx.tileMap);
-          if (ENTITY_META[ue].strength <= zoc) continue;
+          if (ENTITY_META[ue].offStrength <= zoc) continue;
           if (mt.terrain === "lake") continue;
           const eOwnerA = mt.owner as TerritoryOwner;
           const score = dtSplitScore(mk, eOwnerA, aiCtx);
@@ -446,7 +451,7 @@ export async function runAiTerritoryDecisionLoop(
           const zoc = getMaxEnemyZoC(bridge.tile, aiOwner, aiCtx.entities, aiCtx.tileMap);
           for (const [uk, ue] of availUnits) {
             if (actionTaken) break;
-            if (ENTITY_META[ue].strength <= zoc) continue;
+            if (ENTITY_META[ue].offStrength <= zoc) continue;
             const vm = getValidMoves(uk, aiOwner, aiCtx.entities, aiCtx.tileMap, aiCtx.spentUnits, aiCtx.partialMoves.get(uk) ?? unitMovement(aiCtx.entities.get(uk)!), aiCtx.combatSpentUnits);
             if (!vm.has(bridge.tile)) continue;
             actionTaken = await exec.move(uk, bridge.tile);
@@ -458,7 +463,7 @@ export async function runAiTerritoryDecisionLoop(
           if (!actionTaken) {
             for (const uType of buyOrderAsc) {
               if (actionTaken) break;
-              const str = ENTITY_META[uType].strength;
+              const str = ENTITY_META[uType].offStrength;
               const cost = ENTITY_META[uType].cost;
               const upk = ENTITY_META[uType].upkeep;
               if (str <= zoc || !canAfford(cost, upk)) continue;
@@ -513,7 +518,7 @@ export async function runAiTerritoryDecisionLoop(
           if (!canAfford(bCost, bUpk)) continue;
           if (bType === "castle" && !currTerr.some((t) => {
             const e = aiCtx.entities.get(t.key);
-            return !!e && ENTITY_META[e].isUnit && ENTITY_META[e].strength >= 2;
+            return !!e && ENTITY_META[e].isUnit && ENTITY_META[e].defStrength >= 2;
           })) continue;
           actionTaken = await exec.build(bType, placementsC[0].key, bCost);
         }
@@ -631,7 +636,7 @@ export async function runAiTerritoryDecisionLoop(
                 if (hexDistance(ukq, ukr, nq, nr) !== 1) return false;
                 return attackTargets.some(targetKey => {
                   const zoc = getMaxEnemyZoC(targetKey, aiOwner, aiCtx.entities, aiCtx.tileMap);
-                  return ENTITY_META[ue].strength > zoc;
+                  return ENTITY_META[ue].offStrength > zoc;
                 });
               });
 
@@ -656,13 +661,13 @@ export async function runAiTerritoryDecisionLoop(
           const me = aiCtx.entities.get(mk);
           if (!me || me === "rebel") continue;
           const zoc = getMaxEnemyZoC(mk, aiOwner, aiCtx.entities, aiCtx.tileMap);
-          if (ENTITY_META[ue].strength <= zoc) continue;
+          if (ENTITY_META[ue].offStrength <= zoc) continue;
           if (mt.terrain === "lake") continue;
           const eOwnerE1 = mt.owner as TerritoryOwner;
           entityAttacks.push({
             fk: uk, tk: mk,
-            eStr: ENTITY_META[me].strength,
-            aStr: ENTITY_META[ue].strength,
+            eStr: ENTITY_META[me].defStrength,
+            aStr: ENTITY_META[ue].offStrength,
             oneHex: dtCaptureCreatesOneHex(mk, eOwnerE1, aiCtx),
             neg: dtCaptureNegatesIncome(mk, eOwnerE1, aiCtx),
             score: dtSplitScore(mk, eOwnerE1, aiCtx),
@@ -695,7 +700,7 @@ export async function runAiTerritoryDecisionLoop(
       if (!actionTaken) {
         for (const uType of buyOrderDesc) {
           if (actionTaken) break;
-          const str = ENTITY_META[uType].strength;
+          const str = ENTITY_META[uType].offStrength;
           const cost = ENTITY_META[uType].cost;
           const upk = ENTITY_META[uType].upkeep;
           if (!canAfford(cost, upk)) continue;
@@ -710,7 +715,7 @@ export async function runAiTerritoryDecisionLoop(
               if (!ne || ne === "rebel") continue;
               if (nt.terrain === "lake") continue;
               // Cavalry can never assault a fortification.
-              if (isCavalry(uType) && cavalryMoveKind(ne) === "building") continue;
+              if (isCavalry(uType) && moveKind(ne) === "building") continue;
               const zoc = getMaxEnemyZoC(nk, aiOwner, aiCtx.entities, aiCtx.tileMap);
               if (str > zoc) {
                 actionTaken = await exec.buy(uType, nk, cost, true);
@@ -731,7 +736,7 @@ export async function runAiTerritoryDecisionLoop(
             const me = aiCtx.entities.get(mk);
             if (me && me !== "rebel") continue;
             const zoc = getMaxEnemyZoC(mk, aiOwner, aiCtx.entities, aiCtx.tileMap);
-            if (ENTITY_META[ue].strength <= zoc) continue;
+            if (ENTITY_META[ue].offStrength <= zoc) continue;
             if (mt.terrain === "lake") continue;
             const sz = getCT(mk, mt.owner as TerritoryOwner).length;
             emptyEnemyMoves.push({ fk: uk, tk: mk, sz });
@@ -757,7 +762,7 @@ export async function runAiTerritoryDecisionLoop(
         if (!actionTaken) {
           for (const uType of buyOrderAsc) {
             if (actionTaken) break;
-            const str = ENTITY_META[uType].strength;
+            const str = ENTITY_META[uType].offStrength;
             const cost = ENTITY_META[uType].cost;
             const upk = ENTITY_META[uType].upkeep;
             if (!canAfford(cost, upk)) continue;
@@ -792,7 +797,7 @@ export async function runAiTerritoryDecisionLoop(
             const mt = aiCtx.tileMap.get(mk);
             if (!mt || mt.owner !== "neutral") continue;
             const zoc = getMaxEnemyZoC(mk, aiOwner, aiCtx.entities, aiCtx.tileMap);
-            if (ENTITY_META[ue].strength <= zoc) continue;
+            if (ENTITY_META[ue].offStrength <= zoc) continue;
             if (mt.terrain === "lake") continue;
             neutralMoves.push({ fk: uk, tk: mk, prio: neutralPrio(mt) });
           }
@@ -813,7 +818,7 @@ export async function runAiTerritoryDecisionLoop(
         if (!actionTaken) {
           for (const uType of buyOrderAsc) {
             if (actionTaken) break;
-            const str = ENTITY_META[uType].strength;
+            const str = ENTITY_META[uType].offStrength;
             const cost = ENTITY_META[uType].cost;
             const upk = ENTITY_META[uType].upkeep;
             if (!canAfford(cost, upk)) continue;
@@ -883,7 +888,7 @@ export async function runAiTerritoryDecisionLoop(
             return nt && nt.owner !== aiOwner && nt.owner !== "neutral";
           });
         })
-        .sort(([, a2], [, b2]) => ENTITY_META[a2].strength - ENTITY_META[b2].strength);
+        .sort(([, a2], [, b2]) => ENTITY_META[a2].tier - ENTITY_META[b2].tier);
       for (const rt of rebelTiles) {
         if (actionTaken) break;
         for (const [uk] of unitsAsc) {
@@ -1002,6 +1007,8 @@ export interface AiTurnCallbacks {
     advanceTurn(): void;
     /** Store the next-round armed graves/ruins snapshot (called once at round end). */
     setArmedGraves(graves: ArmedSites, ruins: ArmedSites): void;
+    /** Clear the ranged kill markers; called once as the player's turn begins. */
+    setKillMarks(v: Set<string>): void;
   };
   refs: {
     getAiStateMap(): Map<string, AiState>;
@@ -1262,7 +1269,7 @@ export async function runAiTurn(
         if (!updId) return;
         const updMaxStr = updTerr.reduce((best, t) => {
           const e = ws.entities.get(t.key);
-          return e ? Math.max(best, ENTITY_META[e].strength) : best;
+          return e ? Math.max(best, ENTITY_META[e].defStrength) : best;
         }, 0);
         const updBorder = updTerr.filter((t) => {
           const [tq, tr] = t.key.split(",").map(Number);
@@ -1279,7 +1286,7 @@ export async function runAiTurn(
             const et = ws.tileMap.get(ek);
             if (!et || et.owner === aiOwner || et.owner === "neutral") continue;
             const [eq2, er2] = ek.split(",").map(Number);
-            if (hexDistance(bq, br, eq2, er2) <= 3 && ENTITY_META[ee].strength > updMaxStr) return true;
+            if (hexDistance(bq, br, eq2, er2) <= 3 && ENTITY_META[ee].offStrength > updMaxStr) return true;
           }
           return false;
         });
@@ -1381,7 +1388,7 @@ export async function runAiTurn(
           // Combat-lock the unit when it strikes a defender (cavalry: no second
           // strike) or finishes its combat; carries with it on later moves.
           const isEntityStrike =
-            isCombatMove && cavalryMoveKind(destExisting) === "entity";
+            isCombatMove && moveKind(destExisting) === "entity";
           ws.combatSpentUnits = advanceCombatSpent({
             combatSpentUnits: ws.combatSpentUnits,
             fromKey,
@@ -1498,7 +1505,7 @@ export async function runAiTurn(
           if (unitMaxAttacks(unitType) > 1) {
             ws.attacksUsed = new Map(ws.attacksUsed);
             ws.attacksUsed.set(target, 1);
-            if (cavalryMoveKind(targetEntityBefore) === "entity") {
+            if (moveKind(targetEntityBefore) === "entity") {
               ws.combatSpentUnits = new Set(ws.combatSpentUnits);
               ws.combatSpentUnits.add(target);
             }
@@ -1750,6 +1757,17 @@ export async function runAiTurn(
     armedGraves.set("player", armedSitesForOwner("player", ws.tileMap, ws.graveyard));
     armedRuins.set("player", armedSitesForOwner("player", ws.tileMap, ws.ruins));
   }
+
+  // ── Clear last round's ranged kill markers ──────────────────────────────────
+  // Start of the player's turn: clear last round's ranged kill markers. In this
+  // version only the player can create one, and only during the player's own
+  // turn, so a single wholesale clear here gives every marker exactly one full
+  // round on screen — the same lifetime a grave gets. When the AI learns to
+  // fire, this must become an owner-scoped sweep like spawnRebelsForOwner.
+  // Deliberately NOT gated on round 1 (unlike the rebel spawn above, and for the
+  // same reason sweepNeutralMarkers isn't): there is nothing to suspend, and
+  // gating it would give a round-1 marker two rounds instead of one.
+  cbs.state.setKillMarks(new Set());
 
   // ── Expire orphaned markers on bridgeless water ─────────────────────────────
   // No owner sweep reaches a neutral tile, so this single fixed point is the

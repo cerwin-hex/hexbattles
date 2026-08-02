@@ -31,7 +31,7 @@ export interface EconBreakdown {
     id: EntityType;
     name: string;
     count: number;
-    category: "infantry" | "cavalry" | "buildings";
+    category: "infantry" | "cavalry" | "ranged" | "buildings";
     upkeepPerUnit: number | null;
     mostExpensiveCost: number | null;
     total: number;

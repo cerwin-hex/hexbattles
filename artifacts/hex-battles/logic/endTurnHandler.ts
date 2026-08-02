@@ -37,6 +37,12 @@ export interface EndTurnParams {
   setCombatSpentUnits: (s: Set<string>) => void;
   setPartialMoves: (m: Map<string, number>) => void;
   setAttacksUsed: (m: Map<string, number>) => void;
+  /**
+   * Ranged shots reset with every other per-turn budget. Deliberately no
+   * `setKillMarks` counterpart: a kill marker must survive the AI phase and is
+   * cleared at the start of the player's next turn, inside `runAiTurn`.
+   */
+  setFiredUnits: (s: Set<string>) => void;
   setIsAiTurn: (b: boolean) => void;
   checkWinLoss: (map: Map<string, HexTile>) => boolean;
   runAiTurn: (
@@ -81,6 +87,7 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
     setCombatSpentUnits,
     setPartialMoves,
     setAttacksUsed,
+    setFiredUnits,
     setIsAiTurn,
     checkWinLoss,
     runAiTurn,
@@ -156,6 +163,7 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
   setCombatSpentUnits(new Set());
   setPartialMoves(new Map());
   setAttacksUsed(new Map());
+  setFiredUnits(new Set());
   closeRibbon();
 
   if (!checkWinLoss(nextTileMap)) {

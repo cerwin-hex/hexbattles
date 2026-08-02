@@ -5,6 +5,7 @@ import {
   UNIT_UPGRADE,
   getContiguousTerritory,
   getTerritoryId,
+  isRanged,
 } from "@/utils/hexGrid";
 import type { EntityType, HexTile } from "@/types";
 import { BOTTOM_BAR_H } from "@/constants/gameConstants";
@@ -15,12 +16,14 @@ interface EntityPanelProps {
   entities: Map<string, EntityType>;
   activeTileMap: Map<string, HexTile>;
   spentUnits: Set<string>;
+  firedUnits: Set<string>;
   territoryBalances: Map<string, number>;
   isAiTurn: boolean;
   gameResult: "victory" | "defeat" | null;
   botInset: number;
   pushHistory: () => void;
   setEntities: (updater: (prev: Map<string, EntityType>) => Map<string, EntityType>) => void;
+  setFiredUnits: (updater: (prev: Set<string>) => Set<string>) => void;
   setTerritoryBalances: (updater: (prev: Map<string, number>) => Map<string, number>) => void;
   setSelectedEntityKey: (key: string | null) => void;
   onRemoveOverride?: () => void;
@@ -31,12 +34,14 @@ export default function EntityPanel({
   entities,
   activeTileMap,
   spentUnits,
+  firedUnits,
   territoryBalances,
   isAiTurn,
   gameResult,
   botInset,
   pushHistory,
   setEntities,
+  setFiredUnits,
   setTerritoryBalances,
   setSelectedEntityKey,
   onRemoveOverride,
@@ -66,6 +71,12 @@ export default function EntityPanel({
   const removeEnabled = isUnit
     ? !isSpent
     : !!entityTerritoryId && entityTerritoryBalance >= removeCost;
+  // Bridges, cities and rebels are all 0/0 in ENTITY_META — a strength readout
+  // for them would be noise at best and misleading at worst, so the line is
+  // driven off the data rather than off an entity allow-list.
+  const hasStrength = entityId
+    ? ENTITY_META[entityId].offStrength > 0 || ENTITY_META[entityId].defStrength > 0
+    : false;
 
   return (
     <View style={[styles.entityPanel, { bottom: BOTTOM_BAR_H + botInset }]}>
@@ -97,6 +108,16 @@ export default function EntityPanel({
             } else {
               next.delete(selectedEntityKey);
             }
+            return next;
+          });
+          // firedUnits is keyed by tile, not by unit, so the removed unit's flag
+          // would otherwise be inherited by whatever is bought onto the tile
+          // next — a fresh bowman reading "Shot used" before it ever fired. The
+          // move path clears the destination the same way (advanceFired).
+          setFiredUnits((prev) => {
+            if (!prev.has(selectedEntityKey)) return prev;
+            const next = new Set(prev);
+            next.delete(selectedEntityKey);
             return next;
           });
           if (removeCost > 0) {
@@ -146,6 +167,37 @@ export default function EntityPanel({
           ⬆ Upgrade {canUpgrade ? `(${upgradeCost})` : "(Max)"}
         </Text>
       </TouchableOpacity>
+      {entityId && hasStrength && (
+        // Pushed to the far right by marginLeft:auto so the buttons keep the
+        // left edge they have always had. flexShrink so the readout gives way on
+        // a narrow screen instead of overflowing the row.
+        <View
+          style={{
+            marginLeft: "auto",
+            justifyContent: "center",
+            alignItems: "flex-end",
+            paddingLeft: 8,
+            flexShrink: 1,
+          }}
+        >
+          <Text style={[styles.buildBtnText, { fontSize: 12 }]}>
+            {`Atk ${ENTITY_META[entityId].offStrength} · Def ${ENTITY_META[entityId].defStrength}`}
+          </Text>
+          {isRanged(entityId) && (
+            <Text
+              style={[
+                styles.buildBtnText,
+                { fontSize: 11 },
+                // The actionable state carries the full colour; the spent one is
+                // dimmed, matching how every other affordance in the UI reads.
+                firedUnits.has(selectedEntityKey) && styles.buildBtnTextDisabled,
+              ]}
+            >
+              {firedUnits.has(selectedEntityKey) ? "Shot used" : "Shot ready"}
+            </Text>
+          )}
+        </View>
+      )}
     </View>
   );
 }
