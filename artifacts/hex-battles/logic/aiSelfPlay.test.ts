@@ -78,6 +78,46 @@ function countTwoPlyPositiveIdleCaptures(owner: TerritoryOwner, ws: AiWorkingSta
 const FULL = !!process.env.AI_SELFPLAY;
 const fullIt = FULL ? it : it.skip;
 
+/**
+ * A 1v1 new-vs-old A/B that plays every seed TWICE — once with the new brain on
+ * ai1, once on ai2 — so each board's own bias cancels inside its own pair.
+ *
+ * The earlier form played N independent games and merely alternated which seat
+ * was "new" from one seed to the NEXT. That cancels nothing, and it was measured
+ * (2026-08-02) producing a 9-15 "regression" from two brains that were byte-for-
+ * byte identical, on seeds 9300+, while the same identical brains came out level
+ * on seeds 9400+. Every conclusion drawn from that shape was noise.
+ *
+ * Paired, identical brains tie EXACTLY, by construction rather than by averaging:
+ * a match is deterministic, so both halves of a pair play out the same way, and
+ * whoever wins is labelled "new" in one half and "old" in the other. That makes
+ * any departure from level a real difference between the brains — which is what
+ * lets the caller assert a tight bound instead of a hopeful one.
+ */
+async function mirroredAb(
+  apply: (seat: "new" | "old") => void,
+  o: { seeds: number; firstSeed: number; tiles: number; maxTurns: number },
+): Promise<{ newWins: number; oldWins: number; draws: number; games: number }> {
+  let newWins = 0, oldWins = 0, draws = 0, games = 0;
+  for (let i = 0; i < o.seeds; i++) {
+    for (const newOwner of ["ai1", "ai2"] as const) {
+      const r = await playMatch({
+        seed: o.firstSeed + i,
+        tiles: o.tiles,
+        difficultyA: "expert",
+        difficultyB: "expert",
+        maxTurns: o.maxTurns,
+        onBeforeOwnerTurn: (owner) => apply(owner === newOwner ? "new" : "old"),
+      });
+      games++;
+      if (r.winner === "draw") draws++;
+      else if (r.winner === newOwner) newWins++;
+      else oldWins++;
+    }
+  }
+  return { newWins, oldWins, draws, games };
+}
+
 describe("playMatch (smoke)", () => {
   it("plays a full headless game to completion without throwing", async () => {
     const r = await playMatch({
@@ -141,7 +181,7 @@ describe("no over-spend invariant", () => {
     async () => {
       let wins = 0;
       let games = 0;
-      for (let s = 6000; s < 6020; s++) {
+      for (let s = 6000; s < 6040; s++) {
         const r = await playMatch({
           seed: s,
           tiles: 50,
@@ -153,7 +193,18 @@ describe("no over-spend invariant", () => {
         games++;
         if (r.winner === "ai1") wins++;
       }
-      expect(wins / games).toBeGreaterThan(0.8);
+      // Expert's true rate against Hard here is 0.833, measured 2026-08-02 over
+      // 60 seeds from 6000 (50/60; the first 20 alone give 16/20, the worst block
+      // of the three). The bound this test used to carry — 20 games and `> 0.8`,
+      // i.e. 17 of 20 — sat ABOVE the expected 16.7 wins, so it failed roughly
+      // half the time on the AI's own merits and one flipped game was enough to
+      // "fail" it. 40 games at a 0.70 floor sits ~2.3 sd below the true rate.
+      //
+      // Deliberately loose: this catches a COLLAPSE (a tempo bug that starts
+      // throwing dominated games, which lands far below 0.70), not a small
+      // strength change — vs-hard is saturated and cannot see those at any N. The
+      // per-game non-negative-balance assertion above is the sharp part.
+      expect(wins / games).toBeGreaterThanOrEqual(0.7);
     },
     600000,
   );
@@ -285,28 +336,46 @@ describe("expert strength (self-play)", () => {
       // advance, per-territory iteration cap) must only drop candidates/actions the
       // eval would never choose. Head-to-head — the shipping brain (pruned + capped,
       // via null overrides) vs the exhaustive pre-optimisation brain (full + iter
-      // 100) — on mirrored seats it should be a wash, NOT a regression. (vs-hard is
+      // 100) — on paired seats it should be a wash, NOT a regression. (vs-hard is
       // saturated and cannot detect a small loss here; this A/B can.)
-      let optWins = 0, oldWins = 0;
-      const N = 24;
-      for (let i = 0; i < N; i++) {
-        const optOwner: TerritoryOwner = i % 2 === 0 ? "ai1" : "ai2";
-        const r = await playMatch({
-          seed: 9300 + i, tiles: 50, difficultyA: "expert", difficultyB: "expert", maxTurns: 45,
-          onBeforeOwnerTurn: (owner) => {
-            if (owner === optOwner) { __setExpertCandidateMode(null); __setExpertMaxIters(null); }
-            else { __setExpertCandidateMode("full"); __setExpertMaxIters(100); }
-          },
-        });
-        __setExpertCandidateMode(null);
-        __setExpertMaxIters(null);
-        if (r.winner === optOwner) optWins++;
-        else if (r.winner !== "draw") oldWins++;
-      }
-      // Neutral within noise over 24 games: require the optimised brain is not
-      // meaningfully worse (observed ~even). Guards against a prune that silently
-      // removes a winning line.
-      expect(optWins).toBeGreaterThanOrEqual(oldWins - 4);
+      const r = await mirroredAb(
+        (seat) => {
+          if (seat === "new") { __setExpertCandidateMode(null); __setExpertMaxIters(null); }
+          else { __setExpertCandidateMode("full"); __setExpertMaxIters(100); }
+        },
+        { seeds: 12, firstSeed: 9300, tiles: 50, maxTurns: 45 },
+      );
+      __setExpertCandidateMode(null);
+      __setExpertMaxIters(null);
+      // Pairing removes the board bias, so the bound can be tight: identical
+      // brains would tie exactly, and only a real difference moves this.
+      //
+      // Measured 2026-08-02, paired: 12-12 of 24, no draws, reproducible across
+      // runs — the shipping pruned brain is dead level with the exhaustive one,
+      // so the pruning costs nothing. The 9-15 this reported before it was paired
+      // was harness artifact, not a regression: see the note on `mirroredAb`.
+      expect(r.newWins).toBeGreaterThanOrEqual(r.oldWins - 4);
+    },
+    600000,
+  );
+
+  fullIt(
+    "the paired A/B harness ties exactly when both seats run the same brain",
+    async () => {
+      // The control that the previous, unpaired harness would have failed — and
+      // did fail, silently, for as long as it existed. Both seats get the SAME
+      // configuration, so any score other than a dead heat means the harness is
+      // reading board bias rather than brain strength, and every A/B built on it
+      // is worthless. Runs on the same seeds as the pruning A/B above so it
+      // vouches for exactly the measurement that test relies on.
+      const r = await mirroredAb(
+        () => { __setExpertCandidateMode("full"); __setExpertMaxIters(100); },
+        { seeds: 12, firstSeed: 9300, tiles: 50, maxTurns: 45 },
+      );
+      __setExpertCandidateMode(null);
+      __setExpertMaxIters(null);
+      expect(r.newWins).toBe(r.oldWins);
+      expect(r.newWins + r.oldWins + r.draws).toBe(r.games);
     },
     600000,
   );
@@ -322,42 +391,41 @@ describe("expert strength (self-play)", () => {
       //
       // The fix is provably right on the isolated position (see aiExpertPocket
       // .test.ts), but it removes reward from real front terms, so it must also not
-      // cost strength in whole games. Mirrored seats, new brain vs old brain.
+      // cost strength in whole games. Paired seats, new brain vs old brain.
       // (vs-hard is saturated and cannot detect a small loss here; this A/B can.)
-      let newWins = 0, oldWins = 0;
-      const N = 24;
-      for (let i = 0; i < N; i++) {
-        const newOwner: TerritoryOwner = i % 2 === 0 ? "ai1" : "ai2";
-        const r = await playMatch({
-          seed: 9700 + i, tiles: 50, difficultyA: "expert", difficultyB: "expert", maxTurns: 45,
-          onBeforeOwnerTurn: (owner) => {
-            if (owner === newOwner) {
-              __setExpertInertPocketFront(null);
-              __setExpertSafeCaptureAugment(null);
-            } else {
-              __setExpertInertPocketFront(false);
-              __setExpertSafeCaptureAugment(false);
-            }
-          },
-        });
-        __setExpertInertPocketFront(null);
-        __setExpertSafeCaptureAugment(null);
-        if (r.winner === newOwner) newWins++;
-        else if (r.winner !== "draw") oldWins++;
-      }
+      const r = await mirroredAb(
+        (seat) => {
+          if (seat === "new") {
+            __setExpertInertPocketFront(null);
+            __setExpertSafeCaptureAugment(null);
+          } else {
+            __setExpertInertPocketFront(false);
+            __setExpertSafeCaptureAugment(false);
+          }
+        },
+        { seeds: 12, firstSeed: 9700, tiles: 50, maxTurns: 45 },
+      );
+      __setExpertInertPocketFront(null);
+      __setExpertSafeCaptureAugment(null);
+      const newWins = r.newWins;
+      const oldWins = r.oldWins;
       // Must be at least a wash. Guards against the exclusion stripping reward the
       // front terms genuinely needed.
       //
-      // Observed when this landed (so a future failure on this loose bound is
-      // interpretable): 1v1 mirrored 18-22 over 40 games on seeds 9700+, and
-      // 48-52 over 100 games on seeds 20000+ — pooled 66-74 of 140, z = -0.68,
-      // p ~ 0.5, i.e. no detectable difference. A 3-seat FFA mirror over 30 seeds
-      // gave 11 wins against a neutral baseline of 10. Note the resolution limit:
-      // sd is 5 at N=100, so this A/B can only exclude a LARGE regression —
-      // detecting a true 5-point loss at 80% power would need ~400 games. The
-      // positive evidence for the change is behavioural, not win rate: idle
-      // undefended positive-delta captures across 7 seeds of 100-tile 4-Expert
-      // games went from 367 (fix off) to 0 (fix on).
+      // Measured 2026-08-02, paired: 13-11 of 24, no draws — the new brain a
+      // shade ahead, comfortably a wash.
+      //
+      // Historical numbers below were taken with the UNPAIRED harness and are not
+      // comparable to what this now measures — that harness was shown (2026-08-02)
+      // to score two identical brains 9-15, so its spreads were part board bias.
+      // Kept only because the behavioural evidence in the last sentence stands on
+      // its own: 1v1 18-22 over 40 games on seeds 9700+, 48-52 over 100 games on
+      // seeds 20000+, a 3-seat FFA mirror giving 11 against a neutral 10. The
+      // resolution limit is real and still applies — sd is 5 at N=100, so this
+      // A/B can only exclude a LARGE regression; detecting a true 5-point loss at
+      // 80% power would need ~400 games. The positive evidence for the change was
+      // never the win rate: idle undefended positive-delta captures across 7 seeds
+      // of 100-tile 4-Expert games went from 367 (fix off) to 0 (fix on).
       expect(newWins).toBeGreaterThanOrEqual(oldWins - 4);
     },
     600000,
