@@ -6,6 +6,7 @@ import type { AiWorkingState, AiTurnCallbacks, AiDecisionExec } from "@/logic/ai
 import type { HexTile, EntityType, TerritoryOwner, AiStepSnapshot } from "@/types";
 import type { AiContext } from "@/logic/aiHelpers";
 import { ALL_GAME_ELEMENTS, type GameElements } from "@/constants/gameElements";
+import { hexDistance } from "@/utils/hexGrid";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1031,6 +1032,50 @@ describe("runAiTerritoryDecisionLoop", () => {
     expect(target).toBe("0,0");
     expect(terrain).toBe("field");
     expect(cost).toBe(2);
+  });
+
+  it("does not found a second city while the territory is at its cap", async () => {
+    // 9 tiles → cap floor(9/5) = 1, and a city already stands at 0,0.
+    const tiles = Array.from({ length: 9 }, (_, i) => makeTile(i, 0, "ai1"));
+    const entities = new Map<string, EntityType>([["4,0", "tower"]]);
+    const aiCtx = makeAiCtx(tiles, "ai1", entities, new Map([["0,0", 100]]));
+    aiCtx.cities = new Set(["0,0"]);
+    const exec = makeExec();
+
+    await runAiTerritoryDecisionLoop("0,0", aiCtx, exec, () => true, "hard");
+
+    const cityBuilds = vi
+      .mocked(exec.build)
+      .mock.calls.filter(([type]) => type === "city");
+    expect(cityBuilds).toHaveLength(0);
+  });
+
+  it("never founds a city within three tiles of one it already holds", async () => {
+    // 15 tiles → cap 3. The tower at 4,0 puts the zone of control on 3,0/4,0/5,0,
+    // all of which are legally far enough from the city at 0,0.
+    const tiles = Array.from({ length: 15 }, (_, i) => makeTile(i, 0, "ai1"));
+    const entities = new Map<string, EntityType>([["4,0", "tower"]]);
+    const aiCtx = makeAiCtx(tiles, "ai1", entities, new Map([["0,0", 100]]));
+    aiCtx.cities = new Set(["0,0"]);
+    let built = false;
+    const exec = makeExec({
+      build: vi.fn(async (type) => {
+        if (type === "city") built = true;
+        return true;
+      }),
+    });
+
+    await runAiTerritoryDecisionLoop("0,0", aiCtx, exec, () => !built, "hard");
+
+    const cityBuilds = vi
+      .mocked(exec.build)
+      .mock.calls.filter(([type]) => type === "city");
+    // Non-vacuous: the AI must actually want a city here.
+    expect(cityBuilds.length).toBeGreaterThan(0);
+    for (const [, target] of cityBuilds) {
+      const [q, r] = String(target).split(",").map(Number);
+      expect(hexDistance(q, r, 0, 0)).toBeGreaterThanOrEqual(3);
+    }
   });
 });
 

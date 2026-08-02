@@ -20,7 +20,7 @@ import {
   improveCostFor,
   IMPROVED_TERRAINS,
 } from "@/utils/hexGrid";
-import { calcTerritoryIncome, calcTerritoryUpkeep, mergeResult } from "@/logic/gameLogic";
+import { calcTerritoryIncome, calcTerritoryUpkeep, foundCitySites, mergeResult, ownCityKeys } from "@/logic/gameLogic";
 import { aiBuyableUnits } from "@/constants/gameConstants";
 import { dtCountClusters, dtFindImproveMove } from "@/logic/aiHelpers";
 import { ALL_GAME_ELEMENTS, type GameElements } from "@/constants/gameElements";
@@ -996,11 +996,19 @@ export function generateCandidateActions(
     }
   }
   const cityCost = ENTITY_META.city.cost;
-  const hasCity = territory.some((t) => ctx.cities.has(t.key));
-  if (!hasCity && territory.length >= 5 && canAfford(cityCost)) {
+  const territoryCityCount = territory.filter((t) => ctx.cities.has(t.key)).length;
+  // Precomputed once per generation pass: an illegal city build left in the
+  // list would be scored and valued by the 2-ply search, and per-candidate
+  // distance scans would make generation cost O(territory x cities).
+  const citySites =
+    canAfford(cityCost)
+      ? foundCitySites(territory, territoryCityCount, ownCityKeys(ctx.cities, ctx.tileMap, owner))
+      : new Set<string>();
+  if (citySites.size > 0) {
     // Building on an improved tile would destroy the improvement; don't.
     for (const t of innerPlacements) {
       if (IMPROVED_TERRAINS.has(t.terrain)) continue;
+      if (!citySites.has(t.key)) continue;
       out.push({ kind: "build", buildingType: "city", target: t.key, cost: cityCost });
     }
   }

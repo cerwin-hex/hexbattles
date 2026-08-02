@@ -19,7 +19,7 @@ import {
   improveCostFor,
   IMPROVED_TERRAINS,
 } from "@/utils/hexGrid";
-import { advanceAttacksUsed, advanceCombatSpent, applyOwnerEconomy, armedSitesForOwner, calcTerritoryIncome, calcTerritoryUpkeep, effectiveRemaining, findImproveAnchor, isChargeAttack, mergeResult, resolveMovedUnitMoves, spawnRebelsForOwner, sweepNeutralMarkers } from "@/logic/gameLogic";
+import { advanceAttacksUsed, advanceCombatSpent, applyOwnerEconomy, armedSitesForOwner, calcTerritoryIncome, calcTerritoryUpkeep, effectiveRemaining, findImproveAnchor, foundCitySites, isChargeAttack, mergeResult, ownCityKeys, resolveMovedUnitMoves, spawnRebelsForOwner, sweepNeutralMarkers } from "@/logic/gameLogic";
 import {
   dtSplitScore,
   dtCaptureNegatesIncome,
@@ -527,8 +527,13 @@ export async function runAiTerritoryDecisionLoop(
     // ══ PRIORITY D: Build a city ══
     if (!actionTaken) {
       const cityCost = ENTITY_META.city.cost;
-      const alreadyHasCity = currTerr.some((t) => aiCtx.cities.has(t.key));
-      if (canAfford(cityCost, 0) && currTerr.length >= 5 && !alreadyHasCity) {
+      const territoryCityCount = currTerr.filter((t) => aiCtx.cities.has(t.key)).length;
+      const citySites = foundCitySites(
+        currTerr,
+        territoryCityCount,
+        ownCityKeys(aiCtx.cities, aiCtx.tileMap, aiOwner),
+      );
+      if (canAfford(cityCost, 0) && citySites.size > 0) {
         const bldgZoC = new Set<string>();
         for (const [bk, be] of aiCtx.entities) {
           if (be !== "tower" && be !== "castle") continue;
@@ -552,6 +557,7 @@ export async function runAiTerritoryDecisionLoop(
           if (t.terrain === "mountain" || t.terrain === "lake" || aiCtx.cities.has(t.key)) return false;
           if (IMPROVED_TERRAINS.has(t.terrain)) return false;
           if (aiCtx.entities.has(t.key)) return false;
+          if (!citySites.has(t.key)) return false;
           return bldgZoC.has(t.key);
         }).sort((a, b) => {
           if (!largestEnemyKey) return 0;

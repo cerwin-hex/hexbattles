@@ -17,7 +17,7 @@ import { runOneAiTurnHeadless } from "@/logic/aiSelfPlay";
 import type { AiContext } from "@/logic/aiHelpers";
 import { ALL_GAME_ELEMENTS } from "@/constants/gameElements";
 import type { HexTile, EntityType, TerritoryOwner } from "@/types";
-import { getContiguousTerritory, getTerritoryId, getValidMoves } from "@/utils/hexGrid";
+import { getContiguousTerritory, getTerritoryId, getValidMoves, hexDistance } from "@/utils/hexGrid";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -712,6 +712,35 @@ describe("generateCandidateActions", () => {
       (c: ExpertAction) => c.kind === "move" && c.from === "10,10",
     );
     expect(cavalryMoves.length).toBeGreaterThan(0);
+  });
+
+  it("offers no city candidate closer than three tiles to a city it holds", () => {
+    // 12 tiles → cap 2, one city held, so one slot is open.
+    const tiles = Array.from({ length: 12 }, (_, i) => makeTile(i, 0, "ai1"));
+    const tm = makeTileMap(tiles);
+    const ctx = makeCtx(tm, new Map(), "ai1", new Map());
+    ctx.cities = new Set(["0,0"]);
+    const cands = generateCandidateActions(ctx, Array.from(tm.values()), 100);
+    const targets = cands
+      .filter((c: ExpertAction) => c.kind === "build" && c.buildingType === "city")
+      .map((c) => (c as { target: string }).target);
+    // Non-vacuous: with a free slot the generator must offer somewhere legal.
+    expect(targets.length).toBeGreaterThan(0);
+    for (const key of targets) {
+      const [q, r] = key.split(",").map(Number);
+      expect(hexDistance(q, r, 0, 0)).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("offers no city candidate at all once the territory is at its cap", () => {
+    const tiles = Array.from({ length: 12 }, (_, i) => makeTile(i, 0, "ai1"));
+    const tm = makeTileMap(tiles);
+    const ctx = makeCtx(tm, new Map(), "ai1", new Map());
+    ctx.cities = new Set(["0,0", "6,0"]); // 2 cities, cap floor(12/5) = 2
+    const cands = generateCandidateActions(ctx, Array.from(tm.values()), 100);
+    expect(
+      cands.some((c: ExpertAction) => c.kind === "build" && c.buildingType === "city"),
+    ).toBe(false);
   });
 });
 
