@@ -998,8 +998,10 @@ export function generateCandidateActions(
   const cityCost = ENTITY_META.city.cost;
   const territoryCityCount = territory.filter((t) => ctx.cities.has(t.key)).length;
   // Precomputed once per generation pass: an illegal city build left in the
-  // list would be scored and valued by the 2-ply search, and per-candidate
-  // distance scans would make generation cost O(territory x cities).
+  // list would be scored and valued by the 2-ply search. Precomputing also
+  // keeps ownCityKeys — a scan of every city on the board — off the
+  // per-candidate path; the distance work itself is O(territory x cities)
+  // either way.
   const citySites =
     canAfford(cityCost)
       ? foundCitySites(territory, territoryCityCount, ownCityKeys(ctx.cities, ctx.tileMap, owner))

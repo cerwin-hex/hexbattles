@@ -28,6 +28,11 @@ import { SELECTED_UNIT_RING } from "@/constants/colors";
 // layer on every state change.
 const EMPTY_TILE_SET: Set<string> = new Set();
 
+// Stands in for "some city could pay" when asking canImproveTile about every
+// condition EXCEPT the anchor. It is never used as a real city key — the
+// predicate only distinguishes null from non-null.
+const ANCHOR_PROBE = "anchor-probe";
+
 interface SelectionStateParams {
   selectedTileKey: string | null;
   selectedEntityKey: string | null;
@@ -324,22 +329,30 @@ export function useSelectionState({
       let inRange = false;
       for (const tile of selectedTerritory) {
         if (improveTargetFor(tile.terrain) !== imp.target) continue;
+        // Ask first whether the anchor is the ONLY thing that could still
+        // block this tile. Without this, a tile that is really blocked by a
+        // building, a rebel, or by being the city itself would still count
+        // towards `inRange` and make the ribbon claim "Cities used" when no
+        // city has built. ANCHOR_PROBE stands in for "some city is free", so
+        // canImproveTile reports on every other condition.
+        if (
+          !canImproveTile({
+            terrain: tile.terrain,
+            targetTerrain: imp.target,
+            balance: imp.cost,
+            anchor: ANCHOR_PROBE,
+            isCity: cities.has(tile.key),
+            occupantEntity: entities.get(tile.key),
+          })
+        )
+          continue;
         const a = findImproveAnchor({
           tileKey: tile.key,
           territoryCityKeys,
           usedCities: improvedCities,
         });
         if (a.inRange) inRange = true;
-        if (
-          canImproveTile({
-            terrain: tile.terrain,
-            targetTerrain: imp.target,
-            balance: imp.cost,
-            anchor: a.anchor,
-            isCity: cities.has(tile.key),
-            occupantEntity: entities.get(tile.key),
-          })
-        ) {
+        if (a.anchor !== null) {
           available = true;
           break;
         }

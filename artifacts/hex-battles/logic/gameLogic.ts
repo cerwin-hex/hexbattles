@@ -758,7 +758,9 @@ export function findImproveAnchor(o: {
     if (dist > CITY_IMPROVE_RADIUS) continue;
     inRange = true;
     if (o.usedCities.has(key)) continue;
-    if (dist < bestDist || (dist === bestDist && anchor !== null && key < anchor)) {
+    // A tie can only occur once an anchor is set, so `anchor` is non-null
+    // whenever the second clause is reached.
+    if (dist < bestDist || (dist === bestDist && key < anchor!)) {
       bestDist = dist;
       anchor = key;
     }

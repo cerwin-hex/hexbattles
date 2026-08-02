@@ -43,9 +43,10 @@ function ents(pairs: [string, EntityType][]): Map<string, EntityType> {
   return new Map(pairs);
 }
 
+/** `makeTile` addressed by tile key, for the city rules whose inputs are keys. */
 function mkTile(key: string, owner: TerritoryOwner): HexTile {
   const [q, r] = key.split(",").map(Number);
-  return { q, r, key, terrain: "grass", owner, cityBuffer: false, isCity: false };
+  return makeTile(q, r, owner);
 }
 
 // ─── calcTerritoryUpkeep ──────────────────────────────────────────────────────
