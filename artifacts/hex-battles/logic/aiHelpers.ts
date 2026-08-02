@@ -14,6 +14,7 @@ import {
   calcTerritoryIncome,
   calcTerritoryUpkeep,
   canImproveTile,
+  findImproveAnchor,
   mergeResult,
 } from "@/logic/gameLogic";
 
@@ -229,9 +230,11 @@ export function dtFindMergeMove(
 
 /**
  * Finds the best tile improvement for the AI: any tile of its territory whose
- * terrain can be improved (grass→field, forest→sawmill, desert→mine) and that
- * the territory can afford. Requires a city in the territory — the same rule
- * the player follows, via the shared `canImproveTile` predicate.
+ * terrain can be improved (grass→field, forest→sawmill, desert→mine), that
+ * lies within CITY_IMPROVE_RADIUS of a city of the same territory which has
+ * not already built this turn, and that the territory can afford. The same
+ * zone and per-turn-allowance rule the player follows, via the shared
+ * `canImproveTile` predicate and `findImproveAnchor`.
  *
  * Prefers a tile adjacent to one of the AI's own cities, where the Field's
  * city-adjacency bonus stacks on top of the terrain income.
@@ -250,19 +253,24 @@ export function dtFindImproveMove(
   balance: number,
 ): { key: string; terrain: TerrainType } | null {
   if (!ctx.elements.improvements) return null;
-  const territoryHasCity = territory.some((t) => ctx.cities.has(t.key));
-  if (!territoryHasCity) return null;
+  const territoryCityKeys = territory.filter((t) => ctx.cities.has(t.key)).map((t) => t.key);
+  if (territoryCityKeys.length === 0) return null;
   let best: { key: string; terrain: TerrainType } | null = null;
   let bestPrio = -1;
   for (const t of territory) {
     const target = improveTargetFor(t.terrain);
     if (!target) continue;
+    const { anchor } = findImproveAnchor({
+      tileKey: t.key,
+      territoryCityKeys,
+      usedCities: ctx.cityImproveUsed,
+    });
     if (
       !canImproveTile({
         terrain: t.terrain,
         targetTerrain: target,
         balance,
-        territoryHasCity,
+        anchor,
         isCity: ctx.cities.has(t.key),
         occupantEntity: ctx.entities.get(t.key),
       })

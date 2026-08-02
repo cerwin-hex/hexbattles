@@ -717,7 +717,7 @@ describe("canImproveTile", () => {
     terrain: "grass" as const,
     targetTerrain: "field" as const,
     balance: 5,
-    territoryHasCity: true,
+    anchor: "0,0" as string | null,
     isCity: false,
     occupantEntity: undefined as EntityType | undefined,
   };
@@ -744,8 +744,8 @@ describe("canImproveTile", () => {
     expect(canImproveTile({ ...base, terrain: "mine", targetTerrain: "mine" })).toBe(false);
   });
 
-  it("requires a city in the territory", () => {
-    expect(canImproveTile({ ...base, territoryHasCity: false })).toBe(false);
+  it("requires a city in range that has not built this turn", () => {
+    expect(canImproveTile({ ...base, anchor: null })).toBe(false);
   });
 
   it("rejects a city tile", () => {

@@ -8,9 +8,10 @@ import {
   getTerritoryId,
   getValidMoves,
   getPlacementAttackTiles,
+  improveTargetFor,
   unitMovement,
 } from "@/utils/hexGrid";
-import { canImproveTile, mergeResult } from "@/logic/gameLogic";
+import { canImproveTile, findImproveAnchor, mergeResult } from "@/logic/gameLogic";
 import { rangedTargets } from "@/logic/rangedAttack";
 import { computeSelectionBorderEdges } from "@/utils/borderEdges";
 import { SELECTED_UNIT_RING } from "@/constants/colors";
@@ -34,6 +35,7 @@ interface SelectionStateParams {
   firedUnits: Set<string>;
   territoryBalances: Map<string, number>;
   cities: Set<string>;
+  improvedCities: Set<string>;
   freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
   isAiTurn: boolean;
   gameResult: unknown;
@@ -57,6 +59,7 @@ export function useSelectionState({
   firedUnits,
   territoryBalances,
   cities,
+  improvedCities,
   freeTowerUsedTiles,
   isAiTurn,
   gameResult,
@@ -243,8 +246,11 @@ export function useSelectionState({
     return false;
   }, [selectedTerritory, selectedTileKeys, activeTileMap, entities]);
 
-  const territoryHasCity = useMemo(
-    () => selectedTerritory.some((t) => cities.has(t.key)),
+  // The cities of the selected territory. Both improvement helpers need the
+  // keys rather than a yes/no, since the zone and the per-turn allowance are
+  // resolved per city.
+  const territoryCityKeys = useMemo<string[]>(
+    () => selectedTerritory.filter((t) => cities.has(t.key)).map((t) => t.key),
     [selectedTerritory, cities],
   );
 
@@ -255,12 +261,17 @@ export function useSelectionState({
     if (!armedImprovement) return EMPTY_TILE_SET;
     const result = new Set<string>();
     for (const tile of selectedTerritory) {
+      const { anchor } = findImproveAnchor({
+        tileKey: tile.key,
+        territoryCityKeys,
+        usedCities: improvedCities,
+      });
       if (
         canImproveTile({
           terrain: tile.terrain,
           targetTerrain: armedImprovement,
           balance: selectedTerritoryBalance,
-          territoryHasCity,
+          anchor,
           isCity: cities.has(tile.key),
           occupantEntity: entities.get(tile.key),
         })
@@ -272,37 +283,51 @@ export function useSelectionState({
     armedImprovement,
     selectedTerritory,
     selectedTerritoryBalance,
-    territoryHasCity,
+    territoryCityKeys,
+    improvedCities,
     cities,
     entities,
   ]);
 
   // Whether the territory holds at least one tile each improvement could be
-  // built on, ignoring gold — an unaffordable item dims with its price showing,
-  // which is the ribbon's existing convention, but an item with no possible
-  // target says so instead ("No grass"). Passing `balance: imp.cost` makes the
-  // affordability clause vacuously true so this reports terrain availability
-  // only. Computed for all three at once because the ribbon renders all three
-  // regardless of what is armed.
-  const improvementAvailability = useMemo<Map<TerrainType, boolean>>(() => {
-    const result = new Map<TerrainType, boolean>();
+  // built on, ignoring gold, plus why not when it does not: `inRange` false
+  // means no city covers a candidate tile, `inRange` true with `available`
+  // false means every covering city has already built this turn. An
+  // unaffordable item dims with its price showing, which is the ribbon's
+  // existing convention, but an item with no possible target says so instead.
+  const improvementAvailability = useMemo<
+    Map<TerrainType, { available: boolean; inRange: boolean }>
+  >(() => {
+    const result = new Map<TerrainType, { available: boolean; inRange: boolean }>();
     for (const imp of IMPROVEMENTS) {
-      result.set(
-        imp.target,
-        selectedTerritory.some((tile) =>
+      let available = false;
+      let inRange = false;
+      for (const tile of selectedTerritory) {
+        if (improveTargetFor(tile.terrain) !== imp.target) continue;
+        const a = findImproveAnchor({
+          tileKey: tile.key,
+          territoryCityKeys,
+          usedCities: improvedCities,
+        });
+        if (a.inRange) inRange = true;
+        if (
           canImproveTile({
             terrain: tile.terrain,
             targetTerrain: imp.target,
             balance: imp.cost,
-            territoryHasCity,
+            anchor: a.anchor,
             isCity: cities.has(tile.key),
             occupantEntity: entities.get(tile.key),
-          }),
-        ),
-      );
+          })
+        ) {
+          available = true;
+          break;
+        }
+      }
+      result.set(imp.target, { available, inRange });
     }
     return result;
-  }, [selectedTerritory, territoryHasCity, cities, entities]);
+  }, [selectedTerritory, territoryCityKeys, improvedCities, cities, entities]);
 
   const validPlacementAttackTiles = useMemo<Set<string>>(() => {
     if (!armedEntityId) return new Set();
@@ -438,7 +463,7 @@ export function useSelectionState({
     improvementAvailability,
     validPlacementAttackTiles,
     minUnitCost,
-    territoryHasCity,
+    territoryCityKeys,
     selectionBorderEdges,
     buildingSelectionEdges,
     affordableTerritoryTileKeys,

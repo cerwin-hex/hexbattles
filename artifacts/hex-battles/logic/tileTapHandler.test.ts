@@ -58,6 +58,8 @@ function makeParams(overrides: Partial<TileTapParams> = {}): TileTapParams {
     validPlacementAttackTiles: new Set(),
     ribbonOpen: false,
     cities: new Set(),
+    improvedCities: new Set(),
+    setImprovedCities: vi.fn(),
     setMutableTileMap: vi.fn(),
     setLiveOwnerMap: vi.fn(),
     setEntities: vi.fn(),
@@ -1044,6 +1046,57 @@ describe("improvement placement", () => {
     handleTileTapLogic(params);
     expect(params.setMutableTileMap).not.toHaveBeenCalled();
     expect(params.setTerritoryBalances).not.toHaveBeenCalled();
+  });
+
+  it("flashes an error when the tile is more than two tiles from any city", () => {
+    const tiles = [
+      makeTile(0, 0, "player", "grass"),
+      makeTile(1, 0, "player", "grass"),
+      makeTile(2, 0, "player", "grass"),
+      makeTile(3, 0, "player", "grass"),
+    ];
+    const params = improveParams({
+      key: "3,0",
+      activeTileMap: tileMap(tiles),
+      selectedTerritory: tiles,
+      selectedTileKeys: new Set(["0,0", "1,0", "2,0", "3,0"]),
+      cities: new Set(["0,0"]),
+      validImprovementTiles: new Set(["3,0"]),
+    });
+    handleTileTapLogic(params);
+    expect(params.setMutableTileMap).not.toHaveBeenCalled();
+    expect(params.triggerErrorFlash).toHaveBeenCalledWith("3,0");
+  });
+
+  it("flashes an error when the only city in range already built this turn", () => {
+    const params = improveParams({ improvedCities: new Set(["1,0"]) });
+    handleTileTapLogic(params);
+    expect(params.setMutableTileMap).not.toHaveBeenCalled();
+    expect(params.triggerErrorFlash).toHaveBeenCalledWith("0,0");
+  });
+
+  it("charges a second improvement to another city in range", () => {
+    const tiles = [
+      makeTile(0, 0, "player", "grass"),
+      makeTile(1, 0, "player", "grass"),
+      makeTile(2, 0, "player", "grass"),
+    ];
+    const params = improveParams({
+      key: "1,0",
+      activeTileMap: tileMap(tiles),
+      selectedTerritory: tiles,
+      selectedTileKeys: new Set(["0,0", "1,0", "2,0"]),
+      cities: new Set(["0,0", "2,0"]),
+      improvedCities: new Set(["0,0"]),
+      validImprovementTiles: new Set(["1,0"]),
+    });
+    handleTileTapLogic(params);
+    const written = vi.mocked(params.setMutableTileMap).mock.calls[0][0];
+    expect(written.get("1,0")?.terrain).toBe("field");
+    const updater = vi.mocked(params.setImprovedCities).mock.calls[0][0];
+    const next =
+      typeof updater === "function" ? updater(params.improvedCities) : updater;
+    expect(next.has("2,0")).toBe(true);
   });
 });
 

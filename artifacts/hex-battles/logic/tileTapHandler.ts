@@ -23,6 +23,7 @@ import {
   applySingleHexPenalty,
   canImproveTile,
   classifyOwnTilePlacement,
+  findImproveAnchor,
   isChargeAttack,
   mergeResult,
   resolveMovedUnitMoves,
@@ -77,6 +78,8 @@ export interface TileTapParams {
   validPlacementAttackTiles: Set<string>;
   ribbonOpen: boolean;
   cities: Set<string>;
+  improvedCities: Set<string>;
+  setImprovedCities: Dispatch<SetStateAction<Set<string>>>;
   setMutableTileMap: (m: Map<string, HexTile>) => void;
   setLiveOwnerMap: (m: Map<string, TerritoryOwner>) => void;
   setEntities: (m: Map<string, EntityType>) => void;
@@ -143,6 +146,8 @@ export function handleTileTapLogic(params: TileTapParams): void {
     validPlacementAttackTiles,
     ribbonOpen,
     cities,
+    improvedCities,
+    setImprovedCities,
     setMutableTileMap,
     setLiveOwnerMap,
     setEntities,
@@ -456,16 +461,20 @@ export function handleTileTapLogic(params: TileTapParams): void {
     if (!selectedTerritoryId) return;
     const targetTile = activeTileMap.get(key);
     const balance = territoryBalances.get(selectedTerritoryId) ?? 0;
-    const territoryHasCity = selectedTerritory.some((t) => cities.has(t.key));
     // Re-check the rule rather than trusting the highlight set, which is
     // computed from a render-time snapshot.
+    const { anchor } = findImproveAnchor({
+      tileKey: key,
+      territoryCityKeys: selectedTerritory.filter((t) => cities.has(t.key)).map((t) => t.key),
+      usedCities: improvedCities,
+    });
     if (
       !targetTile ||
       !canImproveTile({
         terrain: targetTile.terrain,
         targetTerrain: armedImprovement,
         balance,
-        territoryHasCity,
+        anchor,
         isCity: cities.has(key),
         occupantEntity: entities.get(key),
       })
@@ -484,6 +493,9 @@ export function handleTileTapLogic(params: TileTapParams): void {
         next.set(selectedTerritoryId, (next.get(selectedTerritoryId) ?? 0) - cost);
         return next;
       });
+      // The anchor is non-null here — canImproveTile rejects otherwise. It
+      // spends its one improvement for this turn.
+      setImprovedCities((prev) => new Set([...prev, anchor!]));
       setArmedImprovement(null);
       closeRibbon();
     });

@@ -31,7 +31,7 @@ interface PurchaseRibbonProps {
   setArmedEntityId: (id: EntityType | null) => void;
   armedImprovement: TerrainType | null;
   setArmedImprovement: (t: TerrainType | null) => void;
-  improvementAvailability: Map<TerrainType, boolean>;
+  improvementAvailability: Map<TerrainType, { available: boolean; inRange: boolean }>;
   hasBridgePlacementAvailable: boolean;
   elements: GameElements;
 }
@@ -208,7 +208,7 @@ export default function PurchaseRibbon({
               const isArmed = armedImprovement === imp.target;
               const round1Locked = turn === 1;
               const noCity = !territoryHasCity;
-              const noTarget = !improvementAvailability.get(imp.target);
+              const noTarget = !improvementAvailability.get(imp.target)?.available;
               const affordable = imp.cost <= selectedTerritoryBalance;
               const enabled = affordable && !round1Locked && !noCity && !noTarget;
               const statusLabel = round1Locked

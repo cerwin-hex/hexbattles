@@ -882,7 +882,7 @@ export default function GameScreen() {
     fortificationDots,
     validPlacementAttackTiles,
     minUnitCost,
-    territoryHasCity,
+    territoryCityKeys,
     selectionBorderEdges,
     buildingSelectionEdges,
     affordableTerritoryTileKeys,
@@ -899,6 +899,7 @@ export default function GameScreen() {
     firedUnits,
     territoryBalances,
     cities,
+    improvedCities,
     freeTowerUsedTiles,
     isAiTurn,
     gameResult,
@@ -1182,6 +1183,8 @@ export default function GameScreen() {
         validPlacementAttackTiles,
         ribbonOpen,
         cities,
+        improvedCities,
+        setImprovedCities,
         setMutableTileMap,
         setLiveOwnerMap,
         setEntities,
@@ -1238,6 +1241,7 @@ export default function GameScreen() {
       turn,
       freeTowerUsedTiles,
       cities,
+      improvedCities,
       checkWinLoss,
       pushHistory,
       triggerErrorFlash,
@@ -1547,7 +1551,7 @@ export default function GameScreen() {
         selectedTerritory={selectedTerritory}
         selectedTerritoryBalance={selectedTerritoryBalance}
         selectedTerritoryDefenseCounts={selectedTerritoryDefenseCounts}
-        territoryHasCity={territoryHasCity}
+        territoryHasCity={territoryCityKeys.length > 0}
         freeTowerUsedTiles={freeTowerUsedTiles}
         armedEntityId={armedEntityId}
         setArmedEntityId={setArmedEntityId}

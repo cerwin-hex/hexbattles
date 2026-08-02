@@ -626,14 +626,18 @@ export function canImproveTile(o: {
   targetTerrain: TerrainType;
   /** The territory's gold balance. */
   balance: number;
-  /** Improvements require a city in the same territory. */
-  territoryHasCity: boolean;
+  /**
+   * The city that would pay for this improvement — from findImproveAnchor.
+   * Null means no city of the territory covers the tile, or every covering
+   * city has already built this turn.
+   */
+  anchor: string | null;
   /** Whether the tile itself is a city. */
   isCity: boolean;
   /** The entity standing on the tile, if any. */
   occupantEntity: EntityType | undefined;
 }): boolean {
-  if (!o.territoryHasCity) return false;
+  if (o.anchor === null) return false;
   if (o.isCity) return false;
   // A friendly unit occupies the terrain, it does not consume it — improving
   // under a unit is allowed and does not spend that unit. Buildings and rebels

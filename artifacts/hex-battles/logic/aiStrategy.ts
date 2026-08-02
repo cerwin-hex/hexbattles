@@ -19,7 +19,7 @@ import {
   improveCostFor,
   IMPROVED_TERRAINS,
 } from "@/utils/hexGrid";
-import { advanceAttacksUsed, advanceCombatSpent, applyOwnerEconomy, armedSitesForOwner, calcTerritoryIncome, calcTerritoryUpkeep, effectiveRemaining, isChargeAttack, mergeResult, resolveMovedUnitMoves, spawnRebelsForOwner, sweepNeutralMarkers } from "@/logic/gameLogic";
+import { advanceAttacksUsed, advanceCombatSpent, applyOwnerEconomy, armedSitesForOwner, calcTerritoryIncome, calcTerritoryUpkeep, effectiveRemaining, findImproveAnchor, isChargeAttack, mergeResult, resolveMovedUnitMoves, spawnRebelsForOwner, sweepNeutralMarkers } from "@/logic/gameLogic";
 import {
   dtSplitScore,
   dtCaptureNegatesIncome,
@@ -1647,6 +1647,16 @@ export async function runAiTurn(
         if (!canPay(cost)) return false;
         const tt = ws.tileMap.get(target);
         if (!tt) return false;
+        // Resolve the anchor before rewriting the tile map — the territory it
+        // is read from must be the same one dtFindImproveMove used to pick this
+        // tile, not one recomputed after the terrain change.
+        const terrBefore = getContiguousTerritory(ws.tileMap, target, aiOwner, ws.entities);
+        const { anchor } = findImproveAnchor({
+          tileKey: target,
+          territoryCityKeys: terrBefore.filter((t) => ws.cities.has(t.key)).map((t) => t.key),
+          usedCities: ws.cityImproveUsed,
+        });
+        if (!anchor) return false;
         ws.tileMap = new Map(ws.tileMap);
         ws.tileMap.set(target, { ...tt, terrain });
         cache.clear();
@@ -1654,6 +1664,8 @@ export async function runAiTurn(
         const tid = getTerritoryId(terr);
         ws.balances = new Map(ws.balances);
         if (tid) ws.balances.set(tid, (ws.balances.get(tid) ?? 0) - cost);
+        ws.cityImproveUsed = new Set(ws.cityImproveUsed);
+        ws.cityImproveUsed.add(anchor);
         // Deliberately does NOT mark the tile spent. Improvements are purchases,
         // not unit actions, and may be built under a friendly unit — marking the
         // tile would freeze that unit for the rest of the turn.

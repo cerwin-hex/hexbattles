@@ -372,10 +372,25 @@ describe("dtFindImproveMove", () => {
     expect(dtFindImproveMove(tiles, ctx, 1)).toBeNull();
   });
 
-  it("improves an empty grass tile into a field — no peasant needed", () => {
+  it("returns null when every improvable tile lies outside the city zones", () => {
     const tiles = [makeTile(0, 0, "ai1", "grass"), makeTile(5, 5, "ai1", "grass")];
     const ctx = makeCtx(tiles, [], [], "ai1");
     ctx.cities = new Set(["5,5"]);
+    expect(dtFindImproveMove(tiles, ctx, 10)).toBeNull();
+  });
+
+  it("returns null when every city covering the improvable tiles has already built", () => {
+    const tiles = [makeTile(0, 0, "ai1", "grass"), makeTile(1, 0, "ai1", "grass")];
+    const ctx = makeCtx(tiles, [], [], "ai1");
+    ctx.cities = new Set(["1,0"]);
+    ctx.cityImproveUsed = new Set(["1,0"]);
+    expect(dtFindImproveMove(tiles, ctx, 10)).toBeNull();
+  });
+
+  it("improves an empty grass tile into a field — no peasant needed", () => {
+    const tiles = [makeTile(0, 0, "ai1", "grass"), makeTile(1, 0, "ai1", "grass")];
+    const ctx = makeCtx(tiles, [], [], "ai1");
+    ctx.cities = new Set(["1,0"]);
     expect(dtFindImproveMove(tiles, ctx, 10)).toEqual({
       key: "0,0",
       terrain: "field",
@@ -383,9 +398,9 @@ describe("dtFindImproveMove", () => {
   });
 
   it("improves a tile that a friendly unit is standing on", () => {
-    const tiles = [makeTile(0, 0, "ai1", "grass"), makeTile(5, 5, "ai1", "grass")];
+    const tiles = [makeTile(0, 0, "ai1", "grass"), makeTile(1, 0, "ai1", "grass")];
     const ctx = makeCtx(tiles, [["0,0", "swordsman"]], [], "ai1");
-    ctx.cities = new Set(["5,5"]);
+    ctx.cities = new Set(["1,0"]);
     expect(dtFindImproveMove(tiles, ctx, 10)).toEqual({
       key: "0,0",
       terrain: "field",
@@ -393,9 +408,9 @@ describe("dtFindImproveMove", () => {
   });
 
   it("ignores spent units — a spent unit no longer blocks improving its tile", () => {
-    const tiles = [makeTile(0, 0, "ai1", "grass"), makeTile(5, 5, "ai1", "grass")];
+    const tiles = [makeTile(0, 0, "ai1", "grass"), makeTile(1, 0, "ai1", "grass")];
     const ctx = makeCtx(tiles, [["0,0", "peasant"]], [], "ai1");
-    ctx.cities = new Set(["5,5"]);
+    ctx.cities = new Set(["1,0"]);
     ctx.spentUnits = new Set(["0,0"]);
     expect(dtFindImproveMove(tiles, ctx, 10)).toEqual({
       key: "0,0",
