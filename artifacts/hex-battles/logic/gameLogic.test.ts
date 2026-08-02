@@ -20,6 +20,7 @@ import {
   canFoundCity,
   foundCitySites,
   ownCityKeys,
+  findImproveAnchor,
 } from "@/logic/gameLogic";
 import { cityCapFor } from "@/utils/hexGrid";
 
@@ -1066,5 +1067,70 @@ describe("foundCitySites", () => {
     const territory = keys.map((k) => mkTile(k, "player"));
     const sites = foundCitySites(territory, 1, ["0,0"]);
     expect([...sites].sort()).toEqual(["3,0", "4,0", "5,0", "6,0", "7,0", "8,0", "9,0"]);
+  });
+});
+
+// ─── findImproveAnchor ────────────────────────────────────────────────────────
+
+describe("findImproveAnchor", () => {
+  const noneUsed = new Set<string>();
+
+  it("picks a city within two tiles and reports it in range", () => {
+    expect(
+      findImproveAnchor({ tileKey: "2,0", territoryCityKeys: ["0,0"], usedCities: noneUsed }),
+    ).toEqual({ anchor: "0,0", inRange: true });
+  });
+
+  it("rejects a tile three or more away", () => {
+    expect(
+      findImproveAnchor({ tileKey: "3,0", territoryCityKeys: ["0,0"], usedCities: noneUsed }),
+    ).toEqual({ anchor: null, inRange: false });
+  });
+
+  it("returns nothing when the territory has no city at all", () => {
+    expect(
+      findImproveAnchor({ tileKey: "0,0", territoryCityKeys: [], usedCities: noneUsed }),
+    ).toEqual({ anchor: null, inRange: false });
+  });
+
+  it("prefers the nearest city among several in range", () => {
+    expect(
+      findImproveAnchor({
+        tileKey: "1,0",
+        territoryCityKeys: ["3,0", "0,0"],
+        usedCities: noneUsed,
+      }).anchor,
+    ).toBe("0,0");
+  });
+
+  it("skips a city that already built this turn and takes the next nearest", () => {
+    expect(
+      findImproveAnchor({
+        tileKey: "1,0",
+        territoryCityKeys: ["0,0", "3,0"],
+        usedCities: new Set(["0,0"]),
+      }),
+    ).toEqual({ anchor: "3,0", inRange: true });
+  });
+
+  it("reports in range but no anchor when every city in range has built", () => {
+    expect(
+      findImproveAnchor({
+        tileKey: "1,0",
+        territoryCityKeys: ["0,0"],
+        usedCities: new Set(["0,0"]),
+      }),
+    ).toEqual({ anchor: null, inRange: true });
+  });
+
+  it("breaks ties between equally distant cities by tile key", () => {
+    // "0,0" and "2,0" are both distance 1 from "1,0".
+    expect(
+      findImproveAnchor({
+        tileKey: "1,0",
+        territoryCityKeys: ["2,0", "0,0"],
+        usedCities: noneUsed,
+      }).anchor,
+    ).toBe("0,0");
   });
 });

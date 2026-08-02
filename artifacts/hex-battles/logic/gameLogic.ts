@@ -18,6 +18,7 @@ import {
   improveTargetFor,
   hexDistance,
   cityCapFor,
+  CITY_IMPROVE_RADIUS,
   MIN_OWN_CITY_DISTANCE,
 } from "@/utils/hexGrid";
 import type { ArmedSites } from "@/types";
@@ -711,6 +712,54 @@ export function foundCitySites(
     if (!blocked) out.add(tile.key);
   }
   return out;
+}
+
+/**
+ * Which city would pay for an improvement on a tile.
+ *
+ * `inRange` exists so the UI can tell the two failure modes apart: no city
+ * covers the tile at all, versus every covering city has already built this
+ * turn.
+ */
+export interface ImproveAnchor {
+  /** Nearest covering city that has not built this turn, or null. */
+  anchor: string | null;
+  /** Whether any city of the territory covers the tile at all. */
+  inRange: boolean;
+}
+
+/**
+ * Resolves both the zone rule and the one-improvement-per-city-per-turn rule at
+ * once: a tile is improvable when a city of the SAME territory stands within
+ * CITY_IMPROVE_RADIUS and has not built this turn. Overlapping zones are a real
+ * benefit — the nearest unused city pays, so two cities three tiles apart allow
+ * two improvements in their shared area in one turn. Ties between equally
+ * distant unused cities go to the lower tile key, so the choice is
+ * deterministic and testable.
+ */
+export function findImproveAnchor(o: {
+  tileKey: string;
+  /** Keys of the cities inside the same territory. */
+  territoryCityKeys: Iterable<string>;
+  /** Cities of this owner that already paid for an improvement this turn. */
+  usedCities: ReadonlySet<string>;
+}): ImproveAnchor {
+  const [q, r] = o.tileKey.split(",").map(Number);
+  let anchor: string | null = null;
+  let bestDist = Infinity;
+  let inRange = false;
+  for (const key of o.territoryCityKeys) {
+    const [cq, cr] = key.split(",").map(Number);
+    const dist = hexDistance(q, r, cq, cr);
+    if (dist > CITY_IMPROVE_RADIUS) continue;
+    inRange = true;
+    if (o.usedCities.has(key)) continue;
+    if (dist < bestDist || (dist === bestDist && anchor !== null && key < anchor)) {
+      bestDist = dist;
+      anchor = key;
+    }
+  }
+  return { anchor, inRange };
 }
 
 /**
