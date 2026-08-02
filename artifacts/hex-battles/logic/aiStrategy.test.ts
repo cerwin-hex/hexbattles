@@ -30,6 +30,7 @@ function makeEmptyWs(tileMap: Map<string, HexTile>): AiWorkingState {
     partialMoves: new Map(),
     attacksUsed: new Map(),
     combatSpentUnits: new Set(),
+    cityImproveUsed: new Set(),
     freeTowerUsed: new Map(),
   };
 }
@@ -483,6 +484,7 @@ function makeAiCtx(
     spentUnits: new Set(),
     partialMoves: new Map(),
     combatSpentUnits: new Set(),
+    cityImproveUsed: new Set(),
     aiOwner,
     elements,
   };

@@ -430,6 +430,7 @@ describe("cavalry single-turn sweep (end-to-end)", () => {
       partialMoves: new Map(),
       attacksUsed: new Map(),
       combatSpentUnits: new Set(),
+      cityImproveUsed: new Set(),
       freeTowerUsed: new Map(),
     };
 

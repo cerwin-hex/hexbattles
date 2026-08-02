@@ -37,6 +37,7 @@ function makeWs(tiles: HexTile[], overrides: Partial<AiWorkingState> = {}): AiWo
     partialMoves: new Map(),
     attacksUsed: new Map(),
     combatSpentUnits: new Set(),
+    cityImproveUsed: new Set(),
     freeTowerUsed: new Map(),
     ...overrides,
   };

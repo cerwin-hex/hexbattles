@@ -984,6 +984,8 @@ export interface AiWorkingState {
   attacksUsed: Map<string, number>;
   /** Units that have struck a defender this turn (cavalry: no second strike). */
   combatSpentUnits: Set<string>;
+  /** Cities of this AI that already paid for an improvement this turn. */
+  cityImproveUsed: Set<string>;
   freeTowerUsed: Map<TerritoryOwner, Set<string>>;
   /** Which parts of the game this match is played with. Absent means the full
    *  rule set — self-play and the AI test harnesses rely on that default. */
@@ -1099,6 +1101,11 @@ export async function runAiTurn(
 
   for (const aiOwner of aiOwners) {
     if (!cbs.refs.isTurnActive()) return;
+
+    // Fresh per-owner-turn improvement allowance — mirrors spentUnits /
+    // combatSpentUnits, which self-play resets before calling in with a single
+    // owner. Copy-on-write, never mutated in place, like markSpent below.
+    ws.cityImproveUsed = new Set();
 
     const visited = new Set<string>();
     const aiTiles = Array.from(ws.tileMap.values()).filter(
@@ -1241,6 +1248,7 @@ export async function runAiTurn(
         get spentUnits() { return ws.spentUnits; },
         get partialMoves() { return ws.partialMoves; },
         get combatSpentUnits() { return ws.combatSpentUnits; },
+        get cityImproveUsed() { return ws.cityImproveUsed; },
         get aiOwner() { return aiOwner; },
         get elements() { return elements; },
         territoryCache: cache,

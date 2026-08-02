@@ -23,6 +23,7 @@ interface UseMoveHistoryParams {
   ruins: Set<string>;
   killMarks: Set<string>;
   firedUnits: Set<string>;
+  improvedCities: Set<string>;
   selectedTileKey: string | null;
   isAiTurn: boolean;
   gameResult: GameResult;
@@ -42,6 +43,7 @@ interface UseMoveHistoryParams {
   setRuins: (s: Set<string>) => void;
   setKillMarks: (s: Set<string>) => void;
   setFiredUnits: (s: Set<string>) => void;
+  setImprovedCities: (s: Set<string>) => void;
   setSelectedTileKey: (k: string | null) => void;
   setSelectedEntityKey: (k: string | null) => void;
   setArmedEntityId: (id: EntityType | null) => void;
@@ -62,6 +64,7 @@ export function useMoveHistory({
   ruins,
   killMarks,
   firedUnits,
+  improvedCities,
   selectedTileKey,
   isAiTurn,
   gameResult,
@@ -81,6 +84,7 @@ export function useMoveHistory({
   setRuins,
   setKillMarks,
   setFiredUnits,
+  setImprovedCities,
   setSelectedTileKey,
   setSelectedEntityKey,
   setArmedEntityId,
@@ -107,6 +111,7 @@ export function useMoveHistory({
         ruins: new Set(ruins),
         killMarks: new Set(killMarks),
         firedUnits: new Set(firedUnits),
+        improvedCities: new Set(improvedCities),
         selectedTileKey,
       },
     ]);
@@ -125,6 +130,7 @@ export function useMoveHistory({
     ruins,
     killMarks,
     firedUnits,
+    improvedCities,
     selectedTileKey,
   ]);
 
@@ -147,6 +153,7 @@ export function useMoveHistory({
       setRuins(snapshot.ruins ?? new Set());
       setKillMarks(snapshot.killMarks ?? new Set());
       setFiredUnits(snapshot.firedUnits ?? new Set());
+      setImprovedCities(snapshot.improvedCities ?? new Set());
       setSelectedTileKey(snapshot.selectedTileKey);
       setSelectedEntityKey(null);
       setArmedEntityId(null);
@@ -172,6 +179,7 @@ export function useMoveHistory({
     setRuins,
     setKillMarks,
     setFiredUnits,
+    setImprovedCities,
     setSelectedTileKey,
     setSelectedEntityKey,
     setArmedEntityId,

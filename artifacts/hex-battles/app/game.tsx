@@ -393,6 +393,9 @@ export default function GameScreen() {
   // Ranged units that have already fired this turn; reset with every other
   // per-turn budget at end of turn.
   const [firedUnits, setFiredUnits] = useState<Set<string>>(new Set());
+  // Cities that already paid for an improvement this turn. Cleared when the
+  // player's turn ends; each AI owner tracks its own in AiWorkingState.
+  const [improvedCities, setImprovedCities] = useState<Set<string>>(new Set());
   // cities is completely separate from entities — a permanent Set of tile keys
   // that have a city (pre-placed OR player/AI built). Units can freely occupy
   // city tiles without touching this set. Cities are never removed once placed.
@@ -620,6 +623,7 @@ export default function GameScreen() {
       setRuins(s.ruins);
       setKillMarks(s.killMarks);
       setFiredUnits(s.firedUnits);
+      setImprovedCities(s.improvedCities ?? new Set());
       setCities(s.cities);
       setFreeTowerUsedTiles(s.freeTowerUsedTiles);
       // Absent in saves written before arming was persisted; empty is safe and
@@ -643,6 +647,7 @@ export default function GameScreen() {
     setPartialMoves(new Map());
     setAttacksUsed(new Map());
     setFiredUnits(new Set());
+    setImprovedCities(new Set());
     setMutableTileMap(new Map(tileMap));
     setLiveOwnerMap(new Map());
     setGraveyard(new Set());
@@ -746,6 +751,7 @@ export default function GameScreen() {
         partialMoves: new Map<string, number>(),
         attacksUsed: new Map<string, number>(),
         combatSpentUnits: new Set<string>(),
+        cityImproveUsed: new Set<string>(),
         freeTowerUsed: new Map(freeTowerUsedTilesRef.current),
         elements,
       };
@@ -826,6 +832,7 @@ export default function GameScreen() {
         ruins,
         killMarks,
         firedUnits,
+        improvedCities,
         // Refs, not state: this effect only runs on the player's turn, by which
         // point runAiTurn has already published the freshly armed buckets.
         armedGraveyard: armedGraveyardRef.current,
@@ -853,6 +860,7 @@ export default function GameScreen() {
     ruins,
     killMarks,
     firedUnits,
+    improvedCities,
     freeTowerUsedTiles,
     turn,
     isAiTurn,
@@ -993,6 +1001,7 @@ export default function GameScreen() {
     ruins,
     killMarks,
     firedUnits,
+    improvedCities,
     selectedTileKey,
     isAiTurn,
     gameResult,
@@ -1012,6 +1021,7 @@ export default function GameScreen() {
     setRuins,
     setKillMarks,
     setFiredUnits,
+    setImprovedCities,
     setSelectedTileKey,
     setSelectedEntityKey,
     setArmedEntityId,
@@ -1268,6 +1278,7 @@ export default function GameScreen() {
       setPartialMoves,
       setAttacksUsed,
       setFiredUnits,
+      setImprovedCities,
       setIsAiTurn,
       checkWinLoss,
       runAiTurn,

@@ -48,6 +48,7 @@ function makeCtx(
     spentUnits: new Set(),
     partialMoves: new Map(),
     combatSpentUnits: new Set(),
+    cityImproveUsed: new Set(),
     aiOwner,
     elements,
   };
@@ -145,6 +146,7 @@ describe("dtCaptureNegatesIncome", () => {
       spentUnits: new Set(),
       partialMoves: new Map(),
       combatSpentUnits: new Set(),
+      cityImproveUsed: new Set(),
       aiOwner: "ai1",
       elements: ALL_GAME_ELEMENTS,
     };
@@ -325,6 +327,7 @@ describe("dtFindMergeMove", () => {
       spentUnits: new Set(),
       partialMoves: new Map(),
       combatSpentUnits: new Set(),
+      cityImproveUsed: new Set(),
       aiOwner: "ai1",
       elements: ALL_GAME_ELEMENTS,
     };
@@ -344,6 +347,7 @@ describe("dtFindMergeMove", () => {
       spentUnits: new Set(),
       partialMoves: new Map(),
       combatSpentUnits: new Set(),
+      cityImproveUsed: new Set(),
       aiOwner: "ai1",
       elements: ALL_GAME_ELEMENTS,
     };

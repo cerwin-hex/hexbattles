@@ -75,6 +75,7 @@ function runPlayerEndTurn(state: RoundState, turn: number): RoundState {
     setPartialMoves: vi.fn(),
     setAttacksUsed: vi.fn(),
     setFiredUnits: vi.fn(),
+    setImprovedCities: vi.fn(),
     setIsAiTurn: vi.fn(),
     checkWinLoss: vi.fn().mockReturnValue(false),
     runAiTurn: vi.fn(),
@@ -113,6 +114,7 @@ async function runAiPhase(state: RoundState, turn: number): Promise<RoundState> 
     partialMoves: new Map(),
     attacksUsed: new Map(),
     combatSpentUnits: new Set(),
+    cityImproveUsed: new Set(),
     freeTowerUsed: new Map(),
   };
   // "ai1" owns no tiles on this board, so the AI does nothing — but the
@@ -267,6 +269,7 @@ describe("bankruptcy markers on a demolished bridge", () => {
       partialMoves: new Map(),
       attacksUsed: new Map(),
       combatSpentUnits: new Set(),
+      cityImproveUsed: new Set(),
       freeTowerUsed: new Map(),
     };
     // Carried across rounds, exactly as game.tsx carries them over the boundary.
@@ -309,6 +312,7 @@ describe("bankruptcy markers on a demolished bridge", () => {
       partialMoves: new Map(),
       attacksUsed: new Map(),
       combatSpentUnits: new Set(),
+      cityImproveUsed: new Set(),
       freeTowerUsed: new Map(),
     };
     const armedGraves: ArmedSites = new Map();

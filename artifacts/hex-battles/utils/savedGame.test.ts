@@ -87,6 +87,7 @@ function makeSnapshot(): SavedGame {
       ]),
       killMarks: new Set<string>(),
       firedUnits: new Set<string>(),
+      improvedCities: new Set<string>(),
       turn: 7,
     },
   };

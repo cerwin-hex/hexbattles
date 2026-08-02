@@ -96,6 +96,7 @@ function ctxOf(b: ReturnType<typeof buildBoard>): AiContext {
     spentUnits: new Set(),
     partialMoves: new Map(),
     combatSpentUnits: new Set(),
+    cityImproveUsed: new Set(),
     aiOwner: "ai1",
     elements: ALL_GAME_ELEMENTS,
   };
@@ -114,6 +115,7 @@ function workingStateOf(b: ReturnType<typeof buildBoard>): AiWorkingState {
     partialMoves: new Map(),
     attacksUsed: new Map(),
     combatSpentUnits: new Set(),
+    cityImproveUsed: new Set(),
     freeTowerUsed: new Map(),
   };
 }

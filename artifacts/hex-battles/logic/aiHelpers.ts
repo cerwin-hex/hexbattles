@@ -26,6 +26,8 @@ export interface AiContext {
   partialMoves: Map<string, number>;
   /** Units that have struck a defender this turn (cavalry: no second strike). */
   combatSpentUnits: Set<string>;
+  /** Cities of this AI that already paid for an improvement this turn. */
+  cityImproveUsed: Set<string>;
   aiOwner: TerritoryOwner;
   /** Which parts of the game this match is played with. */
   elements: GameElements;

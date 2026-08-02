@@ -88,6 +88,8 @@ export type MoveHistorySnapshot = {
   ruins: Set<string>;
   killMarks: Set<string>;
   firedUnits: Set<string>;
+  /** Cities that already paid for an improvement this turn. */
+  improvedCities: Set<string>;
   selectedTileKey: string | null;
 };
 

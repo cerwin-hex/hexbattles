@@ -52,6 +52,7 @@ function makeCtx(
     spentUnits: new Set(),
     partialMoves: new Map(),
     combatSpentUnits: new Set(),
+    cityImproveUsed: new Set(),
     aiOwner: owner,
     elements: ALL_GAME_ELEMENTS,
   };
@@ -779,6 +780,7 @@ describe("runExpertTerritoryDecisionLoop", () => {
       partialMoves: new Map(),
       attacksUsed: new Map(),
       combatSpentUnits: new Set(),
+      cityImproveUsed: new Set(),
       freeTowerUsed: new Map(),
     };
     const tid = getTerritoryId(getContiguousTerritory(tileMap, "0,0", "ai1", entities))!;
@@ -1049,6 +1051,7 @@ describe("runExpertTerritoryDecisionLoop", () => {
       partialMoves: new Map(),
       attacksUsed: new Map(),
       combatSpentUnits: new Set(),
+      cityImproveUsed: new Set(),
       freeTowerUsed: new Map(),
     };
     const tid = getTerritoryId(getContiguousTerritory(tileMap, "0,0", "ai1", entities))!;

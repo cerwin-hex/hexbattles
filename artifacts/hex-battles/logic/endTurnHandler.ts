@@ -43,6 +43,7 @@ export interface EndTurnParams {
    * cleared at the start of the player's next turn, inside `runAiTurn`.
    */
   setFiredUnits: (s: Set<string>) => void;
+  setImprovedCities: (s: Set<string>) => void;
   setIsAiTurn: (b: boolean) => void;
   checkWinLoss: (map: Map<string, HexTile>) => boolean;
   runAiTurn: (
@@ -88,6 +89,7 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
     setPartialMoves,
     setAttacksUsed,
     setFiredUnits,
+    setImprovedCities,
     setIsAiTurn,
     checkWinLoss,
     runAiTurn,
@@ -164,6 +166,7 @@ export function handleEndTurnLogic(params: EndTurnParams): void {
   setPartialMoves(new Map());
   setAttacksUsed(new Map());
   setFiredUnits(new Set());
+  setImprovedCities(new Set());
   closeRibbon();
 
   if (!checkWinLoss(nextTileMap)) {

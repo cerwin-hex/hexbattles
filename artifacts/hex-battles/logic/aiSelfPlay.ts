@@ -141,6 +141,7 @@ export async function runOneAiTurnHeadless(
   ws.partialMoves = new Map();
   ws.attacksUsed = new Map();
   ws.combatSpentUnits = new Set();
+  ws.cityImproveUsed = new Set();
   await runAiTurn(ws, makeHeadlessCbs(), [owner], turn, difficulty, armedGraves, armedRuins);
 }
 
@@ -209,6 +210,7 @@ export async function playMatch(cfg: MatchConfig): Promise<MatchResult> {
       partialMoves: new Map(),
       attacksUsed: new Map(),
       combatSpentUnits: new Set(),
+      cityImproveUsed: new Set(),
       freeTowerUsed: new Map(),
     };
 
@@ -234,6 +236,7 @@ export async function playMatch(cfg: MatchConfig): Promise<MatchResult> {
         ws.partialMoves = new Map();
         ws.attacksUsed = new Map();
         ws.combatSpentUnits = new Set();
+        ws.cityImproveUsed = new Set();
         cfg.onBeforeOwnerTurn?.(owner);
         await runAiTurn(ws, cbs, [owner], turn, diffByOwner[owner], armedGraves, armedRuins);
         // Invariant: no territory may ever hold a negative balance (over-spend).
@@ -341,6 +344,7 @@ export async function playFreeForAll(cfg: FreeForAllConfig): Promise<FreeForAllR
       partialMoves: new Map(),
       attacksUsed: new Map(),
       combatSpentUnits: new Set(),
+      cityImproveUsed: new Set(),
       freeTowerUsed: new Map(),
     };
     const diffByOwner: Record<string, Difficulty> = {};
@@ -361,6 +365,7 @@ export async function playFreeForAll(cfg: FreeForAllConfig): Promise<FreeForAllR
         ws.partialMoves = new Map();
         ws.attacksUsed = new Map();
         ws.combatSpentUnits = new Set();
+        ws.cityImproveUsed = new Set();
         cfg.onBeforeOwnerTurn?.(owner);
         const t0 = performance.now();
         await runAiTurn(ws, cbs, [owner], turn, diffByOwner[owner], armedGraves, armedRuins);

@@ -29,6 +29,8 @@ export interface SavedGameState {
   killMarks: Set<string>;
   /** Ranged units that have already fired this turn. */
   firedUnits: Set<string>;
+  /** Cities that already paid for an improvement this turn. */
+  improvedCities: Set<string>;
   turn: number;
 }
 
@@ -71,6 +73,7 @@ interface Serialized {
     // Added with the ranged track; absent in older saves, loaded as empty.
     killMarks?: string[];
     firedUnits?: string[];
+    improvedCities?: string[];
     turn: number;
   };
 }
@@ -101,6 +104,7 @@ export function serializeSavedGame(g: SavedGame): string {
       ),
       killMarks: [...g.state.killMarks],
       firedUnits: [...g.state.firedUnits],
+      improvedCities: [...g.state.improvedCities],
       turn: g.state.turn,
     },
   };
@@ -140,6 +144,7 @@ export function deserializeSavedGame(json: string): SavedGame | null {
         ),
         killMarks: new Set(parsed.state.killMarks ?? []),
         firedUnits: new Set(parsed.state.firedUnits ?? []),
+        improvedCities: new Set(parsed.state.improvedCities ?? []),
         turn: parsed.state.turn,
       },
     };
