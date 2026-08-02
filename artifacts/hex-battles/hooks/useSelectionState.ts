@@ -11,7 +11,13 @@ import {
   improveTargetFor,
   unitMovement,
 } from "@/utils/hexGrid";
-import { canImproveTile, findImproveAnchor, mergeResult } from "@/logic/gameLogic";
+import {
+  canImproveTile,
+  findImproveAnchor,
+  foundCitySites,
+  mergeResult,
+  ownCityKeys,
+} from "@/logic/gameLogic";
 import { rangedTargets } from "@/logic/rangedAttack";
 import { computeSelectionBorderEdges } from "@/utils/borderEdges";
 import { SELECTED_UNIT_RING } from "@/constants/colors";
@@ -254,6 +260,20 @@ export function useSelectionState({
     [selectedTerritory, cities],
   );
 
+  // Every tile of the selected territory where a city may be founded. NOT
+  // gated on a city being armed: the ribbon needs it to decide whether to
+  // offer the City item at all, and only the highlight layer restricts its use
+  // to the armed case.
+  const validCitySites = useMemo<Set<string>>(
+    () =>
+      foundCitySites(
+        selectedTerritory,
+        territoryCityKeys.length,
+        ownCityKeys(cities, activeTileMap, "player"),
+      ),
+    [selectedTerritory, territoryCityKeys, cities, activeTileMap],
+  );
+
   // Every tile of the selected territory where the armed improvement may be
   // built. Empty when no improvement is armed, so arming Field lights up only
   // grass tiles rather than the whole territory.
@@ -464,6 +484,7 @@ export function useSelectionState({
     validPlacementAttackTiles,
     minUnitCost,
     territoryCityKeys,
+    validCitySites,
     selectionBorderEdges,
     buildingSelectionEdges,
     affordableTerritoryTileKeys,

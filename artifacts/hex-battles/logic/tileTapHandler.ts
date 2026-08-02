@@ -21,11 +21,13 @@ import {
   advanceCombatSpent,
   advanceFired,
   applySingleHexPenalty,
+  canFoundCity,
   canImproveTile,
   classifyOwnTilePlacement,
   findImproveAnchor,
   isChargeAttack,
   mergeResult,
+  ownCityKeys,
   resolveMovedUnitMoves,
   effectiveRemaining,
 } from "@/logic/gameLogic";
@@ -542,11 +544,23 @@ export function handleTileTapLogic(params: TileTapParams): void {
         selectedTerritory.length >= 2 &&
         !selectedTerritory.some((t) => playerUsedSet.has(t.key));
       const blockedByGraveyard = !meta.isUnit && graveyard.has(key);
+      // The city rules — cap and spacing — re-checked at the commit site. The
+      // ribbon and the purchase dots compute the same thing from a render-time
+      // snapshot; this is the authority.
+      const cityRuleOk =
+        armedEntityId !== "city" ||
+        canFoundCity({
+          targetKey: key,
+          territoryTileCount: selectedTerritory.length,
+          territoryCityCount: selectedTerritory.filter((t) => cities.has(t.key)).length,
+          ownCityKeys: ownCityKeys(cities, activeTileMap, "player"),
+        });
       const effectiveCost = towerIsFree ? 0 : meta.cost;
       const effectiveNewUpkeep = towerIsFree ? 0 : meta.upkeep;
       if (
         playerCanAfford(balance, effectiveCost) &&
-        !blockedByGraveyard
+        !blockedByGraveyard &&
+        cityRuleOk
       ) {
         pushHistory();
         const newEntities = new Map(entities);

@@ -18,6 +18,7 @@ function MovementHighlightLayerInner({
   validImprovementTiles,
   validPlacementAttackTiles,
   validRangedTargets,
+  validCitySites,
   selectedTileKeys,
   armedEntityId,
   armedImprovement,
@@ -115,6 +116,9 @@ function MovementHighlightLayerInner({
               terrain: tile.terrain,
             });
             if (placement.blocked) return null;
+            // A city may only be founded on a legal site: inside the cap and at
+            // least three tiles from every city the player already holds.
+            if (armedEntityId === "city" && !validCitySites.has(key)) return null;
             // Graveyards block buildings only, and are the handler's own check
             // rather than part of the shared rule.
             if (

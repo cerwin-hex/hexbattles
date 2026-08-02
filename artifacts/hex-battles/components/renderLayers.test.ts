@@ -266,6 +266,7 @@ function makeMovementHighlightLayerProps(
     validImprovementTiles: new Set<string>(),
     validPlacementAttackTiles: new Set<string>(),
     validRangedTargets: new Set<string>(),
+    validCitySites: new Set<string>(),
     selectedTileKeys: new Set<string>(),
     armedEntityId: null,
     armedImprovement: null,

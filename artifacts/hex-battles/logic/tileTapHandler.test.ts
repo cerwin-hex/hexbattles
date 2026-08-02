@@ -779,18 +779,21 @@ describe("armed entity placement on own territory", () => {
   });
 
   it("founds a city on an improved (field) tile and removes the improvement", () => {
-    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player", "field")];
-    const territory = [
+    // 5 tiles → cap floor(5/5) = 1, enough to found the territory's first city.
+    const tiles = [
       makeTile(0, 0, "player"),
       makeTile(1, 0, "player", "field"),
+      makeTile(2, 0, "player"),
+      makeTile(3, 0, "player"),
+      makeTile(4, 0, "player"),
     ];
     const params = makeParams({
       key: "1,0",
       activeTileMap: tileMap(tiles),
       armedEntityId: "city",
-      selectedTileKeys: new Set(["0,0", "1,0"]),
+      selectedTileKeys: new Set(tiles.map((t) => t.key)),
       selectedTerritoryId: "0,0",
-      selectedTerritory: territory,
+      selectedTerritory: tiles,
       entities: new Map(),
       territoryBalances: new Map([["0,0", 100]]),
     });
@@ -831,15 +834,15 @@ describe("armed entity placement on own territory", () => {
   });
 
   it("can found a city on a plain grass tile", () => {
-    const tiles = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
-    const territory = [makeTile(0, 0, "player"), makeTile(1, 0, "player")];
+    // 5 tiles → cap floor(5/5) = 1, enough to found the territory's first city.
+    const tiles = Array.from({ length: 5 }, (_, i) => makeTile(i, 0, "player"));
     const params = makeParams({
       key: "1,0",
       activeTileMap: tileMap(tiles),
       armedEntityId: "city",
-      selectedTileKeys: new Set(["0,0", "1,0"]),
+      selectedTileKeys: new Set(tiles.map((t) => t.key)),
       selectedTerritoryId: "0,0",
-      selectedTerritory: territory,
+      selectedTerritory: tiles,
       entities: new Map(),
       territoryBalances: new Map([["0,0", 100]]),
     });
@@ -1451,5 +1454,64 @@ describe("game elements gate purchases", () => {
     });
     handleTileTapLogic(params);
     expect(params.setEntities).toHaveBeenCalled();
+  });
+});
+
+// ─── City founding rules ──────────────────────────────────────────────────────
+
+describe("founding a city", () => {
+  /** A straight row of `n` player tiles from 0,0 to n-1,0. */
+  function row(n: number): HexTile[] {
+    return Array.from({ length: n }, (_, i) => makeTile(i, 0, "player"));
+  }
+
+  function cityParams(
+    tiles: HexTile[],
+    overrides: Partial<TileTapParams> = {},
+  ): TileTapParams {
+    return makeParams({
+      armedEntityId: "city",
+      activeTileMap: tileMap(tiles),
+      selectedTerritory: tiles.filter((t) => t.owner === "player"),
+      selectedTileKeys: new Set(
+        tiles.filter((t) => t.owner === "player").map((t) => t.key),
+      ),
+      selectedTerritoryId: "0,0",
+      territoryBalances: new Map([["0,0", 100]]),
+      ...overrides,
+    });
+  }
+
+  it("rejects a city when the territory is already at its cap", () => {
+    // 9 tiles → cap floor(9/5) = 1, and one city already stands at 0,0.
+    const params = cityParams(row(9), { key: "5,0", cities: new Set(["0,0"]) });
+    handleTileTapLogic(params);
+    expect(params.setCities).not.toHaveBeenCalled();
+    expect(params.triggerErrorFlash).toHaveBeenCalledWith("5,0");
+  });
+
+  it("rejects a city within three tiles of one the player already holds", () => {
+    // 15 tiles → cap 3, so only the spacing rule can reject 2,0.
+    const params = cityParams(row(15), { key: "2,0", cities: new Set(["0,0"]) });
+    handleTileTapLogic(params);
+    expect(params.setCities).not.toHaveBeenCalled();
+    expect(params.triggerErrorFlash).toHaveBeenCalledWith("2,0");
+  });
+
+  it("allows a city exactly three tiles away when the cap allows it", () => {
+    // 10 tiles → cap 2, one city held, and 3,0 is exactly the minimum distance.
+    const params = cityParams(row(10), { key: "3,0", cities: new Set(["0,0"]) });
+    handleTileTapLogic(params);
+    expect(params.triggerErrorFlash).not.toHaveBeenCalled();
+    expect(params.setCities).toHaveBeenCalled();
+  });
+
+  it("ignores an enemy city when checking the distance", () => {
+    // An ai1 city sits two tiles away at 1,1; only the player's own cities block.
+    const tiles = [...row(5), makeTile(1, 1, "ai1")];
+    const params = cityParams(tiles, { key: "0,0", cities: new Set(["1,1"]) });
+    handleTileTapLogic(params);
+    expect(params.triggerErrorFlash).not.toHaveBeenCalled();
+    expect(params.setCities).toHaveBeenCalled();
   });
 });

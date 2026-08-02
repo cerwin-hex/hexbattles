@@ -90,6 +90,7 @@ export interface MovementHighlightLayerEqualProps {
   validImprovementTiles: Set<string>;
   validPlacementAttackTiles: Set<string>;
   validRangedTargets: Set<string>;
+  validCitySites: Set<string>;
   selectedTileKeys: Set<string>;
   armedEntityId: EntityType | null;
   armedImprovement: TerrainType | null;
@@ -113,6 +114,7 @@ export function areMovementHighlightLayerEqual(
     prev.validImprovementTiles === next.validImprovementTiles &&
     prev.validPlacementAttackTiles === next.validPlacementAttackTiles &&
     prev.validRangedTargets === next.validRangedTargets &&
+    prev.validCitySites === next.validCitySites &&
     prev.selectedTileKeys === next.selectedTileKeys &&
     prev.armedEntityId === next.armedEntityId &&
     prev.armedImprovement === next.armedImprovement &&

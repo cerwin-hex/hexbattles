@@ -883,6 +883,7 @@ export default function GameScreen() {
     validPlacementAttackTiles,
     minUnitCost,
     territoryCityKeys,
+    validCitySites,
     selectionBorderEdges,
     buildingSelectionEdges,
     affordableTerritoryTileKeys,
@@ -1515,6 +1516,7 @@ export default function GameScreen() {
               validImprovementTiles={validImprovementTiles}
               validPlacementAttackTiles={validPlacementAttackTiles}
               validRangedTargets={validRangedTargets}
+              validCitySites={validCitySites}
               selectedTileKeys={selectedTileKeys}
               armedEntityId={armedEntityId}
               armedImprovement={armedImprovement}
@@ -1551,7 +1553,8 @@ export default function GameScreen() {
         selectedTerritory={selectedTerritory}
         selectedTerritoryBalance={selectedTerritoryBalance}
         selectedTerritoryDefenseCounts={selectedTerritoryDefenseCounts}
-        territoryHasCity={territoryCityKeys.length > 0}
+        validCitySites={validCitySites}
+        territoryCityCount={territoryCityKeys.length}
         freeTowerUsedTiles={freeTowerUsedTiles}
         armedEntityId={armedEntityId}
         setArmedEntityId={setArmedEntityId}

@@ -1,7 +1,7 @@
 import React from "react";
 import { ScrollView, StyleProp, Text, TouchableOpacity, View, ViewStyle } from "react-native";
 import Animated from "react-native-reanimated";
-import { nextDefenseUpkeep, ENTITY_META, CITY_BONUS } from "@/utils/hexGrid";
+import { nextDefenseUpkeep, ENTITY_META, CITY_BONUS, cityCapFor } from "@/utils/hexGrid";
 import type { HexTile, TerritoryOwner, EntityType, TerrainType } from "@/types";
 import {
   unitPurchasablesFor,
@@ -25,7 +25,8 @@ interface PurchaseRibbonProps {
   selectedTerritory: HexTile[];
   selectedTerritoryBalance: number;
   selectedTerritoryDefenseCounts: { tower: number; castle: number };
-  territoryHasCity: boolean;
+  validCitySites: Set<string>;
+  territoryCityCount: number;
   freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
   armedEntityId: EntityType | null;
   setArmedEntityId: (id: EntityType | null) => void;
@@ -46,7 +47,8 @@ export default function PurchaseRibbon({
   selectedTerritory,
   selectedTerritoryBalance,
   selectedTerritoryDefenseCounts,
-  territoryHasCity,
+  validCitySites,
+  territoryCityCount,
   freeTowerUsedTiles,
   armedEntityId,
   setArmedEntityId,
@@ -85,9 +87,13 @@ export default function PurchaseRibbon({
           const isCastle = item.id === "castle";
           const isBridge = item.id === "bridge";
           const round1Locked = turn === 1 && !isTower;
-          const cityAlreadyBuilt = item.id === "city" && territoryHasCity;
-          const cityTooSmall = item.id === "city" && selectedTerritory.length < 5;
-          const cityLocked = cityAlreadyBuilt || cityTooSmall;
+          const cityCap = cityCapFor(selectedTerritory.length);
+          const cityTooSmall = item.id === "city" && cityCap === 0;
+          const cityCapReached =
+            item.id === "city" && cityCap > 0 && territoryCityCount >= cityCap;
+          const cityNoSite =
+            item.id === "city" && !cityTooSmall && !cityCapReached && validCitySites.size === 0;
+          const cityLocked = cityTooSmall || cityCapReached || cityNoSite;
           const bridgeLocked = isBridge && !hasBridgePlacementAvailable;
           const playerUsedTilesSet = freeTowerUsedTiles.get("player") ?? new Set<string>();
           const playerTowerFree =
@@ -102,20 +108,23 @@ export default function PurchaseRibbon({
             ? "Round 2+"
             : bridgeLocked
               ? "No water"
-            : cityAlreadyBuilt
-              ? "BUILT"
               : cityTooSmall
                 ? "<5 tiles"
-                : playerTowerFree
-                  ? "FREE"
-                  : `${item.cost}`;
+                : cityCapReached
+                  ? "MAX"
+                  : cityNoSite
+                    ? "Too close"
+                    : playerTowerFree
+                      ? "FREE"
+                      : `${item.cost}`;
           // Only the bare numeric cost is a money value (gets a coin icon); the
-          // status labels ("Round 2+", "BUILT", "FREE", …) stay plain text.
+          // status labels ("Round 2+", "MAX", "FREE", …) stay plain text.
           const costIsMoney =
             !round1Locked &&
             !bridgeLocked &&
-            !cityAlreadyBuilt &&
             !cityTooSmall &&
+            !cityCapReached &&
+            !cityNoSite &&
             !playerTowerFree;
           const nextUpkeepLabel = (() => {
             if (isTower) {
@@ -176,7 +185,7 @@ export default function PurchaseRibbon({
                     !enabled && styles.ribbonDim,
                     isArmed && styles.ribbonNameArmed,
                     playerTowerFree && styles.ribbonCostFree,
-                    cityAlreadyBuilt && styles.ribbonCostBuilt,
+                    cityCapReached && styles.ribbonCostBuilt,
                   ]}
                 >
                   {costLabel}
@@ -206,18 +215,23 @@ export default function PurchaseRibbon({
             <View style={styles.ribbonDivider} />
             {improvements.map((imp) => {
               const isArmed = armedImprovement === imp.target;
+              const availability = improvementAvailability.get(imp.target);
               const round1Locked = turn === 1;
-              const noCity = !territoryHasCity;
-              const noTarget = !improvementAvailability.get(imp.target)?.available;
+              const noTarget = !availability?.available;
+              // In range but unavailable can only mean every covering city has
+              // already built this turn.
+              const usedUp = noTarget && !!availability?.inRange;
               const affordable = imp.cost <= selectedTerritoryBalance;
-              const enabled = affordable && !round1Locked && !noCity && !noTarget;
+              const enabled = affordable && !round1Locked && !noTarget;
               const statusLabel = round1Locked
                 ? "Round 2+"
-                : noCity
+                : territoryCityCount === 0
                   ? "Needs city"
-                  : noTarget
-                    ? `No ${imp.source}`
-                    : null;
+                  : usedUp
+                    ? "Cities used"
+                    : noTarget
+                      ? `No ${imp.source} near`
+                      : null;
               return (
                 <TouchableOpacity
                   key={imp.target}
