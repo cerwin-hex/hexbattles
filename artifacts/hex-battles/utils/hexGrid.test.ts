@@ -14,6 +14,7 @@ import {
   getMoveField,
   getContiguousTerritory,
   getTerritoryId,
+  recalculateTerritoriesForCapture,
   generateHexGrid,
   improveCostFor,
   improveTargetFor,
@@ -524,6 +525,65 @@ describe("getMoveField", () => {
     const { reachable } = getMoveField("0,0", "player", ents, map, new Set(), 5);
     const moves = getValidMoves("0,0", "player", ents, map, new Set(), 5);
     expect([...reachable].sort()).toEqual([...moves].sort());
+  });
+});
+
+// ─── recalculateTerritoriesForCapture ────────────────────────────────────────
+
+describe("recalculateTerritoriesForCapture", () => {
+  it("pools the balances of every territory the captured tile fuses together", () => {
+    // Two separate two-tile territories either side of a neutral gap at (1,0).
+    // Taking the gap joins them, and the survivor must hold the sum. This is the
+    // path that asks, per tile of the new territory, which old territory it came
+    // from — the answer is memoised per old cluster, so a multi-tile cluster
+    // must still contribute its balance exactly once and no cluster may be
+    // missed.
+    const before = tileMap([
+      makeTile(0, 0, "player"),
+      makeTile(0, 1, "player"),
+      makeTile(1, 0, "neutral"),
+      makeTile(2, 0, "player"),
+      makeTile(2, 1, "player"),
+    ]);
+    const after = new Map(before);
+    after.set("1,0", { ...before.get("1,0")!, owner: "player" });
+
+    const balances = recalculateTerritoriesForCapture(
+      "1,0",
+      "player",
+      "neutral",
+      before,
+      after,
+      new Map([["0,0", 10], ["2,0", 5]]),
+      new Map(),
+      new Map(),
+    );
+
+    expect(balances.get("0,0")).toBe(15);
+    expect(balances.has("2,0")).toBe(false);
+  });
+
+  it("keeps the balance intact when the captured tile joins a single territory", () => {
+    const before = tileMap([
+      makeTile(0, 0, "player"),
+      makeTile(0, 1, "player"),
+      makeTile(1, 0, "neutral"),
+    ]);
+    const after = new Map(before);
+    after.set("1,0", { ...before.get("1,0")!, owner: "player" });
+
+    const balances = recalculateTerritoriesForCapture(
+      "1,0",
+      "player",
+      "neutral",
+      before,
+      after,
+      new Map([["0,0", 7]]),
+      new Map(),
+      new Map(),
+    );
+
+    expect(balances.get("0,0")).toBe(7);
   });
 });
 

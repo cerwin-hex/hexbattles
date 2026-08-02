@@ -709,9 +709,11 @@ export function recalculateTerritoriesForCapture(
     if (!isTerritoryTile(map, startKey, owner, oldEnt)) return [];
     const cluster: HexTile[] = [];
     const visited = new Set<string>([startKey]);
+    // Read head instead of `q.shift()`: shifting re-indexes the whole array each
+    // step, making an otherwise linear flood fill quadratic in cluster size.
     const q = [startKey];
-    while (q.length > 0) {
-      const curr = q.shift()!;
+    for (let head = 0; head < q.length; head++) {
+      const curr = q[head];
       const t = map.get(curr);
       if (!t || t.owner !== owner) continue;
       if (t.terrain === 'mountain') continue;
@@ -732,9 +734,10 @@ export function recalculateTerritoriesForCapture(
     if (!isTerritoryTile(map, startKey, owner, entities)) return [];
     const cluster: HexTile[] = [];
     const visited = new Set<string>([startKey]);
+    // Read head instead of `q.shift()` — see clusterOwnerOld.
     const q = [startKey];
-    while (q.length > 0) {
-      const curr = q.shift()!;
+    for (let head = 0; head < q.length; head++) {
+      const curr = q[head];
       const t = map.get(curr);
       if (!t || t.owner !== owner) continue;
       if (t.terrain === 'mountain') continue;
@@ -805,9 +808,20 @@ export function recalculateTerritoriesForCapture(
 
     if (newTerrId) {
       const mergedIds = new Set<string>();
+      // Which OLD territories the capture just fused into one. Every tile of an
+      // old cluster answers this identically — `clusterOwnerOld` returns that
+      // same cluster, so `getTerritoryId` returns that same id — so one BFS per
+      // old cluster settles all of its tiles. Without this the loop ran a full
+      // territory BFS for every tile of the merged territory, which on the AI's
+      // search path is the dominant cost of evaluating a capture: quadratic in
+      // territory size, paid once per capture candidate.
+      const seenOld = new Set<string>();
       for (const t of newTerr) {
         if (t.key === changedTileKey) continue;
+        if (seenOld.has(t.key)) continue;
+        seenOld.add(t.key);
         const oldTerr2 = clusterOwnerOld(previousTileMap, t.key, newOwner);
+        for (const ot of oldTerr2) seenOld.add(ot.key);
         const oldId2 = getTerritoryId(oldTerr2);
         if (oldId2) mergedIds.add(oldId2);
       }
