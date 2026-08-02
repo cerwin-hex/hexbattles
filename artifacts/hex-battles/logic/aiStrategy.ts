@@ -528,12 +528,14 @@ export async function runAiTerritoryDecisionLoop(
     if (!actionTaken) {
       const cityCost = ENTITY_META.city.cost;
       const territoryCityCount = currTerr.filter((t) => aiCtx.cities.has(t.key)).length;
-      const citySites = foundCitySites(
-        currTerr,
-        territoryCityCount,
-        ownCityKeys(aiCtx.cities, aiCtx.tileMap, aiOwner),
-      );
-      if (canAfford(cityCost, 0) && citySites.size > 0) {
+      const citySites = canAfford(cityCost, 0)
+        ? foundCitySites(
+            currTerr,
+            territoryCityCount,
+            ownCityKeys(aiCtx.cities, aiCtx.tileMap, aiOwner),
+          )
+        : new Set<string>();
+      if (citySites.size > 0) {
         const bldgZoC = new Set<string>();
         for (const [bk, be] of aiCtx.entities) {
           if (be !== "tower" && be !== "castle") continue;

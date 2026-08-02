@@ -82,6 +82,9 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
               <Text style={styles.ruleSectionTitle}>Improvements</Text>
               <View style={styles.ruleDivider} />
               <Text style={styles.ruleBody}>
+                A territory may found one City for every 5 tiles it owns, and a new City must sit at least 3 tiles from every City you already own, anywhere on the map. Enemy and neutral cities don't block you.
+              </Text>
+              <Text style={[styles.ruleBody, { marginTop: 8 }]}>
                 You can improve a tile within 2 tiles of one of your Cities in that same territory: grass into a Field (2 gold), forest into a Sawmill (3 gold), or desert into a Mine (4 gold). Improving uses up nothing but gold.
               </Text>
               <Text style={[styles.ruleBody, { marginTop: 8 }]}>

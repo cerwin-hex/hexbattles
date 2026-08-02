@@ -446,12 +446,17 @@ describe("dtFindImproveMove", () => {
   });
 
   it("prefers a tile adjacent to an own city", () => {
-    // City at 0,0 (own); forest at 1,0 (adjacent to the city);
-    // grass at 5,5 (far from any city). Both are improvable and affordable.
+    // City at 0,0 (own); forest at 1,0 is adjacent to the city (distance 1);
+    // grass at 2,0 is inside the city's improve zone but not adjacent
+    // (distance 2). Both are legal and affordable, so this still discriminates
+    // the adjacency-priority tie-break: the adjacent tile must win.
     const cityTile = makeTile(0, 0, "ai1", "grass");
     const forestTile = makeTile(1, 0, "ai1", "forest");
-    const farGrass = makeTile(5, 5, "ai1", "grass");
-    const territory = [cityTile, forestTile, farGrass];
+    const zoneGrass = makeTile(2, 0, "ai1", "grass");
+    // zoneGrass is listed before forestTile so a pure scan-order win (first
+    // legal candidate found) can't masquerade as the adjacency-priority
+    // tie-break: forestTile must overtake it on priority, not on position.
+    const territory = [cityTile, zoneGrass, forestTile];
     const ctx = makeCtx(territory, [], [], "ai1");
     ctx.cities = new Set(["0,0"]);
     expect(dtFindImproveMove(territory, ctx, 10)).toEqual({
