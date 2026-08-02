@@ -12,14 +12,15 @@ import {
   type GameElementDef,
 } from "@/constants/gameElements";
 
-// main ships no beta element, so beta behaviour is exercised against a fixture
-// that marks a real element as beta. Using real ids keeps the types honest.
+// Beta behaviour is exercised against a fixture that marks a real element as
+// beta, so these cases stay stable as elements graduate out of beta. Using real
+// ids keeps the types honest.
 const BETA_FIXTURE: readonly GameElementDef[] = GAME_ELEMENTS.map((d) =>
   d.id === "rebels" ? { ...d, beta: true } : d,
 );
 
 // Mirrors the rule DEFAULT_GAME_ELEMENTS applies, so the fixture's beta element
-// can be exercised without a beta element shipping on main.
+// can be exercised independently of which elements ship in beta.
 function buildDefaultsFor(defs: readonly GameElementDef[]): Record<string, boolean> {
   return Object.fromEntries(defs.map((d) => [d.id, !d.beta]));
 }

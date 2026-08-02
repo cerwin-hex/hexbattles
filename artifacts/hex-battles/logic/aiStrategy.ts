@@ -34,7 +34,6 @@ import { aiBuyableUnits } from "@/constants/gameConstants";
 import type { AiState, Difficulty } from "@/types";
 import {
   ALL_GAME_ELEMENTS,
-  enabledUnitTypes,
   isEntityEnabled,
   type GameElements,
 } from "@/constants/gameElements";

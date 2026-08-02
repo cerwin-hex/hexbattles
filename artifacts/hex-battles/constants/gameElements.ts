@@ -143,7 +143,8 @@ export function enabledUnitTypes(elements: GameElements): EntityType[] {
 
 /**
  * "N of M" for the Settings section header. `defs` is injectable so tests can
- * cover beta behaviour — main ships no beta element today.
+ * cover beta behaviour against a fixture rather than against whichever real
+ * element happens to be in beta.
  */
 export function enabledElementCount(
   chosen: GameElements,

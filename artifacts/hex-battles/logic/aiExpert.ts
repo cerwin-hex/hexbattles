@@ -23,11 +23,7 @@ import {
 import { calcTerritoryIncome, calcTerritoryUpkeep, mergeResult } from "@/logic/gameLogic";
 import { aiBuyableUnits } from "@/constants/gameConstants";
 import { dtCountClusters, dtFindImproveMove } from "@/logic/aiHelpers";
-import {
-  ALL_GAME_ELEMENTS,
-  enabledUnitTypes,
-  type GameElements,
-} from "@/constants/gameElements";
+import { ALL_GAME_ELEMENTS, type GameElements } from "@/constants/gameElements";
 import type { AiContext } from "@/logic/aiHelpers";
 import type { AiDecisionExec } from "@/logic/aiStrategy";
 
