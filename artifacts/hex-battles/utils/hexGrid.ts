@@ -156,6 +156,24 @@ export const TERRAIN_MOVE_COST: Record<TerrainType, number> = {
 
 export const CITY_BONUS = 1;
 
+/** Tiles a territory must own for each city it may found. */
+export const TILES_PER_CITY = 5;
+
+/**
+ * Minimum hex distance between two cities of the SAME owner. Enemy and neutral
+ * cities never block a site. Checked only when founding: a territory that
+ * shrinks, splits, or captures a city standing too close keeps every city.
+ */
+export const MIN_OWN_CITY_DISTANCE = 3;
+
+/** How far a city's improvement zone reaches, in hex distance. */
+export const CITY_IMPROVE_RADIUS = 2;
+
+/** How many cities a territory of `tileCount` tiles may hold. */
+export function cityCapFor(tileCount: number): number {
+  return Math.floor(tileCount / TILES_PER_CITY);
+}
+
 /**
  * A terrain improvement: the base terrain it is built on, the terrain it
  * produces, its gold cost, and how much per-turn income the tile gains.

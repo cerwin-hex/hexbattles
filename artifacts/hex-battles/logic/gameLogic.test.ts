@@ -17,7 +17,11 @@ import {
   calcTerritoryIncome,
   tileEconomicIncome,
   canImproveTile,
+  canFoundCity,
+  foundCitySites,
+  ownCityKeys,
 } from "@/logic/gameLogic";
+import { cityCapFor } from "@/utils/hexGrid";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -36,6 +40,11 @@ function tileMap(tiles: HexTile[]): Map<string, HexTile> {
 
 function ents(pairs: [string, EntityType][]): Map<string, EntityType> {
   return new Map(pairs);
+}
+
+function mkTile(key: string, owner: TerritoryOwner): HexTile {
+  const [q, r] = key.split(",").map(Number);
+  return { q, r, key, terrain: "grass", owner, cityBuffer: false, isCity: false };
 }
 
 // ─── calcTerritoryUpkeep ──────────────────────────────────────────────────────
@@ -979,5 +988,83 @@ describe("advanceFired", () => {
       isMerge: false,
     });
     expect(r.has("1,0")).toBe(false);
+  });
+});
+
+// ─── City founding rules ──────────────────────────────────────────────────────
+
+describe("cityCapFor", () => {
+  it("allows one city per five tiles, rounded down", () => {
+    expect(cityCapFor(0)).toBe(0);
+    expect(cityCapFor(4)).toBe(0);
+    expect(cityCapFor(5)).toBe(1);
+    expect(cityCapFor(9)).toBe(1);
+    expect(cityCapFor(10)).toBe(2);
+    expect(cityCapFor(23)).toBe(4);
+  });
+});
+
+describe("canFoundCity", () => {
+  const base = {
+    targetKey: "0,0",
+    territoryTileCount: 5,
+    territoryCityCount: 0,
+    ownCityKeys: [] as string[],
+  };
+
+  it("needs five tiles per city", () => {
+    expect(canFoundCity({ ...base, territoryTileCount: 4 })).toBe(false);
+    expect(canFoundCity({ ...base, territoryTileCount: 5 })).toBe(true);
+  });
+
+  it("counts the cities the territory already holds against the cap", () => {
+    expect(canFoundCity({ ...base, territoryTileCount: 9, territoryCityCount: 1 })).toBe(false);
+    expect(canFoundCity({ ...base, territoryTileCount: 10, territoryCityCount: 1 })).toBe(true);
+  });
+
+  it("rejects a site closer than three tiles to a city the owner holds", () => {
+    // "2,0" is two tiles from the origin, "3,0" is three.
+    expect(canFoundCity({ ...base, territoryTileCount: 10, territoryCityCount: 1, ownCityKeys: ["2,0"] })).toBe(false);
+    expect(canFoundCity({ ...base, territoryTileCount: 10, territoryCityCount: 1, ownCityKeys: ["3,0"] })).toBe(true);
+  });
+
+  it("checks the distance against every own city, including ones outside this territory", () => {
+    expect(
+      canFoundCity({
+        ...base,
+        territoryTileCount: 20,
+        territoryCityCount: 1,
+        ownCityKeys: ["5,0", "1,1"],
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("ownCityKeys", () => {
+  it("keeps only cities standing on tiles this owner holds", () => {
+    const tileMap = new Map<string, HexTile>([
+      ["0,0", mkTile("0,0", "player")],
+      ["3,0", mkTile("3,0", "ai1")],
+      ["6,0", mkTile("6,0", "neutral")],
+    ]);
+    const cities = new Set(["0,0", "3,0", "6,0"]);
+    expect(ownCityKeys(cities, tileMap, "player")).toEqual(["0,0"]);
+  });
+});
+
+describe("foundCitySites", () => {
+  it("returns every legal tile of the territory and nothing else", () => {
+    // A one-row territory from 0,0 to 4,0 with a city already at 0,0.
+    const territory = ["0,0", "1,0", "2,0", "3,0", "4,0"].map((k) => mkTile(k, "player"));
+    const sites = foundCitySites(territory, 1, ["0,0"]);
+    // Cap is floor(5/5) = 1 and one city exists, so nothing is legal.
+    expect(sites.size).toBe(0);
+  });
+
+  it("excludes only the tiles within three of an own city", () => {
+    const keys = ["0,0", "1,0", "2,0", "3,0", "4,0", "5,0", "6,0", "7,0", "8,0", "9,0"];
+    const territory = keys.map((k) => mkTile(k, "player"));
+    const sites = foundCitySites(territory, 1, ["0,0"]);
+    expect([...sites].sort()).toEqual(["3,0", "4,0", "5,0", "6,0", "7,0", "8,0", "9,0"]);
   });
 });

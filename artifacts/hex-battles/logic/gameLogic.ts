@@ -16,6 +16,9 @@ import {
   tileKey,
   improveCostFor,
   improveTargetFor,
+  hexDistance,
+  cityCapFor,
+  MIN_OWN_CITY_DISTANCE,
 } from "@/utils/hexGrid";
 import type { ArmedSites } from "@/types";
 import { TIER_TO_UNIT } from "@/constants/gameConstants";
@@ -638,6 +641,76 @@ export function canImproveTile(o: {
   if (o.occupantEntity === "rebel") return false;
   if (improveTargetFor(o.terrain) !== o.targetTerrain) return false;
   return o.balance >= improveCostFor(o.targetTerrain);
+}
+
+/**
+ * The cities of `cities` that stand on tiles `owner` holds. The `cities` set is
+ * global — it holds every city on the board regardless of owner — so the
+ * founding distance rule, which only counts the owner's own cities, has to
+ * filter it through the tile map first.
+ */
+export function ownCityKeys(
+  cities: Iterable<string>,
+  tileMap: Map<string, HexTile>,
+  owner: TerritoryOwner,
+): string[] {
+  const out: string[] = [];
+  for (const key of cities) {
+    if (tileMap.get(key)?.owner === owner) out.push(key);
+  }
+  return out;
+}
+
+/**
+ * Whether a city may be founded on `targetKey`. Covers the two spatial rules
+ * only — one city per TILES_PER_CITY tiles of the paying territory, and at
+ * least MIN_OWN_CITY_DISTANCE from every city the owner already holds.
+ * Occupancy, terrain and gold stay with the callers that already check them
+ * (classifyOwnTilePlacement, playerCanAfford), exactly as before.
+ */
+export function canFoundCity(o: {
+  targetKey: string;
+  /** Tiles in the contiguous territory paying for the city. */
+  territoryTileCount: number;
+  /** Cities already inside that territory, however they were acquired. */
+  territoryCityCount: number;
+  /** Every city this owner holds, anywhere on the map. */
+  ownCityKeys: Iterable<string>;
+}): boolean {
+  if (o.territoryCityCount >= cityCapFor(o.territoryTileCount)) return false;
+  const [q, r] = o.targetKey.split(",").map(Number);
+  for (const key of o.ownCityKeys) {
+    const [cq, cr] = key.split(",").map(Number);
+    if (hexDistance(q, r, cq, cr) < MIN_OWN_CITY_DISTANCE) return false;
+  }
+  return true;
+}
+
+/**
+ * Every tile of `territory` where this owner may found a city. Evaluates the
+ * cap once and then walks the territory a single time, so the cost is
+ * O(territory x own cities) per call rather than per candidate tile — the
+ * expert search asks for this once per candidate-generation pass.
+ */
+export function foundCitySites(
+  territory: HexTile[],
+  territoryCityCount: number,
+  ownCities: Iterable<string>,
+): Set<string> {
+  const out = new Set<string>();
+  if (territoryCityCount >= cityCapFor(territory.length)) return out;
+  const cityCoords = [...ownCities].map((k) => k.split(",").map(Number) as [number, number]);
+  for (const tile of territory) {
+    let blocked = false;
+    for (const [cq, cr] of cityCoords) {
+      if (hexDistance(tile.q, tile.r, cq, cr) < MIN_OWN_CITY_DISTANCE) {
+        blocked = true;
+        break;
+      }
+    }
+    if (!blocked) out.add(tile.key);
+  }
+  return out;
 }
 
 /**
