@@ -82,10 +82,10 @@ function RulesModal({ visible, onClose }: { visible: boolean; onClose: () => voi
               <Text style={styles.ruleSectionTitle}>Improvements</Text>
               <View style={styles.ruleDivider} />
               <Text style={styles.ruleBody}>
-                Once a territory has a City, a Peasant there can improve the tile it stands on: grass into a Field (2 gold), forest into a Sawmill (3 gold), or desert into a Mine (4 gold). Improving uses up the peasant's action for that turn.
+                You can improve a tile within 2 tiles of one of your Cities in that same territory: grass into a Field (2 gold), forest into a Sawmill (3 gold), or desert into a Mine (4 gold). Improving uses up nothing but gold.
               </Text>
               <Text style={[styles.ruleBody, { marginTop: 8 }]}>
-                A Field earns +1 gold per turn, plus another +1 while it borders one of your cities. A Sawmill earns +1 gold and costs only 1 movement to enter. A Mine earns +2 gold. Founding a city, tower or castle on an improved tile destroys the improvement.
+                A Field earns +1 gold per turn, plus another +1 while it borders one of your cities. A Sawmill earns +1 gold and costs only 1 movement to enter. A Mine earns +2 gold. Founding a city, tower or castle on an improved tile destroys the improvement. Each City pays for one improvement per turn, so a tile in range of several uses the nearest one that hasn't built yet.
               </Text>
             </View>
 
