@@ -13,6 +13,7 @@ Current release: **1.1.0 (versionCode 7)**
 |-------|-------|
 | App name (max 30) | `Hex Battles` [11] |
 | Package name | `dk.hextek.hexbattles` |
+| Expo project | `@cerwin/hex-strategy` (legacy slug — see below) |
 | Category | Games → Strategy |
 | Tags | Turn-based, Strategy, Single player |
 | Contains ads | No |
@@ -165,20 +166,26 @@ Answer the form as:
 - **Is all of the user data collected by your app encrypted in transit?** → n/a
 - **Do you provide a way for users to request that their data is deleted?** → n/a
 
-Permissions the built AAB declares, and why: `INTERNET` and `VIBRATE` from the
-React Native / Expo runtime, `READ/WRITE_EXTERNAL_STORAGE` capped at API 32, and
-`SYSTEM_ALERT_WINDOW` from `expo-dev-client`. None back a user-facing feature.
-`ACCESS_FINE_LOCATION` / `ACCESS_COARSE_LOCATION` shipped in versionCode 6 via an
-unused `expo-location` dependency; that dependency was removed for 1.1.0 and the
-permissions are gone from the manifest. Verify with
-`npx expo prebuild --platform android --no-install` before a release, then
-`rm -rf android` and `git checkout -- package.json`.
+The privacy policy is `privacy.html` in the repo root, rewritten 2026-08-03 to
+describe this app rather than the generator boilerplate it started as. **It only
+counts once the hosted copy behind the Play Console URL is replaced** — the file
+in git is the source, not the published page.
 
-> **Note:** `privacy.html` in the repo root is a generated boilerplate policy that
-> claims the app collects IP address, page views and session length, and that the
-> provider may send marketing. None of that is true of this app. It contradicts a
-> "no data collected" declaration and should be rewritten before the next
-> listing review.
+### Permissions
+
+These appear in the prebuild manifest
+(`npx expo prebuild --platform android --no-install`, then `rm -rf android` and
+`git checkout -- package.json`). None of them back a user-facing feature:
+
+| Permission | Comes from |
+|------------|-----------|
+| `INTERNET`, `VIBRATE` | React Native / Expo runtime |
+| `READ`/`WRITE_EXTERNAL_STORAGE` (maxSdk 32) | Expo runtime |
+| `SYSTEM_ALERT_WINDOW` | `expo-dev-client` — appears in the merged source manifest; whether it survives into the release variant is unconfirmed, so check the live listing's permission list rather than trusting this row |
+
+`ACCESS_FINE_LOCATION` / `ACCESS_COARSE_LOCATION` shipped in versionCode 6 via an
+unused `expo-location` dependency. That dependency was removed for 1.1.0 and both
+permissions are confirmed gone from the manifest.
 
 ---
 
@@ -192,3 +199,26 @@ permissions are gone from the manifest. Verify with
 
 `orientation` is `"default"`, so the game runs both portrait and landscape —
 decide which one the screenshots show.
+
+---
+
+## The `hex-strategy` slug
+
+`app.json` carries `"slug": "hex-strategy"`, a leftover from when the app lived
+in `artifacts/hex-strategy/`. It was set deliberately in commit `495fff1` to match
+the EAS project that already existed, because the project ID is what keeps the
+signing keystore and the Play upload identity intact.
+
+Nothing player-facing uses it. Play keys off `dk.hextek.hexbattles` and the
+display name "Hex Battles"; `expo-updates` is not installed, so nothing resolves
+the slug at runtime. It shows up only in the EAS dashboard URL.
+
+To rename it, the order matters:
+
+1. Rename the project in its settings on expo.dev. There is no
+   `eas project:rename` — it is a dashboard action, and the slug may be a
+   separate field from the display name.
+2. Only then set `"slug": "hex-battles"` in `app.json`.
+
+Reversed, `eas build` fails on a slug/project mismatch. Don't do this in the same
+sitting as a release.
