@@ -26,14 +26,14 @@ Current release: **1.1.0 (versionCode 7)**
 ```
 Turn-based hex strategy. Claim land, raise armies, outthink your AI rivals.
 ```
-[74]
+[75]
 
 ## Short description — da-DK (max 80)
 
 ```
 Turbaseret hex-strategi. Erobr land, byg hære, og udtænk dine AI-modstandere.
 ```
-[76]
+[77]
 
 ---
 
@@ -66,15 +66,15 @@ rebels rise in the ruins. Bridges let you cross water your enemy can't.
 
 PLAY IT YOUR WAY
 Choose map size, number of AI opponents and difficulty from Easy to Expert. The
-Game Elements menu lets you switch individual systems — rebels, improvements,
-ranged units, the admin burden — on or off, so you can play the full game or a
-stripped-down one. Your last setup is remembered.
+Game Elements list in Settings lets you switch individual systems — rebels,
+improvements, ranged units, the admin burden — on or off, so you can play the
+full game or a stripped-down one. Your last setup is remembered.
 
 NO STRINGS
 No ads. No in-app purchases. No account. No internet connection needed. Your
 saved game stays on your device.
 ```
-[~1560]
+[1608] of 4000
 
 ## Full description — da-DK (max 4000)
 
@@ -105,16 +105,16 @@ helt, rejser oprørere sig i ruinerne. Broer lader dig krydse vand, fjenden ikke
 kan.
 
 SPIL DET SOM DU VIL
-Vælg kortstørrelse, antal AI-modstandere og sværhedsgrad fra Let til Ekspert. I
-menuen Game Elements kan du slå enkelte systemer til og fra — oprørere,
-forbedringer, skytteenheder, administrationsbyrden — så du kan spille det fulde
-spil eller en enklere udgave. Dine sidste valg bliver husket.
+Vælg kortstørrelse, antal AI-modstandere og sværhedsgrad fra Let til Ekspert.
+Under Game Elements i indstillingerne kan du slå enkelte systemer til og fra —
+oprørere, forbedringer, skytteenheder, administrationsbyrden — så du kan spille
+det fulde spil eller en enklere udgave. Dine sidste valg bliver husket.
 
 INGEN BETINGELSER
 Ingen reklamer. Ingen køb i appen. Ingen konto. Ingen internetforbindelse. Din
 gemte spilstilling bliver på din enhed.
 ```
-[~1580]
+[1610] of 4000
 
 ---
 
@@ -128,12 +128,12 @@ Build fields, sawmills and mines straight from the Build ribbon — no peasant
 needed. Improvements now belong to a city: four tiles between cities, one build
 per city per turn.
 
-New Game Elements menu turns individual systems on or off.
+A new Game Elements list in Settings turns individual systems on or off.
 
 The menu remembers your last setup, neutral cities scale with map size, and the
 AI is both sharper and faster.
 ```
-[~440]
+[469] of 500
 
 ## Release notes 1.1.0 — da-DK (max 500)
 
@@ -145,12 +145,12 @@ Byg marker, savværker og miner direkte fra Build-båndet — uden en bonde.
 Forbedringer hører nu til en by: fire felter mellem byer, én bygning per by per
 tur.
 
-Ny Game Elements-menu slår enkelte systemer til og fra.
+Ny Game Elements-liste i indstillingerne slår enkelte systemer til og fra.
 
 Menuen husker dine sidste valg, neutrale byer skalerer med kortstørrelsen, og
 AI'en er både skarpere og hurtigere.
 ```
-[~430]
+[459] of 500
 
 ---
 
@@ -164,6 +164,15 @@ Answer the form as:
 - **Does your app collect or share any of the required user data types?** → No
 - **Is all of the user data collected by your app encrypted in transit?** → n/a
 - **Do you provide a way for users to request that their data is deleted?** → n/a
+
+Permissions the built AAB declares, and why: `INTERNET` and `VIBRATE` from the
+React Native / Expo runtime, `READ/WRITE_EXTERNAL_STORAGE` capped at API 32, and
+`SYSTEM_ALERT_WINDOW` from `expo-dev-client`. None back a user-facing feature.
+`ACCESS_FINE_LOCATION` / `ACCESS_COARSE_LOCATION` shipped in versionCode 6 via an
+unused `expo-location` dependency; that dependency was removed for 1.1.0 and the
+permissions are gone from the manifest. Verify with
+`npx expo prebuild --platform android --no-install` before a release, then
+`rm -rf android` and `git checkout -- package.json`.
 
 > **Note:** `privacy.html` in the repo root is a generated boilerplate policy that
 > claims the app collects IP address, page views and session length, and that the
