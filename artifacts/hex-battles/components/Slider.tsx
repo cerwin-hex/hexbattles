@@ -1,5 +1,5 @@
 import * as Haptics from "expo-haptics";
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -13,6 +13,11 @@ const THUMB_SIZE = 26;
 const TRACK_HEIGHT = 36;
 const COMPACT_THUMB_SIZE = 20;
 const COMPACT_TRACK_HEIGHT = 26;
+/**
+ * Above this many steps the notches stop being readable and start being
+ * texture, so a slider that fine draws a plain track instead.
+ */
+const MAX_TICKS = 12;
 
 interface SliderProps {
   label: string;
@@ -42,6 +47,9 @@ export function Slider({
 }: SliderProps) {
   const thumbSize = compact ? COMPACT_THUMB_SIZE : THUMB_SIZE;
   const trackHeight = compact ? COMPACT_TRACK_HEIGHT : TRACK_HEIGHT;
+  // Track width in React state as well as on the UI thread: the notches are
+  // plain views laid out from it, while the thumb reads the shared value.
+  const [trackW, setTrackW] = useState(0);
   const thumbX = useSharedValue(0);
   const startX = useSharedValue(0);
   const trackWShared = useSharedValue(0);
@@ -61,6 +69,7 @@ export function Slider({
     (width: number) => {
       trackWShared.value = width;
       thumbX.value = valueToX(value, width);
+      setTrackW(width);
     },
     [valueToX, value, trackWShared, thumbX],
   );
@@ -111,13 +120,18 @@ export function Slider({
       dragging.value = false;
     })
     .onUpdate((e) => {
-      const maxX = trackWShared.value - thumbSize;
-      const newX = Math.max(0, Math.min(maxX, startX.value + e.translationX));
-      thumbX.value = newX;
-      const frac = maxX > 0 ? newX / maxX : 0;
+      const maxX = Math.max(0, trackWShared.value - thumbSize);
+      const fingerX = Math.max(0, Math.min(maxX, startX.value + e.translationX));
+      const frac = maxX > 0 ? fingerX / maxX : 0;
       const raw = min + frac * (max - min);
       const stepped = Math.round(raw / step) * step;
       const clamped = Math.max(min, Math.min(max, stepped));
+      // The thumb sits on the step it selected rather than under the finger, so
+      // where it comes to rest is always a value the slider can actually hold.
+      // On a three-step slider a free-floating thumb reads as three different
+      // positions meaning the same number.
+      const range = max - min || 1;
+      thumbX.value = ((clamped - min) / range) * maxX;
       runOnJS(emit)(clamped);
     });
 
@@ -131,6 +145,16 @@ export function Slider({
 
   const display = formatValue ? formatValue(value) : String(value);
 
+  // One notch per selectable value, drawn where the thumb's centre lands there.
+  const stepCount = Math.max(1, Math.round((max - min) / (step || 1)));
+  const tickXs =
+    trackW > 0 && stepCount <= MAX_TICKS
+      ? Array.from(
+          { length: stepCount + 1 },
+          (_, i) => thumbSize / 2 + (i / stepCount) * Math.max(0, trackW - thumbSize),
+        )
+      : [];
+
   return (
     <View style={compact ? styles.sectionCompact : styles.section}>
       <View style={styles.labelRow}>
@@ -143,6 +167,20 @@ export function Slider({
           onLayout={(e) => handleTrackLayout(e.nativeEvent.layout.width)}
         >
           <Animated.View style={[styles.fill, { borderRadius: trackHeight / 2 }, fillStyle]} />
+          {tickXs.map((x, i) => (
+            <View
+              key={i}
+              pointerEvents="none"
+              style={[
+                styles.tick,
+                {
+                  left: x - 1,
+                  height: compact ? 8 : 12,
+                  top: (trackHeight - (compact ? 8 : 12)) / 2,
+                },
+              ]}
+            />
+          ))}
           <Animated.View
             style={[
               styles.thumb,
@@ -214,6 +252,12 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     backgroundColor: "#7A5418",
+  },
+  tick: {
+    position: "absolute",
+    width: 2,
+    borderRadius: 1,
+    backgroundColor: "rgba(240,208,128,0.3)",
   },
   thumb: {
     position: "absolute",
