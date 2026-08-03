@@ -265,6 +265,7 @@ export function dtFindImproveMove(
   // Once per territory, not once per candidate tile — see cityImproveReach.
   const reach = cityImproveReach({
     cityKeys: territoryCityKeys,
+    owner: ctx.aiOwner,
     tileMap: ctx.tileMap,
     entities: ctx.entities,
   });

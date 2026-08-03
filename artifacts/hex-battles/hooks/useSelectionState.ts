@@ -276,6 +276,7 @@ export function useSelectionState({
     () =>
       cityImproveReach({
         cityKeys: territoryCityKeys,
+        owner: "player",
         tileMap: activeTileMap,
         entities,
       }),

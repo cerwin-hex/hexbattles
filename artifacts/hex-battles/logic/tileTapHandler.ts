@@ -484,6 +484,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
       tileKey: key,
       reach: cityImproveReach({
         cityKeys: selectedTerritory.filter((t) => cities.has(t.key)).map((t) => t.key),
+        owner: "player",
         tileMap: activeTileMap,
         entities,
       }),

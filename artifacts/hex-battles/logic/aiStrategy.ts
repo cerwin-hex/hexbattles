@@ -1690,6 +1690,7 @@ export async function runAiTurn(
           tileKey: target,
           reach: cityImproveReach({
             cityKeys: terrBefore.filter((t) => ws.cities.has(t.key)).map((t) => t.key),
+            owner: aiOwner,
             tileMap: ws.tileMap,
             entities: ws.entities,
           }),

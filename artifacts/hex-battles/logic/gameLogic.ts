@@ -780,15 +780,23 @@ export type ImproveReach = ReadonlyMap<string, ReadonlyMap<string, number>>;
 /**
  * The improvement zones of `cityKeys`: every tile within CITY_IMPROVE_RADIUS
  * STEPS of a city, walking around what a city cannot reach through — mountains,
- * and lakes without a bridge (or a unit holding a captured one).
+ * and water the owner has not spanned itself.
  *
  * Steps, not movement cost: a forest costs 2 to enter but is one step away, and
  * charging its terrain cost would put the far Sawmill permanently out of reach.
  * On open ground this is exactly `hexDistance <= CITY_IMPROVE_RADIUS`.
  *
- * The route is judged on terrain alone and may cross tiles the owner does not
- * hold. Only the tile being built on has to be theirs, which the callers
- * already guarantee by passing tiles of their own territory.
+ * Land is judged on terrain alone: the route may cross tiles `owner` does not
+ * hold, because there is ground there either way. Only the tile being built on
+ * has to be theirs, which the callers already guarantee by passing tiles of
+ * their own territory.
+ *
+ * A LAKE is different — it is crossable only because someone built across it,
+ * so it must be `owner`'s own crossing: their bridge, or their unit holding
+ * one. This follows `isTerritoryTile` rather than the movement rule, which lets
+ * a unit walk over anyone's bridge. Without the ownership test an enemy's
+ * bridge would extend your zone, and an enemy unit stepping onto the water
+ * would open it for as long as it stood there.
  *
  * Walked outward from each city — 19 tiles at radius 2 — rather than searched
  * per candidate tile, so a whole territory's zone costs O(cities), not
@@ -796,6 +804,8 @@ export type ImproveReach = ReadonlyMap<string, ReadonlyMap<string, number>>;
  */
 export function cityImproveReach(o: {
   cityKeys: Iterable<string>;
+  /** The owner whose cities these are — decides which lakes they may cross. */
+  owner: TerritoryOwner;
   tileMap: Map<string, HexTile>;
   entities: Map<string, EntityType>;
 }): ImproveReach {
@@ -822,7 +832,11 @@ export function cityImproveReach(o: {
           const neighbor = o.tileMap.get(nk);
           if (!neighbor) continue;
           if (neighbor.terrain === "mountain") continue;
-          if (neighbor.terrain === "lake" && !isLakePassable(nk, o.entities)) continue;
+          if (
+            neighbor.terrain === "lake" &&
+            (neighbor.owner !== o.owner || !isLakePassable(nk, o.entities))
+          )
+            continue;
           seen.add(nk);
           record(nk, cityKey, steps);
           next.push(nk);

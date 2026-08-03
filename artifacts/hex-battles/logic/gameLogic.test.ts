@@ -1184,7 +1184,19 @@ function reachOn(
   map: Map<string, HexTile> = openBoard(),
   entities: Map<string, EntityType> = new Map(),
 ) {
-  return cityImproveReach({ cityKeys, tileMap: map, entities });
+  return cityImproveReach({ cityKeys, owner: "player", tileMap: map, entities });
+}
+
+/** `boardWith`, then the listed tiles handed to another owner. */
+function boardOwnedBy(
+  terrainByKey: Record<string, HexTile["terrain"]>,
+  ownerByKey: Record<string, TerritoryOwner>,
+): Map<string, HexTile> {
+  const map = boardWith(terrainByKey);
+  for (const [key, owner] of Object.entries(ownerByKey)) {
+    map.set(key, { ...map.get(key)!, owner });
+  }
+  return map;
 }
 
 describe("cityImproveReach", () => {
@@ -1217,12 +1229,33 @@ describe("cityImproveReach", () => {
     expect(reachOn(["0,0"], lake).has("2,0")).toBe(false);
   });
 
-  it("reaches across a bridged lake, but the lake itself is only a corridor", () => {
+  it("reaches across its own bridged lake, but the lake itself is only a corridor", () => {
     const lake = boardWith({ "1,0": "lake" });
     const reach = reachOn(["0,0"], lake, ents([["1,0", "bridge"]]));
     expect(reach.get("2,0")?.get("0,0")).toBe(2);
     // The lake tile is reachable; canImproveTile is what refuses to build on it.
     expect(reach.get("1,0")?.get("0,0")).toBe(1);
+  });
+
+  it("does not cross an enemy's bridge", () => {
+    // Units may walk over anyone's bridge; a city only builds across its own.
+    const enemyBridge = boardOwnedBy({ "1,0": "lake" }, { "1,0": "ai1" });
+    const reach = reachOn(["0,0"], enemyBridge, ents([["1,0", "bridge"]]));
+    expect(reach.has("1,0")).toBe(false);
+    expect(reach.has("2,0")).toBe(false);
+  });
+
+  it("does not open a route because an enemy unit stands on the water", () => {
+    const enemyOnLake = boardOwnedBy({ "1,0": "lake" }, { "1,0": "ai1" });
+    const reach = reachOn(["0,0"], enemyOnLake, ents([["1,0", "swordsman"]]));
+    expect(reach.has("2,0")).toBe(false);
+  });
+
+  it("crosses a lake its own unit holds", () => {
+    // A unit standing on your bridge keeps the crossing open while it is there.
+    const lake = boardWith({ "1,0": "lake" });
+    const reach = reachOn(["0,0"], lake, ents([["1,0", "swordsman"]]));
+    expect(reach.get("2,0")?.get("0,0")).toBe(2);
   });
 
   it("records every city that reaches a tile, with its own step count", () => {
