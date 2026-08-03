@@ -141,6 +141,30 @@ const styles = StyleSheet.create({
     fontFamily: "Cinzel_400Regular",
     color: "#A08860",
   },
+  // Top-right readout of how many tiles the currently selected territory holds.
+  // Only rendered while a territory is selected.
+  // Sized and positioned to mirror menuBtn on the opposite corner: same height,
+  // same radius/border, same top offset, so the two read as one top row.
+  tileCounter: {
+    height: TOP_BTN_H,
+    justifyContent: "center",
+    paddingHorizontal: 10,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: "#7A6030",
+    backgroundColor: "#3A2A10",
+  },
+  tileCounterValue: {
+    fontSize: 22,
+    lineHeight: 26,
+    fontFamily: "Cinzel_700Bold",
+    color: "#F0D890",
+  },
+  tileCounterLabel: {
+    fontSize: 13,
+    fontFamily: "Cinzel_400Regular",
+    color: "#A08860",
+  },
   buildBtn: {
     height: BTN_H,
     flexDirection: "row",

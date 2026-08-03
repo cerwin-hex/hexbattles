@@ -172,6 +172,10 @@ export default function BottomActionMenu({
             );
           })}
 
+        {/* Second spacer: Build/Train float midway between the gold readout and
+            the End Turn button instead of hugging End Turn. */}
+        <View style={styles.spacer} />
+
         {isDeveloperModeActive && (isAiPaused || isAiTurnDone) && aiHistoryIndex > 0 && (
           <TouchableOpacity
             style={styles.prevActionBtn}

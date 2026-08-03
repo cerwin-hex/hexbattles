@@ -94,7 +94,7 @@ import EntityPanel from "@/components/EntityPanel";
 import GameModals from "@/components/GameModals";
 import type { EconBreakdown } from "@/components/GameModals";
 import BottomActionMenu from "@/components/BottomActionMenu";
-import { DevModeOverlay, DevEconomicSvgOverlays } from "@/components/DevModeOverlay";
+import { DevModeOverlay, DevEconomicSvgOverlays, diffLabel } from "@/components/DevModeOverlay";
 
 import {
   HexTileTerrainLayer,
@@ -1586,6 +1586,27 @@ export default function GameScreen() {
         <Text style={styles.menuBtnText}>Menu</Text>
       </TouchableOpacity>
 
+      {selectedTerritory.length > 0 && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: topInset + 4,
+            right: 4,
+            zIndex: 20,
+          }}
+        >
+          <View style={styles.tileCounter}>
+            <Text style={styles.tileCounterValue}>
+              {selectedTerritory.length}
+              <Text style={styles.tileCounterLabel}>
+                {selectedTerritory.length === 1 ? " tile" : " tiles"}
+              </Text>
+            </Text>
+          </View>
+        </View>
+      )}
+
       {turn === 1 && !isAiTurn && gameResult === null && affordableTerritoryTileKeys.size > 0 && (
         <TouchableOpacity
           style={[
@@ -1653,12 +1674,34 @@ export default function GameScreen() {
           <View
             style={{
               marginTop: 2,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 4,
               backgroundColor: "rgba(0,0,0,0.6)",
               borderRadius: 4,
               paddingHorizontal: 6,
               paddingVertical: 1,
             }}
           >
+            <Text
+              style={{
+                color: "#FFD700",
+                fontSize: 10,
+                fontWeight: "bold",
+              }}
+            >
+              {diffLabel(aiDifficulty)}
+            </Text>
+            <Text
+              style={{
+                color: "#FFFFFF",
+                fontSize: 10,
+                fontWeight: "bold",
+                opacity: 0.6,
+              }}
+            >
+              -
+            </Text>
             <Text
               style={{
                 color: "#FFFFFF",
@@ -1677,7 +1720,6 @@ export default function GameScreen() {
           isDeveloperModeActive={isDeveloperModeActive}
           setIsDeveloperModeActive={setIsDeveloperModeActive}
           topInset={topInset}
-          aiDifficulty={aiDifficulty}
           showAiDevLabels={showAiDevLabels}
           setShowAiDevLabels={setShowAiDevLabels}
         />
