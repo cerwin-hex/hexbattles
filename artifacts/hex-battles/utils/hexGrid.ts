@@ -976,7 +976,9 @@ export function generateHexGrid(
   const lakeP = clampPct(options.lakePct, 10);
   const desertP = clampPct(options.desertPct, 10);
   const forestP = clampPct(options.forestPct, 10);
-  const cityTarget = Math.max(0, Math.min(5, Math.round(options.cityCount ?? 2)));
+  // No upper bound of its own: the MIN_CITY_DISTANCE spacing below is the real
+  // ceiling, and it depends on how much open ground this map happens to have.
+  const cityTarget = Math.max(0, Math.round(options.cityCount ?? 2));
 
   const tileMap = new Map<string, HexTile>();
   const frontier: [number, number][] = [[0, 0]];

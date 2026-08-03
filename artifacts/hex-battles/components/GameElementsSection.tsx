@@ -41,6 +41,7 @@ export function GameElementsSection({
                 {def.beta && <Text style={styles.betaChip}>BETA</Text>}
               </View>
               <Text style={styles.rowBlurb}>{def.blurb}</Text>
+              {def.note && <Text style={styles.rowNote}>{def.note}</Text>}
             </View>
             <Toggle
               value={elements[def.id]}
@@ -117,5 +118,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: "Inter_400Regular",
     color: "#786A54",
+  },
+  rowNote: {
+    fontSize: 11,
+    fontFamily: "Inter_400Regular",
+    color: "#C8A24A",
   },
 });

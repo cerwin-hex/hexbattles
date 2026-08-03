@@ -12,7 +12,13 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
 }));
 
 import { DEFAULT_GAME_ELEMENTS } from "@/constants/gameElements";
-import { DEFAULT_SETTINGS, normalizeSettings } from "@/utils/settings";
+import {
+  cityCountForMap,
+  cityPctForCount,
+  DEFAULT_SETTINGS,
+  maxCitiesForMap,
+  normalizeSettings,
+} from "@/utils/settings";
 
 describe("normalizeSettings — game elements", () => {
   it("fills the element set from the defaults when absent", () => {
@@ -67,5 +73,62 @@ describe("normalizeSettings — remembered new-game choices", () => {
   it("rejects a difficulty that is not one of the five", () => {
     expect(normalizeSettings({ difficulty: "nightmare" as never }).difficulty).toBe("medium");
     expect(normalizeSettings({ difficulty: null as never }).difficulty).toBe("medium");
+  });
+});
+
+describe("normalizeSettings — neutral city density", () => {
+  it("reads a blob written when cities were a plain count", () => {
+    // The default map was 100 tiles then, so the count is already a density.
+    expect(normalizeSettings({ cityCount: 3 } as never).cityPct).toBe(3);
+    expect(normalizeSettings({ cityCount: 0 } as never).cityPct).toBe(0);
+  });
+
+  it("prefers the density when both fields are present", () => {
+    expect(normalizeSettings({ cityCount: 5, cityPct: 1 } as never).cityPct).toBe(1);
+  });
+
+  it("keeps the fractional density the slider produces on odd map sizes", () => {
+    expect(normalizeSettings({ cityPct: 2.5 }).cityPct).toBe(2.5);
+  });
+
+  it("clamps a corrupt or out-of-range density", () => {
+    expect(normalizeSettings({ cityPct: 99 }).cityPct).toBe(6);
+    expect(normalizeSettings({ cityPct: -4 }).cityPct).toBe(0);
+    expect(normalizeSettings({ cityPct: Number.NaN }).cityPct).toBe(0);
+    expect(normalizeSettings({}).cityPct).toBe(DEFAULT_SETTINGS.cityPct);
+  });
+});
+
+describe("city density ↔ count", () => {
+  it("turns one density into more cities on a bigger map", () => {
+    expect(cityCountForMap(2, 40)).toBe(1);
+    expect(cityCountForMap(2, 100)).toBe(2);
+    expect(cityCountForMap(2, 200)).toBe(4);
+  });
+
+  it("gives no cities only when the density is zero", () => {
+    expect(cityCountForMap(0, 200)).toBe(0);
+    // 1% of 40 tiles rounds to nothing; a chosen density must still show up.
+    expect(cityCountForMap(1, 40)).toBe(1);
+  });
+
+  it("offers a wider slider on a bigger map", () => {
+    expect(maxCitiesForMap(40)).toBe(2);
+    expect(maxCitiesForMap(100)).toBe(4);
+    expect(maxCitiesForMap(200)).toBe(8);
+  });
+
+  it("never returns more cities than the slider offers", () => {
+    for (const tiles of [40, 70, 100, 150, 200]) {
+      expect(cityCountForMap(6, tiles)).toBe(maxCitiesForMap(tiles));
+    }
+  });
+
+  it("round-trips a slider position through the stored density", () => {
+    for (const tiles of [40, 70, 100, 150, 200]) {
+      for (let count = 0; count <= maxCitiesForMap(tiles); count++) {
+        expect(cityCountForMap(cityPctForCount(count, tiles), tiles)).toBe(count);
+      }
+    }
   });
 });

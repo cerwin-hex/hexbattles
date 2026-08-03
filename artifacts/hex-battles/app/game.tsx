@@ -136,6 +136,11 @@ import {
   getSavedGameSync,
   setSavedGame,
 } from "@/utils/savedGame";
+import {
+  cityCountForMap,
+  DEFAULT_SETTINGS,
+  maxCitiesForMap,
+} from "@/utils/settings";
 export default function GameScreen() {
 
   const params = useLocalSearchParams<{
@@ -156,10 +161,13 @@ export default function GameScreen() {
     if (!Number.isFinite(n)) return fallback;
     return Math.max(0, Math.min(25, Math.round(n)));
   };
-  const clampCityParam = (v: string | undefined, fallback: number) => {
+  // The menu sends a city count already scaled to the map size; all this has to
+  // do is keep it inside what a map that size can hold.
+  const clampCityParam = (v: string | undefined, tiles: number) => {
     const n = Number(v);
-    if (!Number.isFinite(n)) return fallback;
-    return Math.max(0, Math.min(5, Math.round(n)));
+    const max = maxCitiesForMap(tiles);
+    if (!Number.isFinite(n)) return cityCountForMap(DEFAULT_SETTINGS.cityPct, tiles);
+    return Math.max(0, Math.min(max, Math.round(n)));
   };
 
   // Capture the resume snapshot once at mount. After this, the in-memory
@@ -198,7 +206,7 @@ export default function GameScreen() {
             lakePct: clampPctParam(params.lakePct, 10),
             desertPct: clampPctParam(params.desertPct, 10),
             forestPct: clampPctParam(params.forestPct, 10),
-            cityCount: clampCityParam(params.cityCount, 2),
+            cityCount: clampCityParam(params.cityCount, numTiles),
           },
     // params from useLocalSearchParams are stable per nav and resumeSnapshot is captured once
     // eslint-disable-next-line react-hooks/exhaustive-deps

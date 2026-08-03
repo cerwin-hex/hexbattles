@@ -730,6 +730,21 @@ describe("generateHexGrid map options", () => {
     expect(tiles.filter((t) => t.isCity).length).toBe(5);
   });
 
+  it("places more than the old five-city ceiling when a big map asks for it", () => {
+    const counts = Array.from({ length: 10 }, () => {
+      const tiles = generateHexGrid(200, 4, {
+        mountainPct: 0,
+        lakePct: 0,
+        desertPct: 0,
+        forestPct: 0,
+        cityCount: 8,
+      });
+      return tiles.filter((t) => t.isCity).length;
+    });
+    // Spacing still has the last word, so this is a floor rather than an equality.
+    for (const n of counts) expect(n).toBeGreaterThan(5);
+  });
+
   it("uses default city count when option is omitted", () => {
     const tiles = generateHexGrid(150, 4, {
       mountainPct: 0,

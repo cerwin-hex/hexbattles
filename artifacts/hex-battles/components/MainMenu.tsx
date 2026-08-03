@@ -26,7 +26,7 @@ import {
   hydrateSavedGame,
   isHydrated,
 } from '@/utils/savedGame';
-import { MAX_TILE_COUNT, MIN_TILE_COUNT } from '@/utils/settings';
+import { cityCountForMap, MAX_TILE_COUNT, MIN_TILE_COUNT } from '@/utils/settings';
 import { INFO_TABLE_ROWS } from '@/constants/gameConstants';
 import { UnitIcon } from '@/components/UnitIcon';
 
@@ -236,7 +236,9 @@ export default function MainMenu() {
         lakePct: String(settings.lakePct),
         desertPct: String(settings.desertPct),
         forestPct: String(settings.forestPct),
-        cityCount: String(settings.cityCount),
+        // The density becomes a concrete count here, where the map size is
+        // known, so the game gets exactly the number the menu showed.
+        cityCount: String(cityCountForMap(settings.cityPct, tileCount)),
         elements: encodeGameElements(settings.elements),
       },
     });

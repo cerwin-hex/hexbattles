@@ -13,12 +13,13 @@ import { GameElementsSection } from "@/components/GameElementsSection";
 import { Slider } from "@/components/Slider";
 import { COLOR_PALETTE } from "@/constants/colors";
 import {
+  cityCountForMap,
+  cityPctForCount,
   COLOR_KEYS,
   type ColorKey,
   type GameSettings,
-  MAX_CITY_COUNT,
   MAX_TERRAIN_PCT,
-  MIN_CITY_COUNT,
+  maxCitiesForMap,
   MIN_TERRAIN_PCT,
 } from "@/utils/settings";
 
@@ -46,6 +47,13 @@ export function SettingsModal({
   function handleClose() {
     onClose(draft);
   }
+
+  // Cities are stored as a density but chosen as whole cities, against the map
+  // size picked in the menu: pick 3 cities on a 100-tile map, grow the map to
+  // 200, and the slider reads 6 next time it opens.
+  const mapTiles = draft.tileCount;
+  const cityMax = maxCitiesForMap(mapTiles);
+  const cityValue = cityCountForMap(draft.cityPct, mapTiles);
 
   return (
     <Modal
@@ -91,9 +99,12 @@ export function SettingsModal({
               onChange={(next) => update("elements", next)}
             />
 
+            {/* Terrain and cities share one heading but keep a box each. The
+                percentage range in the header belongs to the terrain sliders;
+                the city slider next to it reads out in whole cities. */}
             <View style={styles.section}>
               <View style={styles.terrainHeader}>
-                <Text style={styles.sectionLabel}>Terrain</Text>
+                <Text style={styles.sectionLabel}>Terrain &amp; Cities</Text>
                 <Text style={styles.terrainRange}>
                   {`${MIN_TERRAIN_PCT}–${MAX_TERRAIN_PCT}%`}
                 </Text>
@@ -119,19 +130,19 @@ export function SettingsModal({
                   ),
                 )}
               </View>
-            </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Neutral Cities</Text>
               <View style={styles.terrainBlock}>
                 <Slider
                   compact
-                  label="On the map"
-                  value={draft.cityCount}
-                  min={MIN_CITY_COUNT}
-                  max={MAX_CITY_COUNT}
-                  onChange={(v) => update("cityCount", v)}
+                  label="Neutral Cities"
+                  value={cityValue}
+                  min={0}
+                  max={cityMax}
+                  onChange={(v) => update("cityPct", cityPctForCount(v, mapTiles))}
+                  formatValue={(v) => (v === 1 ? "1 city" : `${v} cities`)}
                 />
+                <Text style={styles.blockHint}>
+                  {`Scales with map size · ${mapTiles} tiles`}
+                </Text>
               </View>
             </View>
           </ScrollView>
@@ -255,6 +266,11 @@ const styles = StyleSheet.create({
   },
   terrainRange: {
     fontSize: 12,
+    fontFamily: "Inter_400Regular",
+    color: "#786A54",
+  },
+  blockHint: {
+    fontSize: 10,
     fontFamily: "Inter_400Regular",
     color: "#786A54",
   },

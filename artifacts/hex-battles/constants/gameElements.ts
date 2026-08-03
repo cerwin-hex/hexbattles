@@ -27,6 +27,8 @@ export interface GameElementDef {
    * label and starts switched off, so nobody meets it without choosing to.
    */
   beta: boolean;
+  /** Optional caveat shown under the blurb — what is still missing in beta. */
+  note?: string;
 }
 
 export const GAME_ELEMENTS: readonly GameElementDef[] = [
@@ -44,6 +46,7 @@ export const GAME_ELEMENTS: readonly GameElementDef[] = [
     name: "Ranged Units",
     blurb: "Bowmen that shoot a neighbour instead of taking ground",
     beta: true,
+    note: "BETA: AI recognises ranged units, but doesn't buy them",
   },
   {
     id: "improvements",
