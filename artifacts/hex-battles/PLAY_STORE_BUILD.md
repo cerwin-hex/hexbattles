@@ -55,15 +55,15 @@ eas build:download --id BUILD_ID_FROM_TERMINAL
 
 Or find all builds at the web dashboard:
 
-https://expo.dev/accounts/YOUR_USERNAME/projects/hex-battles/builds
+https://expo.dev/accounts/YOUR_USERNAME/projects/hex-strategy/builds
 
 ## Step 7 — Upload to Google Play Console
 
 1. Go to https://play.google.com/console
-2. Create a new app (name: **Hex Battles**, package: `dk.hextek.hexbattles`)
-3. Go to **Production → Releases → Create new release**
+2. Open the existing **Hex Battles** app (`dk.hextek.hexbattles`)
+3. Go to **Production → Create new release**
 4. Upload the `.aab` file
-5. Fill in the release notes and submit for review
+5. Paste the release notes from [`STORE_LISTING.md`](./STORE_LISTING.md) and submit for review
 
 ---
 
@@ -82,7 +82,13 @@ This produces an `.apk` file you can install directly on any Android device.
 | Field | Value |
 |-------|-------|
 | Package name | `dk.hextek.hexbattles` |
-| Version | 1.0.0 |
-| Version code | 1 |
+| Expo slug | `hex-strategy` |
+| Version | 1.1.0 |
+| Version code | 7 |
 
-> **Note:** Bump `versionCode` by 1 (e.g. 2, 3, ...) in `app.json` for every new release you upload to Google Play.
+> **Note:** Bump `versionCode` by 1 in `app.json` for every new release you upload
+> to Google Play. Bump `version` too whenever the release is worth a new name —
+> it is what players see in the store.
+
+Listing text, release notes and the Data Safety answers live in
+[`STORE_LISTING.md`](./STORE_LISTING.md).
