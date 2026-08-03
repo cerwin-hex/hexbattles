@@ -1,8 +1,7 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
-import { ENTITY_META } from "@/utils/hexGrid";
-import { classifyOwnTilePlacement } from "@/logic/gameLogic";
+import { buildingSiteBlocked, classifyOwnTilePlacement } from "@/logic/gameLogic";
 import {
   areMovementHighlightLayerEqual,
   type MovementHighlightLayerEqualProps,
@@ -24,6 +23,7 @@ function MovementHighlightLayerInner({
   armedImprovement,
   entities,
   activeTileMap,
+  cities,
   graveyard,
   fortificationDots,
   tileDataMap,
@@ -119,11 +119,16 @@ function MovementHighlightLayerInner({
             // A city may only be founded on a legal site: inside the cap and at
             // least three tiles from every city the player already holds.
             if (armedEntityId === "city" && !validCitySites.has(key)) return null;
-            // Graveyards block buildings only, and are the handler's own check
-            // rather than part of the shared rule.
+            // Cities, graveyards and fort spacing block buildings only; they sit
+            // outside the shared rule because it cannot see those sets.
             if (
-              !ENTITY_META[armedEntityId].isUnit &&
-              (graveyard.has(key) || fortificationDots.has(key))
+              buildingSiteBlocked({
+                armedEntityId,
+                key,
+                cities,
+                graveyard,
+                fortificationDots,
+              })
             )
               return null;
             const isRebelTarget = placement.overwritesRebel;

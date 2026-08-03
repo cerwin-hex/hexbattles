@@ -272,6 +272,7 @@ function makeMovementHighlightLayerProps(
     armedImprovement: null,
     entities: new Map<string, EntityType>(),
     activeTileMap: new Map<string, HexTile>(),
+    cities: new Set<string>(),
     graveyard: new Set<string>(),
     fortificationDots: new Set<string>(),
     tileDataMap: new Map<string, { cx: number; cy: number }>(),
@@ -317,6 +318,17 @@ describe("areMovementHighlightLayerEqual", () => {
     const base = makeMovementHighlightLayerProps({ validRangedTargets });
     const next = makeMovementHighlightLayerProps({ ...base });
     expect(areMovementHighlightLayerEqual(base, next)).toBe(true);
+  });
+
+  it("returns false when cities gains a tile", () => {
+    // Founding a city withdraws the building dots on that tile, so the layer
+    // has to redraw for it.
+    const base = makeMovementHighlightLayerProps();
+    const next = makeMovementHighlightLayerProps({
+      ...base,
+      cities: new Set(["1,2"]),
+    });
+    expect(areMovementHighlightLayerEqual(base, next)).toBe(false);
   });
 
   it("returns false when validMoveTiles reference changes", () => {

@@ -1531,6 +1531,7 @@ export default function GameScreen() {
               armedImprovement={armedImprovement}
               entities={entities}
               activeTileMap={activeTileMap}
+              cities={cities}
               graveyard={graveyard}
               fortificationDots={fortificationDots}
               tileDataMap={tileDataMap}

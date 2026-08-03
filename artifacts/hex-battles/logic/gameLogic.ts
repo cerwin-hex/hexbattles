@@ -394,6 +394,8 @@ export interface OwnTilePlacement {
   overwritesBuilding: boolean;
   /** The purchase puts a unit on one of our own bridges. */
   standsOnBridge: boolean;
+  /** A city is founded beneath a friendly unit, which stays put and unspent. */
+  cityUnderUnit: boolean;
   /** Nothing legal can be bought here, whatever the balance says. */
   blocked: boolean;
 }
@@ -437,6 +439,14 @@ export function classifyOwnTilePlacement(o: {
     ENTITY_META[armedEntityId].offStrength >= ENTITY_META[occupant].defStrength;
   const standsOnBridge =
     armedIsUnit && occupant === "bridge" && tileOwner === "player";
+  // A city is not an entity — it lives in its own set — so a friendly unit on
+  // the tile keeps its place and its moves when one is founded beneath it,
+  // exactly as canImproveTile lets a field be laid under a unit. Units already
+  // walk onto cities freely; without this the reverse order was refused, and
+  // which of the two came first decided whether the tile could ever hold both.
+  // Only a city gets this: a tower or castle needs the entities slot the unit
+  // occupies.
+  const cityUnderUnit = armedEntityId === "city" && occupantIsAllyUnit;
   // A lake tile carries a purchase only through a bridge, and only for a unit —
   // an armed bridge is placed through its own path, never this one.
   const lakeBlocked = terrain === "lake" && occupant !== "bridge";
@@ -445,14 +455,41 @@ export function classifyOwnTilePlacement(o: {
     overwritesRebel,
     overwritesBuilding,
     standsOnBridge,
+    cityUnderUnit,
     blocked:
       lakeBlocked ||
       (!!occupant &&
         !mergeInto &&
         !overwritesRebel &&
         !overwritesBuilding &&
-        !standsOnBridge),
+        !standsOnBridge &&
+        !cityUnderUnit),
   };
+}
+
+/**
+ * The site rules a *building* purchase must clear on top of
+ * classifyOwnTilePlacement, which deliberately knows nothing about them: a tile
+ * that already carries a city, a graveyard marker, or that lies inside a fort's
+ * spacing zone takes no new building. Units clear all three — they stand on
+ * cities and graves and next to forts.
+ *
+ * Shared by the highlight layer and kept alongside the rule it completes, so a
+ * dot cannot again promise a placement the tap handler refuses.
+ */
+export function buildingSiteBlocked(o: {
+  armedEntityId: EntityType;
+  key: string;
+  cities: Set<string>;
+  graveyard: Set<string>;
+  fortificationDots: Set<string>;
+}): boolean {
+  if (ENTITY_META[o.armedEntityId].isUnit) return false;
+  return (
+    o.cities.has(o.key) ||
+    o.graveyard.has(o.key) ||
+    o.fortificationDots.has(o.key)
+  );
 }
 
 /**

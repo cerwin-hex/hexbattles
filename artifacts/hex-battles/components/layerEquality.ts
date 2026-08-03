@@ -96,6 +96,7 @@ export interface MovementHighlightLayerEqualProps {
   armedImprovement: TerrainType | null;
   entities: Map<string, EntityType>;
   activeTileMap: Map<string, HexTile>;
+  cities: Set<string>;
   graveyard: Set<string>;
   fortificationDots: Set<string>;
   tileDataMap: Map<string, { cx: number; cy: number }>;
@@ -120,6 +121,7 @@ export function areMovementHighlightLayerEqual(
     prev.armedImprovement === next.armedImprovement &&
     prev.entities === next.entities &&
     prev.activeTileMap === next.activeTileMap &&
+    prev.cities === next.cities &&
     prev.graveyard === next.graveyard &&
     prev.fortificationDots === next.fortificationDots &&
     prev.tileDataMap === next.tileDataMap &&

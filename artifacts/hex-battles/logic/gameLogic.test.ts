@@ -8,6 +8,7 @@ import {
   initTerritoryBalances,
   mergeResult,
   classifyOwnTilePlacement,
+  buildingSiteBlocked,
   resolveMovedUnitMoves,
   effectiveRemaining,
   isChargeAttack,
@@ -222,6 +223,27 @@ describe("classifyOwnTilePlacement", () => {
     expect(classify("swordsman", "tower").blocked).toBe(true);
   });
 
+  it("a city is founded under a friendly unit, a fort is not", () => {
+    // A city lives in its own set, not in entities, so the unit standing there
+    // keeps its tile — the same reasoning canImproveTile applies to fields.
+    expect(classify("city", "peasant").blocked).toBe(false);
+    expect(classify("city", "shortbowman").blocked).toBe(false);
+    // Towers and castles would have to take the entities slot the unit holds.
+    expect(classify("tower", "peasant").blocked).toBe(true);
+    expect(classify("castle", "peasant").blocked).toBe(true);
+  });
+
+  it("a city is not founded under a rebel or an enemy's unit", () => {
+    expect(classify("city", "rebel").blocked).toBe(true);
+    expect(classify("city", "peasant", { tileOwner: "ai1" }).blocked).toBe(true);
+  });
+
+  it("a city is not founded on another building, nor on a lake", () => {
+    expect(classify("city", "tower").blocked).toBe(true);
+    expect(classify("city", "bridge", { terrain: "lake" }).blocked).toBe(true);
+    expect(classify("city", undefined, { terrain: "lake" }).blocked).toBe(true);
+  });
+
   it("a lake tile carries a unit only through a bridge", () => {
     expect(classify("peasant", undefined, { terrain: "lake" }).blocked).toBe(true);
     const bridged = classify("peasant", "bridge", { terrain: "lake" });
@@ -229,6 +251,44 @@ describe("classifyOwnTilePlacement", () => {
     expect(bridged.standsOnBridge).toBe(true);
     // A building cannot be founded on the bridge a unit may stand on.
     expect(classify("tower", "bridge", { terrain: "lake" }).blocked).toBe(true);
+  });
+});
+
+// ─── buildingSiteBlocked ──────────────────────────────────────────────────────
+
+describe("buildingSiteBlocked", () => {
+  function site(
+    armedEntityId: EntityType,
+    o: { cities?: string[]; graveyard?: string[]; fortificationDots?: string[] } = {},
+  ) {
+    return buildingSiteBlocked({
+      armedEntityId,
+      key: "1,0",
+      cities: new Set(o.cities ?? []),
+      graveyard: new Set(o.graveyard ?? []),
+      fortificationDots: new Set(o.fortificationDots ?? []),
+    });
+  }
+
+  it("a city tile takes no building — the tap handler rejects it, so no dot", () => {
+    expect(site("tower", { cities: ["1,0"] })).toBe(true);
+    expect(site("castle", { cities: ["1,0"] })).toBe(true);
+    expect(site("city", { cities: ["1,0"] })).toBe(true);
+  });
+
+  it("units are unaffected — they may stand on a city, a grave or beside a fort", () => {
+    expect(site("peasant", { cities: ["1,0"] })).toBe(false);
+    expect(site("peasant", { graveyard: ["1,0"] })).toBe(false);
+    expect(site("peasant", { fortificationDots: ["1,0"] })).toBe(false);
+  });
+
+  it("graves and fort spacing keep blocking buildings", () => {
+    expect(site("tower", { graveyard: ["1,0"] })).toBe(true);
+    expect(site("tower", { fortificationDots: ["1,0"] })).toBe(true);
+  });
+
+  it("a clear tile blocks nothing", () => {
+    expect(site("tower", { cities: ["0,0"], graveyard: ["2,0"] })).toBe(false);
   });
 });
 

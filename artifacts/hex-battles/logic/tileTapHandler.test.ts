@@ -877,6 +877,66 @@ describe("armed entity placement on own territory", () => {
     expect(params.triggerErrorFlash).not.toHaveBeenCalled();
     expect(params.setCities).toHaveBeenCalled();
   });
+
+  it("founds a city under a friendly unit, leaving the unit in place and unspent", () => {
+    // Units already stand on cities freely; founding the city the other way
+    // round has to work too, or tile order decides what the player may build.
+    const tiles = Array.from({ length: 5 }, (_, i) => makeTile(i, 0, "player"));
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: tileMap(tiles),
+      armedEntityId: "city",
+      selectedTileKeys: new Set(tiles.map((t) => t.key)),
+      selectedTerritoryId: "0,0",
+      selectedTerritory: tiles,
+      entities: ents([["1,0", "peasant"]]),
+      territoryBalances: new Map([["0,0", 100]]),
+    });
+    handleTileTapLogic(params);
+    expect(params.triggerErrorFlash).not.toHaveBeenCalled();
+    expect(params.setCities).toHaveBeenCalled();
+    const written = (params.setEntities as ReturnType<typeof vi.fn>).mock.calls
+      .at(-1)![0] as Map<string, EntityType>;
+    expect(written.get("1,0")).toBe("peasant");
+    const spent = (params.setSpentUnits as ReturnType<typeof vi.fn>).mock.calls
+      .at(-1)![0] as Set<string>;
+    expect(spent.has("1,0")).toBe(false);
+  });
+
+  it("still refuses a tower under a friendly unit", () => {
+    const tiles = Array.from({ length: 5 }, (_, i) => makeTile(i, 0, "player"));
+    const params = makeParams({
+      key: "1,0",
+      activeTileMap: tileMap(tiles),
+      armedEntityId: "tower",
+      selectedTileKeys: new Set(tiles.map((t) => t.key)),
+      selectedTerritoryId: "0,0",
+      selectedTerritory: tiles,
+      entities: ents([["1,0", "peasant"]]),
+      territoryBalances: new Map([["0,0", 100]]),
+    });
+    handleTileTapLogic(params);
+    expect(params.triggerErrorFlash).toHaveBeenCalledWith("1,0");
+    expect(params.setEntities).not.toHaveBeenCalled();
+  });
+
+  it("still refuses a city on a tile that already has one", () => {
+    const tiles = Array.from({ length: 10 }, (_, i) => makeTile(i, 0, "player"));
+    const params = makeParams({
+      key: "5,0",
+      activeTileMap: tileMap(tiles),
+      armedEntityId: "city",
+      selectedTileKeys: new Set(tiles.map((t) => t.key)),
+      selectedTerritoryId: "0,0",
+      selectedTerritory: tiles,
+      entities: ents([["5,0", "peasant"]]),
+      cities: new Set(["5,0"]),
+      territoryBalances: new Map([["0,0", 100]]),
+    });
+    handleTileTapLogic(params);
+    expect(params.triggerErrorFlash).toHaveBeenCalledWith("5,0");
+    expect(params.setCities).not.toHaveBeenCalled();
+  });
 });
 
 // ─── Armed entity attack (outside own territory) ──────────────────────────────
