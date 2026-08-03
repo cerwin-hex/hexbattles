@@ -15,6 +15,7 @@ import {
   calcTerritoryIncome,
   calcTerritoryUpkeep,
   canImproveTile,
+  cityImproveReach,
   findImproveAnchor,
   mergeResult,
 } from "@/logic/gameLogic";
@@ -236,8 +237,8 @@ export function dtFindMergeMove(
 
 /**
  * Finds the best tile improvement for the AI: any tile of its territory whose
- * terrain can be improved (grass→field, forest→sawmill, desert→mine), that
- * lies within CITY_IMPROVE_RADIUS of a city of the same territory which has
+ * terrain can be improved (grass→field, forest→sawmill, desert→mine), that a
+ * city of the same territory reaches within CITY_IMPROVE_RADIUS steps and has
  * not already built this turn, and that the territory can afford. The same
  * zone and per-turn-allowance rule the player follows, via the shared
  * `canImproveTile` predicate and `findImproveAnchor`.
@@ -261,6 +262,12 @@ export function dtFindImproveMove(
   if (!ctx.elements.improvements) return null;
   const territoryCityKeys = territory.filter((t) => ctx.cities.has(t.key)).map((t) => t.key);
   if (territoryCityKeys.length === 0) return null;
+  // Once per territory, not once per candidate tile — see cityImproveReach.
+  const reach = cityImproveReach({
+    cityKeys: territoryCityKeys,
+    tileMap: ctx.tileMap,
+    entities: ctx.entities,
+  });
   let best: { key: string; terrain: TerrainType } | null = null;
   let bestPrio = -1;
   for (const t of territory) {
@@ -268,7 +275,7 @@ export function dtFindImproveMove(
     if (!target) continue;
     const { anchor } = findImproveAnchor({
       tileKey: t.key,
-      territoryCityKeys,
+      reach,
       usedCities: ctx.cityImproveUsed,
     });
     if (

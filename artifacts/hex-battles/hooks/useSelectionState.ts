@@ -13,10 +13,12 @@ import {
 } from "@/utils/hexGrid";
 import {
   canImproveTile,
+  cityImproveReach,
   findImproveAnchor,
   foundCitySites,
   mergeResult,
   ownCityKeys,
+  type ImproveReach,
 } from "@/logic/gameLogic";
 import { rangedTargets } from "@/logic/rangedAttack";
 import { computeSelectionBorderEdges } from "@/utils/borderEdges";
@@ -267,6 +269,19 @@ export function useSelectionState({
     [selectedTerritory, cities],
   );
 
+  // Where those cities can build, walked once per city rather than once per
+  // candidate tile. Depends on `entities` because a bridge opens a route across
+  // a lake, and on `activeTileMap` because terrain is what blocks one.
+  const improveReach = useMemo<ImproveReach>(
+    () =>
+      cityImproveReach({
+        cityKeys: territoryCityKeys,
+        tileMap: activeTileMap,
+        entities,
+      }),
+    [territoryCityKeys, activeTileMap, entities],
+  );
+
   // Every tile of the selected territory where a city may be founded. NOT
   // gated on a city being armed: the ribbon needs it to decide whether to
   // offer the City item at all, and only the highlight layer restricts its use
@@ -290,7 +305,7 @@ export function useSelectionState({
     for (const tile of selectedTerritory) {
       const { anchor } = findImproveAnchor({
         tileKey: tile.key,
-        territoryCityKeys,
+        reach: improveReach,
         usedCities: improvedCities,
       });
       if (
@@ -310,7 +325,7 @@ export function useSelectionState({
     armedImprovement,
     selectedTerritory,
     selectedTerritoryBalance,
-    territoryCityKeys,
+    improveReach,
     improvedCities,
     cities,
     entities,
@@ -350,7 +365,7 @@ export function useSelectionState({
           continue;
         const a = findImproveAnchor({
           tileKey: tile.key,
-          territoryCityKeys,
+          reach: improveReach,
           usedCities: improvedCities,
         });
         if (a.inRange) inRange = true;
@@ -362,7 +377,7 @@ export function useSelectionState({
       result.set(imp.target, { available, inRange });
     }
     return result;
-  }, [selectedTerritory, territoryCityKeys, improvedCities, cities, entities]);
+  }, [selectedTerritory, improveReach, improvedCities, cities, entities]);
 
   const validPlacementAttackTiles = useMemo<Set<string>>(() => {
     if (!armedEntityId) return new Set();

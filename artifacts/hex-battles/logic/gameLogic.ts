@@ -20,6 +20,7 @@ import {
   cityCapFor,
   CITY_IMPROVE_RADIUS,
   MIN_OWN_CITY_DISTANCE,
+  isLakePassable,
 } from "@/utils/hexGrid";
 import type { ArmedSites } from "@/types";
 import { TIER_TO_UNIT } from "@/constants/gameConstants";
@@ -771,6 +772,69 @@ export function foundCitySites(
 }
 
 /**
+ * Where each city can build, as `tileKey -> (cityKey -> steps)`. Only tiles a
+ * city actually reaches appear, so an absent tile is out of every zone.
+ */
+export type ImproveReach = ReadonlyMap<string, ReadonlyMap<string, number>>;
+
+/**
+ * The improvement zones of `cityKeys`: every tile within CITY_IMPROVE_RADIUS
+ * STEPS of a city, walking around what a city cannot reach through — mountains,
+ * and lakes without a bridge (or a unit holding a captured one).
+ *
+ * Steps, not movement cost: a forest costs 2 to enter but is one step away, and
+ * charging its terrain cost would put the far Sawmill permanently out of reach.
+ * On open ground this is exactly `hexDistance <= CITY_IMPROVE_RADIUS`.
+ *
+ * The route is judged on terrain alone and may cross tiles the owner does not
+ * hold. Only the tile being built on has to be theirs, which the callers
+ * already guarantee by passing tiles of their own territory.
+ *
+ * Walked outward from each city — 19 tiles at radius 2 — rather than searched
+ * per candidate tile, so a whole territory's zone costs O(cities), not
+ * O(territory x cities).
+ */
+export function cityImproveReach(o: {
+  cityKeys: Iterable<string>;
+  tileMap: Map<string, HexTile>;
+  entities: Map<string, EntityType>;
+}): ImproveReach {
+  const reach = new Map<string, Map<string, number>>();
+  const record = (tile: string, city: string, steps: number) => {
+    const byCity = reach.get(tile);
+    if (byCity) byCity.set(city, steps);
+    else reach.set(tile, new Map([[city, steps]]));
+  };
+
+  for (const cityKey of o.cityKeys) {
+    if (!o.tileMap.has(cityKey)) continue;
+    // Breadth-first, so the first visit of a tile is its shortest route.
+    const seen = new Set<string>([cityKey]);
+    let frontier = [cityKey];
+    record(cityKey, cityKey, 0);
+    for (let steps = 1; steps <= CITY_IMPROVE_RADIUS; steps++) {
+      const next: string[] = [];
+      for (const curr of frontier) {
+        const [q, r] = curr.split(",").map(Number);
+        for (const { dir: [dq, dr] } of HEX_EDGES) {
+          const nk = tileKey(q + dq, r + dr);
+          if (seen.has(nk)) continue;
+          const neighbor = o.tileMap.get(nk);
+          if (!neighbor) continue;
+          if (neighbor.terrain === "mountain") continue;
+          if (neighbor.terrain === "lake" && !isLakePassable(nk, o.entities)) continue;
+          seen.add(nk);
+          record(nk, cityKey, steps);
+          next.push(nk);
+        }
+      }
+      frontier = next;
+    }
+  }
+  return reach;
+}
+
+/**
  * Which city would pay for an improvement on a tile.
  *
  * `inRange` exists so the UI can tell the two failure modes apart: no city
@@ -786,28 +850,24 @@ export interface ImproveAnchor {
 
 /**
  * Resolves both the zone rule and the one-improvement-per-city-per-turn rule at
- * once: a tile is improvable when a city of the SAME territory stands within
- * CITY_IMPROVE_RADIUS and has not built this turn. Overlapping zones are a real
- * benefit — the nearest unused city pays, so two cities three tiles apart allow
- * two improvements in their shared area in one turn. Ties between equally
+ * once: a tile is improvable when a city of the SAME territory reaches it —
+ * see `cityImproveReach` — and has not built this turn. Overlapping zones are a
+ * real benefit — the nearest unused city pays, so two cities three tiles apart
+ * allow two improvements in their shared area in one turn. Ties between equally
  * distant unused cities go to the lower tile key, so the choice is
  * deterministic and testable.
  */
 export function findImproveAnchor(o: {
   tileKey: string;
-  /** Keys of the cities inside the same territory. */
-  territoryCityKeys: Iterable<string>;
+  /** Zones of the cities inside the same territory, from `cityImproveReach`. */
+  reach: ImproveReach;
   /** Cities of this owner that already paid for an improvement this turn. */
   usedCities: ReadonlySet<string>;
 }): ImproveAnchor {
-  const [q, r] = o.tileKey.split(",").map(Number);
   let anchor: string | null = null;
   let bestDist = Infinity;
   let inRange = false;
-  for (const key of o.territoryCityKeys) {
-    const [cq, cr] = key.split(",").map(Number);
-    const dist = hexDistance(q, r, cq, cr);
-    if (dist > CITY_IMPROVE_RADIUS) continue;
+  for (const [key, dist] of o.reach.get(o.tileKey) ?? []) {
     inRange = true;
     if (o.usedCities.has(key)) continue;
     // A tie can only occur once an anchor is set, so `anchor` is non-null

@@ -19,7 +19,7 @@ import {
   improveCostFor,
   IMPROVED_TERRAINS,
 } from "@/utils/hexGrid";
-import { advanceAttacksUsed, advanceCombatSpent, applyOwnerEconomy, armedSitesForOwner, calcTerritoryIncome, calcTerritoryUpkeep, classifyOwnTilePlacement, effectiveRemaining, findImproveAnchor, foundCitySites, isChargeAttack, mergeResult, ownCityKeys, resolveMovedUnitMoves, spawnRebelsForOwner, sweepNeutralMarkers } from "@/logic/gameLogic";
+import { advanceAttacksUsed, advanceCombatSpent, applyOwnerEconomy, armedSitesForOwner, calcTerritoryIncome, calcTerritoryUpkeep, cityImproveReach, classifyOwnTilePlacement, effectiveRemaining, findImproveAnchor, foundCitySites, isChargeAttack, mergeResult, ownCityKeys, resolveMovedUnitMoves, spawnRebelsForOwner, sweepNeutralMarkers } from "@/logic/gameLogic";
 import {
   dtSplitScore,
   dtCaptureNegatesIncome,
@@ -1688,7 +1688,11 @@ export async function runAiTurn(
         const terrBefore = getContiguousTerritory(ws.tileMap, target, aiOwner, ws.entities);
         const { anchor } = findImproveAnchor({
           tileKey: target,
-          territoryCityKeys: terrBefore.filter((t) => ws.cities.has(t.key)).map((t) => t.key),
+          reach: cityImproveReach({
+            cityKeys: terrBefore.filter((t) => ws.cities.has(t.key)).map((t) => t.key),
+            tileMap: ws.tileMap,
+            entities: ws.entities,
+          }),
           usedCities: ws.cityImproveUsed,
         });
         if (!anchor) return false;

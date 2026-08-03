@@ -1577,17 +1577,17 @@ describe("founding a city", () => {
     expect(params.triggerErrorFlash).toHaveBeenCalledWith("5,0");
   });
 
-  it("rejects a city within three tiles of one the player already holds", () => {
-    // 15 tiles → cap 3, so only the spacing rule can reject 2,0.
-    const params = cityParams(row(15), { key: "2,0", cities: new Set(["0,0"]) });
+  it("rejects a city within four tiles of one the player already holds", () => {
+    // 15 tiles → cap 3, so only the spacing rule can reject 3,0.
+    const params = cityParams(row(15), { key: "3,0", cities: new Set(["0,0"]) });
     handleTileTapLogic(params);
     expect(params.setCities).not.toHaveBeenCalled();
-    expect(params.triggerErrorFlash).toHaveBeenCalledWith("2,0");
+    expect(params.triggerErrorFlash).toHaveBeenCalledWith("3,0");
   });
 
-  it("allows a city exactly three tiles away when the cap allows it", () => {
-    // 10 tiles → cap 2, one city held, and 3,0 is exactly the minimum distance.
-    const params = cityParams(row(10), { key: "3,0", cities: new Set(["0,0"]) });
+  it("allows a city exactly four tiles away when the cap allows it", () => {
+    // 10 tiles → cap 2, one city held, and 4,0 is exactly the minimum distance.
+    const params = cityParams(row(10), { key: "4,0", cities: new Set(["0,0"]) });
     handleTileTapLogic(params);
     expect(params.triggerErrorFlash).not.toHaveBeenCalled();
     expect(params.setCities).toHaveBeenCalled();

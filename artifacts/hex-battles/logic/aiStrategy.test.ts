@@ -1050,14 +1050,14 @@ describe("runAiTerritoryDecisionLoop", () => {
     expect(cityBuilds).toHaveLength(0);
   });
 
-  it("never founds a city within three tiles of one it already holds", async () => {
-    // 15 tiles → cap 3. The tower at 2,0 puts the zone of control on 1,0/2,0/3,0.
-    // 2,0 is occupied by the tower itself, so the raw candidates before the
-    // spacing rule are 1,0 (distance 1 from the city — illegal) and 3,0
-    // (distance 3 — legal). A spacing-blind implementation would offer 1,0
-    // and fail the assertion below; the correct one must pick 3,0.
+  it("never founds a city within four tiles of one it already holds", async () => {
+    // 15 tiles → cap 3. The tower at 3,0 puts the zone of control on 2,0/3,0/4,0.
+    // 3,0 is occupied by the tower itself, so the raw candidates before the
+    // spacing rule are 2,0 (distance 2 from the city — illegal) and 4,0
+    // (distance 4 — legal). A spacing-blind implementation would offer 2,0
+    // and fail the assertion below; the correct one must pick 4,0.
     const tiles = Array.from({ length: 15 }, (_, i) => makeTile(i, 0, "ai1"));
-    const entities = new Map<string, EntityType>([["2,0", "tower"]]);
+    const entities = new Map<string, EntityType>([["3,0", "tower"]]);
     const aiCtx = makeAiCtx(tiles, "ai1", entities, new Map([["0,0", 100]]));
     aiCtx.cities = new Set(["0,0"]);
     let built = false;
@@ -1077,7 +1077,7 @@ describe("runAiTerritoryDecisionLoop", () => {
     expect(cityBuilds.length).toBeGreaterThan(0);
     for (const [, target] of cityBuilds) {
       const [q, r] = String(target).split(",").map(Number);
-      expect(hexDistance(q, r, 0, 0)).toBeGreaterThanOrEqual(3);
+      expect(hexDistance(q, r, 0, 0)).toBeGreaterThanOrEqual(4);
     }
   });
 });

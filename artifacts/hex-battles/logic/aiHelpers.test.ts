@@ -406,6 +406,18 @@ describe("dtFindImproveMove", () => {
     expect(dtFindImproveMove(tiles, ctx, 10)).toBeNull();
   });
 
+  it("returns null when a mountain stands between the city and the only improvable tile", () => {
+    // "1,0" is the only two-step route from the city at "0,0" to "2,0".
+    const tiles = [
+      makeTile(0, 0, "ai1", "grass"),
+      makeTile(1, 0, "ai1", "mountain"),
+      makeTile(2, 0, "ai1", "grass"),
+    ];
+    const ctx = makeCtx(tiles, [], [], "ai1");
+    ctx.cities = new Set(["0,0"]);
+    expect(dtFindImproveMove(tiles, ctx, 10)).toBeNull();
+  });
+
   it("returns null when every city covering the improvable tiles has already built", () => {
     const tiles = [makeTile(0, 0, "ai1", "grass"), makeTile(1, 0, "ai1", "grass")];
     const ctx = makeCtx(tiles, [], [], "ai1");

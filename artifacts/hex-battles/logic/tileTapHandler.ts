@@ -23,6 +23,7 @@ import {
   applySingleHexPenalty,
   canFoundCity,
   canImproveTile,
+  cityImproveReach,
   classifyOwnTilePlacement,
   findImproveAnchor,
   isChargeAttack,
@@ -481,7 +482,11 @@ export function handleTileTapLogic(params: TileTapParams): void {
     // computed from a render-time snapshot.
     const { anchor } = findImproveAnchor({
       tileKey: key,
-      territoryCityKeys: selectedTerritory.filter((t) => cities.has(t.key)).map((t) => t.key),
+      reach: cityImproveReach({
+        cityKeys: selectedTerritory.filter((t) => cities.has(t.key)).map((t) => t.key),
+        tileMap: activeTileMap,
+        entities,
+      }),
       usedCities: improvedCities,
     });
     if (

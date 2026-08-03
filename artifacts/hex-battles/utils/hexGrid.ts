@@ -178,9 +178,13 @@ export const TILES_PER_CITY = 5;
  * cities never block a site. Checked only when founding: a territory that
  * shrinks, splits, or captures a city standing too close keeps every city.
  */
-export const MIN_OWN_CITY_DISTANCE = 3;
+export const MIN_OWN_CITY_DISTANCE = 4;
 
-/** How far a city's improvement zone reaches, in hex distance. */
+/**
+ * How far a city's improvement zone reaches, in STEPS along a route the city
+ * can walk — mountains and unbridged lakes are walked around, not through. See
+ * `cityImproveReach`.
+ */
 export const CITY_IMPROVE_RADIUS = 2;
 
 /** How many cities a territory of `tileCount` tiles may hold. */

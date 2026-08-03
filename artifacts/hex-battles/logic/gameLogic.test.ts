@@ -22,8 +22,10 @@ import {
   foundCitySites,
   ownCityKeys,
   findImproveAnchor,
+  cityImproveReach,
 } from "@/logic/gameLogic";
 import { cityCapFor } from "@/utils/hexGrid";
+import { hexDistance } from "@/utils/hexMath";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1110,10 +1112,10 @@ describe("canFoundCity", () => {
     expect(canFoundCity({ ...base, territoryTileCount: 10, territoryCityCount: 1 })).toBe(true);
   });
 
-  it("rejects a site closer than three tiles to a city the owner holds", () => {
-    // "2,0" is two tiles from the origin, "3,0" is three.
-    expect(canFoundCity({ ...base, territoryTileCount: 10, territoryCityCount: 1, ownCityKeys: ["2,0"] })).toBe(false);
-    expect(canFoundCity({ ...base, territoryTileCount: 10, territoryCityCount: 1, ownCityKeys: ["3,0"] })).toBe(true);
+  it("rejects a site closer than four tiles to a city the owner holds", () => {
+    // "3,0" is three tiles from the origin, "4,0" is four.
+    expect(canFoundCity({ ...base, territoryTileCount: 10, territoryCityCount: 1, ownCityKeys: ["3,0"] })).toBe(false);
+    expect(canFoundCity({ ...base, territoryTileCount: 10, territoryCityCount: 1, ownCityKeys: ["4,0"] })).toBe(true);
   });
 
   it("checks the distance against every own city, including ones outside this territory", () => {
@@ -1122,7 +1124,7 @@ describe("canFoundCity", () => {
         ...base,
         territoryTileCount: 20,
         territoryCityCount: 1,
-        ownCityKeys: ["5,0", "1,1"],
+        ownCityKeys: ["6,0", "1,1"],
       }),
     ).toBe(false);
   });
@@ -1149,11 +1151,82 @@ describe("foundCitySites", () => {
     expect(sites.size).toBe(0);
   });
 
-  it("excludes only the tiles within three of an own city", () => {
+  it("excludes only the tiles within four of an own city", () => {
     const keys = ["0,0", "1,0", "2,0", "3,0", "4,0", "5,0", "6,0", "7,0", "8,0", "9,0"];
     const territory = keys.map((k) => mkTile(k, "player"));
     const sites = foundCitySites(territory, 1, ["0,0"]);
-    expect([...sites].sort()).toEqual(["3,0", "4,0", "5,0", "6,0", "7,0", "8,0", "9,0"]);
+    expect([...sites].sort()).toEqual(["4,0", "5,0", "6,0", "7,0", "8,0", "9,0"]);
+  });
+});
+
+// ─── cityImproveReach ─────────────────────────────────────────────────────────
+
+/** Open grass spanning q,r in -5..5 — every zone under test fits inside it. */
+function openBoard(): Map<string, HexTile> {
+  const tiles: HexTile[] = [];
+  for (let q = -5; q <= 5; q++) {
+    for (let r = -5; r <= 5; r++) tiles.push(makeTile(q, r, "player"));
+  }
+  return tileMap(tiles);
+}
+
+/** `openBoard` with the listed tiles retextured, for the blocking tests. */
+function boardWith(terrainByKey: Record<string, HexTile["terrain"]>): Map<string, HexTile> {
+  const map = openBoard();
+  for (const [key, terrain] of Object.entries(terrainByKey)) {
+    map.set(key, { ...map.get(key)!, terrain });
+  }
+  return map;
+}
+
+function reachOn(
+  cityKeys: string[],
+  map: Map<string, HexTile> = openBoard(),
+  entities: Map<string, EntityType> = new Map(),
+) {
+  return cityImproveReach({ cityKeys, tileMap: map, entities });
+}
+
+describe("cityImproveReach", () => {
+  it("reaches every tile within two steps on open ground", () => {
+    const reach = reachOn(["0,0"]);
+    // The whole distance-2 disc, city tile included, and nothing beyond it.
+    for (const t of openBoard().values()) {
+      const within = hexDistance(t.q, t.r, 0, 0) <= 2;
+      expect(reach.get(t.key)?.has("0,0") ?? false).toBe(within);
+    }
+  });
+
+  it("counts steps, not movement cost, so a forest two away stays in reach", () => {
+    // Forest costs 2 movement to enter; the zone is measured in steps.
+    const reach = reachOn(["0,0"], boardWith({ "1,0": "forest", "2,0": "forest" }));
+    expect(reach.get("2,0")?.get("0,0")).toBe(2);
+  });
+
+  it("does not reach through a mountain", () => {
+    // "1,0" is the only two-step route from "0,0" to "2,0".
+    const reach = reachOn(["0,0"], boardWith({ "1,0": "mountain" }));
+    expect(reach.has("1,0")).toBe(false);
+    expect(reach.has("2,0")).toBe(false);
+    // A tile the ridge does not stand in front of is untouched.
+    expect(reach.get("0,2")?.get("0,0")).toBe(2);
+  });
+
+  it("does not reach across an unbridged lake", () => {
+    const lake = boardWith({ "1,0": "lake" });
+    expect(reachOn(["0,0"], lake).has("2,0")).toBe(false);
+  });
+
+  it("reaches across a bridged lake, but the lake itself is only a corridor", () => {
+    const lake = boardWith({ "1,0": "lake" });
+    const reach = reachOn(["0,0"], lake, ents([["1,0", "bridge"]]));
+    expect(reach.get("2,0")?.get("0,0")).toBe(2);
+    // The lake tile is reachable; canImproveTile is what refuses to build on it.
+    expect(reach.get("1,0")?.get("0,0")).toBe(1);
+  });
+
+  it("records every city that reaches a tile, with its own step count", () => {
+    expect(reachOn(["0,0", "2,0"]).get("1,0")).toEqual(new Map([["0,0", 1], ["2,0", 1]]));
   });
 });
 
@@ -1164,19 +1237,27 @@ describe("findImproveAnchor", () => {
 
   it("picks a city within two tiles and reports it in range", () => {
     expect(
-      findImproveAnchor({ tileKey: "2,0", territoryCityKeys: ["0,0"], usedCities: noneUsed }),
+      findImproveAnchor({ tileKey: "2,0", reach: reachOn(["0,0"]), usedCities: noneUsed }),
     ).toEqual({ anchor: "0,0", inRange: true });
   });
 
   it("rejects a tile three or more away", () => {
     expect(
-      findImproveAnchor({ tileKey: "3,0", territoryCityKeys: ["0,0"], usedCities: noneUsed }),
+      findImproveAnchor({ tileKey: "3,0", reach: reachOn(["0,0"]), usedCities: noneUsed }),
     ).toEqual({ anchor: null, inRange: false });
+  });
+
+  it("rejects a tile two away that no route reaches", () => {
+    const reach = reachOn(["0,0"], boardWith({ "1,0": "mountain" }));
+    expect(findImproveAnchor({ tileKey: "2,0", reach, usedCities: noneUsed })).toEqual({
+      anchor: null,
+      inRange: false,
+    });
   });
 
   it("returns nothing when the territory has no city at all", () => {
     expect(
-      findImproveAnchor({ tileKey: "0,0", territoryCityKeys: [], usedCities: noneUsed }),
+      findImproveAnchor({ tileKey: "0,0", reach: reachOn([]), usedCities: noneUsed }),
     ).toEqual({ anchor: null, inRange: false });
   });
 
@@ -1184,7 +1265,7 @@ describe("findImproveAnchor", () => {
     expect(
       findImproveAnchor({
         tileKey: "1,0",
-        territoryCityKeys: ["3,0", "0,0"],
+        reach: reachOn(["3,0", "0,0"]),
         usedCities: noneUsed,
       }).anchor,
     ).toBe("0,0");
@@ -1194,7 +1275,7 @@ describe("findImproveAnchor", () => {
     expect(
       findImproveAnchor({
         tileKey: "1,0",
-        territoryCityKeys: ["0,0", "3,0"],
+        reach: reachOn(["0,0", "3,0"]),
         usedCities: new Set(["0,0"]),
       }),
     ).toEqual({ anchor: "3,0", inRange: true });
@@ -1204,20 +1285,29 @@ describe("findImproveAnchor", () => {
     expect(
       findImproveAnchor({
         tileKey: "1,0",
-        territoryCityKeys: ["0,0"],
+        reach: reachOn(["0,0"]),
         usedCities: new Set(["0,0"]),
       }),
     ).toEqual({ anchor: null, inRange: true });
   });
 
   it("breaks ties between equally distant cities by tile key", () => {
-    // "0,0" and "2,0" are both distance 1 from "1,0".
+    // "0,0" and "2,0" are both one step from "1,0".
     expect(
       findImproveAnchor({
         tileKey: "1,0",
-        territoryCityKeys: ["2,0", "0,0"],
+        reach: reachOn(["2,0", "0,0"]),
         usedCities: noneUsed,
       }).anchor,
     ).toBe("0,0");
+  });
+
+  it("takes the city with the shorter route, not the shorter line of sight", () => {
+    // A ridge in front of "0,0" leaves it two steps from "1,0" the long way
+    // round, while "3,0" reaches the same tile in two steps unobstructed.
+    // Without the wall "0,0" would win at one step.
+    const reach = reachOn(["0,0", "3,0"], boardWith({ "1,0": "mountain" }));
+    expect(reach.get("2,0")?.has("0,0")).toBe(false);
+    expect(findImproveAnchor({ tileKey: "2,0", reach, usedCities: noneUsed }).anchor).toBe("3,0");
   });
 });
