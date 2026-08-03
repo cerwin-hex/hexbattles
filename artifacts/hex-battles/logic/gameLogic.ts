@@ -401,11 +401,16 @@ export interface OwnTilePlacement {
 }
 
 /**
- * Whether — and how — the armed entity may be bought onto a tile of the
- * player's own territory. The single source of truth for that rule, shared by
- * the tap handler (which acts on it) and the highlight layer (which draws it);
- * they drifted apart once already, leaving purchase dots on tiles that only
+ * Whether — and how — the armed entity may be bought onto a tile of `buyer`'s
+ * own territory. The single source of truth for that rule, shared by the tap
+ * handler (which acts on it) and the highlight layer (which draws it); they
+ * drifted apart once already, leaving purchase dots on tiles that only
  * error-flash when tapped.
+ *
+ * `buyer` defaults to "player" because every caller was the player's until the
+ * AI's city sites started asking the same question. Nothing here is
+ * player-specific — the rules are the game's, so an AI reading them with its own
+ * owner gets the same answers, which is the point.
  *
  * Gold, cities and graveyards are deliberately out of scope: the caller owns
  * those, because the highlight layer cannot see all of them.
@@ -415,8 +420,11 @@ export function classifyOwnTilePlacement(o: {
   occupant: EntityType | undefined;
   tileOwner: TerritoryOwner | undefined;
   terrain: TerrainType;
+  /** Who is buying. Only "their own" vs "someone else's" ever matters. */
+  buyer?: TerritoryOwner;
 }): OwnTilePlacement {
   const { armedEntityId, occupant, tileOwner, terrain } = o;
+  const buyer = o.buyer ?? "player";
   const armedIsUnit = ENTITY_META[armedEntityId].isUnit;
   const occupantIsAllyUnit =
     !!occupant &&
@@ -424,7 +432,7 @@ export function classifyOwnTilePlacement(o: {
     occupant !== "city" &&
     occupant !== "bridge" &&
     ENTITY_META[occupant].isUnit &&
-    tileOwner === "player";
+    tileOwner === buyer;
   const mergeInto =
     armedIsUnit && occupantIsAllyUnit ? mergeResult(armedEntityId, occupant) : null;
   const overwritesRebel =
@@ -435,10 +443,10 @@ export function classifyOwnTilePlacement(o: {
     armedIsUnit &&
     canCapture(armedEntityId) &&
     occupantIsBuilding &&
-    tileOwner !== "player" &&
+    tileOwner !== buyer &&
     ENTITY_META[armedEntityId].offStrength >= ENTITY_META[occupant].defStrength;
   const standsOnBridge =
-    armedIsUnit && occupant === "bridge" && tileOwner === "player";
+    armedIsUnit && occupant === "bridge" && tileOwner === buyer;
   // A city is not an entity — it lives in its own set — so a friendly unit on
   // the tile keeps its place and its moves when one is founded beneath it,
   // exactly as canImproveTile lets a field be laid under a unit. Units already

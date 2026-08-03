@@ -19,7 +19,7 @@ import {
   improveCostFor,
   IMPROVED_TERRAINS,
 } from "@/utils/hexGrid";
-import { advanceAttacksUsed, advanceCombatSpent, applyOwnerEconomy, armedSitesForOwner, calcTerritoryIncome, calcTerritoryUpkeep, effectiveRemaining, findImproveAnchor, foundCitySites, isChargeAttack, mergeResult, ownCityKeys, resolveMovedUnitMoves, spawnRebelsForOwner, sweepNeutralMarkers } from "@/logic/gameLogic";
+import { advanceAttacksUsed, advanceCombatSpent, applyOwnerEconomy, armedSitesForOwner, calcTerritoryIncome, calcTerritoryUpkeep, classifyOwnTilePlacement, effectiveRemaining, findImproveAnchor, foundCitySites, isChargeAttack, mergeResult, ownCityKeys, resolveMovedUnitMoves, spawnRebelsForOwner, sweepNeutralMarkers } from "@/logic/gameLogic";
 import {
   dtSplitScore,
   dtCaptureNegatesIncome,
@@ -558,7 +558,19 @@ export async function runAiTerritoryDecisionLoop(
         const cityCands = currTerr.filter((t) => {
           if (t.terrain === "mountain" || t.terrain === "lake" || aiCtx.cities.has(t.key)) return false;
           if (IMPROVED_TERRAINS.has(t.terrain)) return false;
-          if (aiCtx.entities.has(t.key)) return false;
+          // The player's rule, read with this AI as the buyer: a city goes under
+          // one of our own units (it lives in `cities`, not `entities`, so the
+          // unit is untouched), but never on a rebel or another building.
+          if (
+            classifyOwnTilePlacement({
+              armedEntityId: "city",
+              occupant: aiCtx.entities.get(t.key),
+              tileOwner: t.owner,
+              terrain: t.terrain,
+              buyer: aiOwner,
+            }).blocked
+          )
+            return false;
           if (!citySites.has(t.key)) return false;
           return bldgZoC.has(t.key);
         }).sort((a, b) => {

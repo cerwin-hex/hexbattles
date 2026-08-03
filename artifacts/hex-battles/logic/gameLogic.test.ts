@@ -244,6 +244,29 @@ describe("classifyOwnTilePlacement", () => {
     expect(classify("city", undefined, { terrain: "lake" }).blocked).toBe(true);
   });
 
+  it("an AI buyer reads the same rules as the player", () => {
+    const asAi = (armedEntityId: EntityType, occupant?: EntityType) =>
+      classifyOwnTilePlacement({
+        armedEntityId,
+        occupant,
+        tileOwner: "ai1",
+        terrain: "grass",
+        buyer: "ai1",
+      });
+    // Its own unit is an ally: a city goes under it, a tower does not, and two
+    // same-track units still merge.
+    expect(asAi("city", "peasant").blocked).toBe(false);
+    expect(asAi("tower", "peasant").blocked).toBe(true);
+    expect(asAi("peasant", "peasant").mergeInto).toBe("warrior");
+    // Its own tower is not an enemy building to be overrun.
+    expect(asAi("swordsman", "tower").blocked).toBe(true);
+    // And the same tile read by the player is someone else's ground.
+    expect(classify("city", "peasant", { tileOwner: "ai1" }).blocked).toBe(true);
+    expect(
+      classify("swordsman", "tower", { tileOwner: "ai1" }).overwritesBuilding,
+    ).toBe(true);
+  });
+
   it("a lake tile carries a unit only through a bridge", () => {
     expect(classify("peasant", undefined, { terrain: "lake" }).blocked).toBe(true);
     const bridged = classify("peasant", "bridge", { terrain: "lake" });

@@ -596,6 +596,31 @@ describe("generateCandidateActions", () => {
     }
   });
 
+  it("offers a city under its own unit, but not on a rebel or a fort", () => {
+    // Same rule the player plays by (classifyOwnTilePlacement): a city occupies
+    // the cities set, not the unit's tile, so the unit is untouched. Six tiles →
+    // city cap floor(6/5) = 1, and no city stands yet, so every tile is a site.
+    const tileMap = makeTileMap(
+      Array.from({ length: 6 }, (_, i) => makeTile(i, 0, "ai1")),
+    );
+    const entities = new Map<string, EntityType>([
+      ["1,0", "peasant"],
+      ["2,0", "rebel"],
+      ["3,0", "tower"],
+    ]);
+    const balances = new Map<string, number>();
+    const terr = getContiguousTerritory(tileMap, "0,0", "ai1", entities);
+    balances.set(getTerritoryId(terr)!, 100);
+    const ctx = makeCtx(tileMap, entities, "ai1", balances);
+    const cityTargets = generateCandidateActions(ctx, terr, 100)
+      .filter((c: ExpertAction) => c.kind === "build" && c.buildingType === "city")
+      .map((c) => (c as { target: string }).target);
+    expect(cityTargets).toContain("1,0");
+    expect(cityTargets).toContain("0,0");
+    expect(cityTargets).not.toContain("2,0");
+    expect(cityTargets).not.toContain("3,0");
+  });
+
   it("does not offer an upgrade for an idle unit that cannot attack and is unthreatened", () => {
     // 5-tile all-grass line (income 10 sustains a warrior's upkeep 9) with a lone
     // peasant interior and no enemy anywhere. Upgrading to a warrior buys strength

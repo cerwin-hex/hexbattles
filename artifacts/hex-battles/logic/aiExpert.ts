@@ -19,7 +19,7 @@ import {
   improveCostFor,
   IMPROVED_TERRAINS,
 } from "@/utils/hexGrid";
-import { calcTerritoryIncome, calcTerritoryUpkeep, foundCitySites, mergeResult, ownCityKeys } from "@/logic/gameLogic";
+import { calcTerritoryIncome, calcTerritoryUpkeep, classifyOwnTilePlacement, foundCitySites, mergeResult, ownCityKeys } from "@/logic/gameLogic";
 import { aiBuyableUnits } from "@/constants/gameConstants";
 import { dtCountClusters, dtFindImproveMove } from "@/logic/aiHelpers";
 import { ALL_GAME_ELEMENTS, type GameElements } from "@/constants/gameElements";
@@ -1015,10 +1015,31 @@ export function generateCandidateActions(
       ? foundCitySites(territory, territoryCityCount, ownCityKeys(ctx.cities, ctx.tileMap, owner))
       : new Set<string>();
   if (citySites.size > 0) {
-    // Building on an improved tile would destroy the improvement; don't.
-    for (const t of innerPlacements) {
+    // `innerPlacements` drops every occupied tile, which is right for a fort but
+    // too narrow for a city: a city lives in `cities`, not `entities`, so it is
+    // founded UNDER our own units and they keep their tile and their move. Walk
+    // the territory itself and re-apply the same rule the player plays by, read
+    // with this owner as the buyer, so a rebel or another building still blocks.
+    for (const t of territory) {
+      if (t.terrain === "mountain" || t.terrain === "lake") continue;
+      // Building on an improved tile would destroy the improvement; don't.
       if (IMPROVED_TERRAINS.has(t.terrain)) continue;
+      if (ctx.cities.has(t.key)) continue;
       if (!citySites.has(t.key)) continue;
+      const occupant = ctx.entities.get(t.key);
+      if (occupant) {
+        if (!CITY_UNDER_UNIT) continue;
+        if (
+          classifyOwnTilePlacement({
+            armedEntityId: "city",
+            occupant,
+            tileOwner: t.owner,
+            terrain: t.terrain,
+            buyer: owner,
+          }).blocked
+        )
+          continue;
+      }
       out.push({ kind: "build", buildingType: "city", target: t.key, cost: cityCost });
     }
   }
@@ -1175,6 +1196,15 @@ let SAFE_CAPTURE_AUGMENT = true;
 const SAFE_CAPTURE_AUGMENT_CAP = 8;
 export function __setExpertSafeCaptureAugment(on: boolean | null): void {
   SAFE_CAPTURE_AUGMENT = on ?? true;
+}
+
+// A city may be founded under one of our own units, exactly as the player may:
+// it occupies the `cities` set rather than the unit's tile, so nothing is
+// displaced. Toggleable for the self-play A/B (off => the original behaviour,
+// where any occupant at all disqualified the tile as a city site).
+let CITY_UNDER_UNIT = true;
+export function __setExpertCityUnderUnit(on: boolean | null): void {
+  CITY_UNDER_UNIT = on ?? true;
 }
 
 // A fort is "idle" (defends nothing) when it is not on the enemy-facing border

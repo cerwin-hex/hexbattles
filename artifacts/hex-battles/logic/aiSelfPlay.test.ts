@@ -8,6 +8,7 @@ import {
 import {
   __setExpertSearchConfig, __setExpertCandidateMode, __setExpertMaxIters,
   __setExpertInertPocketFront, __setExpertSafeCaptureAugment,
+  __setExpertCityUnderUnit,
   evaluatePosition, simulateAction, opponentBestResponse, DEFAULT_WEIGHTS,
   type SimState,
 } from "@/logic/aiExpert";
@@ -427,6 +428,28 @@ describe("expert strength (self-play)", () => {
       // never the win rate: idle undefended positive-delta captures across 7 seeds
       // of 100-tile 4-Expert games went from 367 (fix off) to 0 (fix on).
       expect(newWins).toBeGreaterThanOrEqual(oldWins - 4);
+    },
+    600000,
+  );
+
+  fullIt(
+    "founding cities under own units costs no strength",
+    async () => {
+      // The rule change that made AI city placement match the player's: a city
+      // may be founded on a tile one of our own units stands on. It only WIDENS
+      // the candidate set, so it cannot make a position unreachable — but a wider
+      // set also lets the search pick a city where it used to pick something
+      // else, so it has to be shown not to cost wins. Paired seats, new vs old.
+      // (vs-hard is saturated and cannot detect a small loss here; this A/B can.)
+      const r = await mirroredAb(
+        (seat) => __setExpertCityUnderUnit(seat === "new" ? null : false),
+        { seeds: 12, firstSeed: 9900, tiles: 50, maxTurns: 45 },
+      );
+      __setExpertCityUnderUnit(null);
+      // Measured 2026-08-03, paired: 12-12 of 24, no draws — dead level, so the
+      // wider candidate set costs nothing. Identical brains tie exactly by
+      // construction here, so this bound only moves on a real difference.
+      expect(r.newWins).toBeGreaterThanOrEqual(r.oldWins - 4);
     },
     600000,
   );
