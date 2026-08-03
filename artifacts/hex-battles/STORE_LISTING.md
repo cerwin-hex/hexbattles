@@ -175,11 +175,12 @@ in git is the source, not the published page.
 
 These appear in the prebuild manifest
 (`npx expo prebuild --platform android --no-install`, then `rm -rf android` and
-`git checkout -- package.json`). None of them back a user-facing feature:
+`git checkout -- package.json`):
 
 | Permission | Comes from |
 |------------|-----------|
-| `INTERNET`, `VIBRATE` | React Native / Expo runtime |
+| `VIBRATE` | `expo-haptics` — the only one here that backs a real feature |
+| `INTERNET` | React Native / Expo runtime; the app makes no requests |
 | `READ`/`WRITE_EXTERNAL_STORAGE` (maxSdk 32) | Expo runtime |
 | `SYSTEM_ALERT_WINDOW` | `expo-dev-client` — appears in the merged source manifest; whether it survives into the release variant is unconfirmed, so check the live listing's permission list rather than trusting this row |
 
