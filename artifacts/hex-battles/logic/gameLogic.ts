@@ -468,16 +468,20 @@ export function classifyOwnTilePlacement(o: {
 }
 
 /**
- * The site rules a *building* purchase must clear on top of
- * classifyOwnTilePlacement, which deliberately knows nothing about them: a tile
- * that already carries a city, a graveyard marker, or that lies inside a fort's
- * spacing zone takes no new building. Units clear all three — they stand on
- * cities and graves and next to forts.
+ * Whether a *building* purchase gets no dot on this tile — the half of the
+ * placement rule classifyOwnTilePlacement deliberately leaves to the caller,
+ * because it cannot see these sets. Units suppress nothing: they stand on
+ * cities and graves and inside fort cover alike.
  *
- * Shared by the highlight layer and kept alongside the rule it completes, so a
- * dot cannot again promise a placement the tap handler refuses.
+ * Two of the three terms are rules the tap handler enforces (a city tile and a
+ * graveyard marker both reject a building). The third is not: `fortificationDots`
+ * is the defense cover a tower or castle already projects over its own tile and
+ * its neighbours, so hiding the dot there only discourages stacking a second
+ * fort inside cover the player has bought — tapping such a tile still builds.
+ * Do NOT reuse this in the tap handler without deciding that question first;
+ * that would turn a hint into a rule.
  */
-export function buildingSiteBlocked(o: {
+export function buildingDotSuppressed(o: {
   armedEntityId: EntityType;
   key: string;
   cities: Set<string>;

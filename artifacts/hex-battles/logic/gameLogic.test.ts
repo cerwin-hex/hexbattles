@@ -8,7 +8,7 @@ import {
   initTerritoryBalances,
   mergeResult,
   classifyOwnTilePlacement,
-  buildingSiteBlocked,
+  buildingDotSuppressed,
   resolveMovedUnitMoves,
   effectiveRemaining,
   isChargeAttack,
@@ -256,12 +256,12 @@ describe("classifyOwnTilePlacement", () => {
 
 // ─── buildingSiteBlocked ──────────────────────────────────────────────────────
 
-describe("buildingSiteBlocked", () => {
+describe("buildingDotSuppressed", () => {
   function site(
     armedEntityId: EntityType,
     o: { cities?: string[]; graveyard?: string[]; fortificationDots?: string[] } = {},
   ) {
-    return buildingSiteBlocked({
+    return buildingDotSuppressed({
       armedEntityId,
       key: "1,0",
       cities: new Set(o.cities ?? []),
@@ -271,6 +271,7 @@ describe("buildingSiteBlocked", () => {
   }
 
   it("a city tile takes no building — the tap handler rejects it, so no dot", () => {
+    // The reported bug: arming a tower drew a dot on a city it cannot take.
     expect(site("tower", { cities: ["1,0"] })).toBe(true);
     expect(site("castle", { cities: ["1,0"] })).toBe(true);
     expect(site("city", { cities: ["1,0"] })).toBe(true);
@@ -282,7 +283,7 @@ describe("buildingSiteBlocked", () => {
     expect(site("peasant", { fortificationDots: ["1,0"] })).toBe(false);
   });
 
-  it("graves and fort spacing keep blocking buildings", () => {
+  it("graves (a rule) and existing fort cover (a hint) keep withdrawing the dot", () => {
     expect(site("tower", { graveyard: ["1,0"] })).toBe(true);
     expect(site("tower", { fortificationDots: ["1,0"] })).toBe(true);
   });
