@@ -915,6 +915,7 @@ export default function GameScreen() {
     entities,
     activeTileMap,
     spentUnits,
+    cities,
     combatSpentUnits,
     territoryBalances,
     minUnitCost,

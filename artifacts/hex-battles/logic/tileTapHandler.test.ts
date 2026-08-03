@@ -1029,7 +1029,7 @@ describe("improvement placement", () => {
       typeof balanceUpdater === "function"
         ? balanceUpdater(params.territoryBalances)
         : balanceUpdater;
-    expect(nextBalances.get("0,0")).toBe(8); // 10 − field cost 2
+    expect(nextBalances.get("0,0")).toBe(7); // 10 − field cost 3
   });
 
   it("pushes history, clears the armed improvement and closes the ribbon", () => {

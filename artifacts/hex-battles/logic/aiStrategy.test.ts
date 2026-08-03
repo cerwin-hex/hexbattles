@@ -1031,7 +1031,7 @@ describe("runAiTerritoryDecisionLoop", () => {
     const [target, terrain, cost] = (exec.improve as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(target).toBe("0,0");
     expect(terrain).toBe("field");
-    expect(cost).toBe(2);
+    expect(cost).toBe(3);
   });
 
   it("does not found a second city while the territory is at its cap", async () => {

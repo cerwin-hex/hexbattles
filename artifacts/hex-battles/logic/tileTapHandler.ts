@@ -261,6 +261,7 @@ export function handleTileTapLogic(params: TileTapParams): void {
       entities,
       activeTileMap,
       spentUnits,
+      cities,
       prevRemaining,
       combatSpentUnits,
     );

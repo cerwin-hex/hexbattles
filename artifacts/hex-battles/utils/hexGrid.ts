@@ -154,6 +154,20 @@ export const TERRAIN_MOVE_COST: Record<TerrainType, number> = {
   mine:     1,
 };
 
+/**
+ * Movement cost to enter `tile`, given the live set of city tile keys. Terrain
+ * cost from `TERRAIN_MOVE_COST`, except that a city clears its own ground: any
+ * city tile costs 1 to enter, which only ever matters for a forest (the sole
+ * terrain a city may stand on that costs more than 1).
+ *
+ * `cities` is the authoritative marker — cities live in their own Set, never in
+ * the `entities` map, and `HexTile.isCity` is only a map-generation flag.
+ */
+export function tileMoveCost(tile: HexTile, cities: ReadonlySet<string>): number {
+  if (cities.has(tile.key)) return 1;
+  return TERRAIN_MOVE_COST[tile.terrain] ?? 1;
+}
+
 export const CITY_BONUS = 1;
 
 /** Tiles a territory must own for each city it may found. */
@@ -194,9 +208,9 @@ export interface ImprovementMeta {
  * Order is the display order used by the Build ribbon.
  */
 export const IMPROVEMENTS: readonly ImprovementMeta[] = [
-  { source: 'grass',  target: 'field',   name: 'Field',   cost: 2, incomeDelta: 1 },
-  { source: 'forest', target: 'sawmill', name: 'Sawmill', cost: 3, incomeDelta: 1 },
-  { source: 'desert', target: 'mine',    name: 'Mine',    cost: 4, incomeDelta: 2 },
+  { source: 'grass',  target: 'field',   name: 'Field',   cost: 3, incomeDelta: 1 },
+  { source: 'forest', target: 'sawmill', name: 'Sawmill', cost: 4, incomeDelta: 1 },
+  { source: 'desert', target: 'mine',    name: 'Mine',    cost: 5, incomeDelta: 2 },
 ];
 
 const IMPROVEMENT_BY_TARGET = new Map<TerrainType, ImprovementMeta>(
@@ -386,10 +400,11 @@ export function getValidMoves(
   entities: Map<string, EntityType>,
   tileMap: Map<string, HexTile>,
   spentUnits: Set<string>,
+  cities: ReadonlySet<string>,
   maxRange?: number,
   combatSpentUnits?: Set<string>,
 ): Set<string> {
-  return getMoveField(unitKey, owner, entities, tileMap, spentUnits, maxRange, combatSpentUnits)
+  return getMoveField(unitKey, owner, entities, tileMap, spentUnits, cities, maxRange, combatSpentUnits)
     .reachable;
 }
 
@@ -399,6 +414,7 @@ export function getMoveField(
   entities: Map<string, EntityType>,
   tileMap: Map<string, HexTile>,
   spentUnits: Set<string>,
+  cities: ReadonlySet<string>,
   maxRange?: number,
   combatSpentUnits?: Set<string>,
 ): MoveField {
@@ -441,7 +457,7 @@ export function getMoveField(
       // Lake tiles are impassable unless they have a bridge entity
       if (neighbor.terrain === 'lake' && !isLakePassable(nk, entities)) continue;
 
-      const moveCost = TERRAIN_MOVE_COST[neighbor.terrain] ?? 1;
+      const moveCost = tileMoveCost(neighbor, cities);
       const newCost = cost + moveCost;
 
       if (newCost > range) continue;

@@ -20,6 +20,7 @@ interface UseEndTurnPulseParams {
   entities: Map<string, EntityType>;
   activeTileMap: Map<string, HexTile>;
   spentUnits: Set<string>;
+  cities: Set<string>;
   combatSpentUnits: Set<string>;
   territoryBalances: Map<string, number>;
   minUnitCost: number;
@@ -34,6 +35,7 @@ export function useEndTurnPulse({
   entities,
   activeTileMap,
   spentUnits,
+  cities,
   combatSpentUnits,
   territoryBalances,
   minUnitCost,
@@ -50,6 +52,7 @@ export function useEndTurnPulse({
     entities: Map<string, EntityType>;
     activeTileMap: Map<string, HexTile>;
     spentUnits: Set<string>;
+    cities: Set<string>;
     territoryBalances: Map<string, number>;
     freeTowerUsedTiles: Map<TerritoryOwner, Set<string>>;
     isAiTurn: boolean;
@@ -63,6 +66,7 @@ export function useEndTurnPulse({
       prev.entities === entities &&
       prev.activeTileMap === activeTileMap &&
       prev.spentUnits === spentUnits &&
+      prev.cities === cities &&
       prev.territoryBalances === territoryBalances &&
       prev.freeTowerUsedTiles === freeTowerUsedTiles &&
       prev.isAiTurn === isAiTurn &&
@@ -73,6 +77,7 @@ export function useEndTurnPulse({
       entities,
       activeTileMap,
       spentUnits,
+      cities,
       territoryBalances,
       freeTowerUsedTiles,
       isAiTurn,
@@ -96,6 +101,7 @@ export function useEndTurnPulse({
             entities,
             activeTileMap,
             spentUnits,
+            cities,
             undefined,
             combatSpentUnits,
           );
@@ -136,6 +142,7 @@ export function useEndTurnPulse({
     entities,
     activeTileMap,
     spentUnits,
+    cities,
     combatSpentUnits,
     territoryBalances,
     minUnitCost,

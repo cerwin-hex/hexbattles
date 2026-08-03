@@ -277,20 +277,20 @@ describe("getValidMoves", () => {
     const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "player")]);
     const ents = entities([["0,0", "peasant"]]);
     const spent = new Set(["0,0"]);
-    expect(getValidMoves("0,0", "player", ents, map, spent)).toEqual(new Set());
+    expect(getValidMoves("0,0", "player", ents, map, spent, new Set())).toEqual(new Set());
   });
 
   it("can move to adjacent empty player tile", () => {
     const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "player")]);
     const ents = entities([["0,0", "peasant"]]);
-    const moves = getValidMoves("0,0", "player", ents, map, new Set());
+    const moves = getValidMoves("0,0", "player", ents, map, new Set(), new Set());
     expect(moves.has("1,0")).toBe(true);
   });
 
   it("can move to neutral tile", () => {
     const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "neutral")]);
     const ents = entities([["0,0", "peasant"]]);
-    const moves = getValidMoves("0,0", "player", ents, map, new Set());
+    const moves = getValidMoves("0,0", "player", ents, map, new Set(), new Set());
     expect(moves.has("1,0")).toBe(true);
   });
 
@@ -301,7 +301,7 @@ describe("getValidMoves", () => {
       makeTile(2, 0, "neutral"),
     ]);
     const ents = entities([["0,0", "peasant"]]);
-    const moves = getValidMoves("0,0", "player", ents, map, new Set());
+    const moves = getValidMoves("0,0", "player", ents, map, new Set(), new Set());
     expect(moves.has("1,0")).toBe(false);
     expect(moves.has("2,0")).toBe(false);
   });
@@ -313,7 +313,7 @@ describe("getValidMoves", () => {
     ]);
     // AI has swordsman (strength 3), player unit has strength 1 — cannot capture
     const ents = entities([["0,0", "peasant"], ["1,0", "swordsman"]]);
-    const moves = getValidMoves("0,0", "player", ents, map, new Set());
+    const moves = getValidMoves("0,0", "player", ents, map, new Set(), new Set());
     expect(moves.has("1,0")).toBe(false);
   });
 
@@ -324,7 +324,7 @@ describe("getValidMoves", () => {
     ]);
     // Player has expert (strength 3), enemy has simple (strength 1)
     const ents = entities([["0,0", "swordsman"], ["1,0", "peasant"]]);
-    const moves = getValidMoves("0,0", "player", ents, map, new Set());
+    const moves = getValidMoves("0,0", "player", ents, map, new Set(), new Set());
     expect(moves.has("1,0")).toBe(true);
   });
 
@@ -334,7 +334,7 @@ describe("getValidMoves", () => {
       makeTile(1, 0, "neutral", "lake"),
     ]);
     const ents = entities([["0,0", "peasant"]]);
-    const moves = getValidMoves("0,0", "player", ents, map, new Set());
+    const moves = getValidMoves("0,0", "player", ents, map, new Set(), new Set());
     expect(moves.has("1,0")).toBe(false);
   });
 
@@ -344,7 +344,7 @@ describe("getValidMoves", () => {
       makeTile(1, 0, "player", "lake"),
     ]);
     const ents = entities([["0,0", "peasant"], ["1,0", "bridge"]]);
-    const moves = getValidMoves("0,0", "player", ents, map, new Set());
+    const moves = getValidMoves("0,0", "player", ents, map, new Set(), new Set());
     expect(moves.has("1,0")).toBe(true);
   });
 
@@ -357,7 +357,7 @@ describe("getValidMoves", () => {
       makeTile(2, 0, "neutral", "forest"),
     ]);
     const ents = entities([["0,0", "peasant"]]);
-    const moves = getValidMoves("0,0", "player", ents, map, new Set());
+    const moves = getValidMoves("0,0", "player", ents, map, new Set(), new Set());
     expect(moves.has("1,0")).toBe(true);
     expect(moves.has("2,0")).toBe(false);
   });
@@ -367,9 +367,9 @@ describe("getValidMoves", () => {
     // tile; a peasant (movement 3) stops at the 3rd.
     const row = [0, 1, 2, 3, 4, 5].map((q) => makeTile(q, 0, "player"));
     const map = tileMap(row);
-    const scoutMoves = getValidMoves("0,0", "player", entities([["0,0", "scout"]]), map, new Set());
+    const scoutMoves = getValidMoves("0,0", "player", entities([["0,0", "scout"]]), map, new Set(), new Set());
     expect(scoutMoves.has("5,0")).toBe(true);
-    const peasantMoves = getValidMoves("0,0", "player", entities([["0,0", "peasant"]]), map, new Set());
+    const peasantMoves = getValidMoves("0,0", "player", entities([["0,0", "peasant"]]), map, new Set(), new Set());
     expect(peasantMoves.has("3,0")).toBe(true);
     expect(peasantMoves.has("4,0")).toBe(false);
   });
@@ -378,7 +378,7 @@ describe("getValidMoves", () => {
   it("cavalry can never enter an enemy fortification tile", () => {
     const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "ai1")]);
     const ents = entities([["0,0", "scout"], ["1,0", "tower"]]);
-    const moves = getValidMoves("0,0", "player", ents, map, new Set());
+    const moves = getValidMoves("0,0", "player", ents, map, new Set(), new Set());
     expect(moves.has("1,0")).toBe(false);
   });
 
@@ -386,7 +386,7 @@ describe("getValidMoves", () => {
     const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "ai1")]);
     // swordsman (str 3) vs tower (str 1): allowed for infantry.
     const ents = entities([["0,0", "swordsman"], ["1,0", "tower"]]);
-    const moves = getValidMoves("0,0", "player", ents, map, new Set());
+    const moves = getValidMoves("0,0", "player", ents, map, new Set(), new Set());
     expect(moves.has("1,0")).toBe(true);
   });
 
@@ -399,7 +399,7 @@ describe("getValidMoves", () => {
     // Knight (str 2) at (0,0) already struck this turn (in combatSpentUnits).
     const ents = entities([["0,0", "knight"], ["1,0", "peasant"]]);
     const struck = new Set(["0,0"]);
-    const moves = getValidMoves("0,0", "player", ents, map, new Set(), undefined, struck);
+    const moves = getValidMoves("0,0", "player", ents, map, new Set(), new Set(), undefined, struck);
     expect(moves.has("1,0")).toBe(false); // no second strike
     expect(moves.has("0,1")).toBe(true); // open capture still allowed
   });
@@ -409,7 +409,7 @@ describe("getValidMoves", () => {
     // Knight (str 2) outranks the defender's ZoC (str 1), so only the cavalry
     // gating — not strength — decides eligibility here.
     const ents = entities([["0,0", "knight"], ["1,0", "peasant"]]);
-    const moves = getValidMoves("0,0", "player", ents, map, new Set(), undefined, new Set());
+    const moves = getValidMoves("0,0", "player", ents, map, new Set(), new Set(), undefined, new Set());
     expect(moves.has("1,0")).toBe(true);
   });
 
@@ -417,7 +417,7 @@ describe("getValidMoves", () => {
     const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "player")]);
     const ents = entities([["0,0", "scout"], ["1,0", "rebel"]]);
     const struck = new Set(["0,0"]);
-    const moves = getValidMoves("0,0", "player", ents, map, new Set(), undefined, struck);
+    const moves = getValidMoves("0,0", "player", ents, map, new Set(), new Set(), undefined, struck);
     expect(moves.has("1,0")).toBe(false);
   });
 });
@@ -428,7 +428,7 @@ describe("getMoveField", () => {
   it("charges 1 for an adjacent grass tile", () => {
     const map = tileMap([makeTile(0, 0, "player"), makeTile(1, 0, "player")]);
     const ents = entities([["0,0", "warrior"]]);
-    const { cost } = getMoveField("0,0", "player", ents, map, new Set());
+    const { cost } = getMoveField("0,0", "player", ents, map, new Set(), new Set());
     expect(cost.get("1,0")).toBe(1);
   });
 
@@ -438,8 +438,43 @@ describe("getMoveField", () => {
       makeTile(1, 0, "player", "forest"),
     ]);
     const ents = entities([["0,0", "warrior"]]);
-    const { cost } = getMoveField("0,0", "player", ents, map, new Set());
+    const { cost } = getMoveField("0,0", "player", ents, map, new Set(), new Set());
     expect(cost.get("1,0")).toBe(2);
+  });
+
+  it("charges only 1 for a forest tile a city stands on", () => {
+    // A city clears its own ground: founding on a forest opens the passage, so
+    // the tile costs 1 like every other city tile. Same board, only the cities
+    // set differs — a 2-movement unit keeps 1 movement after the step.
+    const map = tileMap([
+      makeTile(0, 0, "player"),
+      makeTile(1, 0, "player", "forest"),
+    ]);
+    const ents = entities([["0,0", "warrior"]]);
+    const withoutCity = getMoveField("0,0", "player", ents, map, new Set(), new Set(), 2);
+    expect(withoutCity.cost.get("1,0")).toBe(2);
+    const withCity = getMoveField(
+      "0,0", "player", ents, map, new Set(), new Set(["1,0"]), 2,
+    );
+    expect(withCity.cost.get("1,0")).toBe(1);
+  });
+
+  it("lets a unit walk on past a city built on a forest", () => {
+    // The saving is real, not cosmetic: with the city the 2-budget warrior
+    // reaches the tile beyond the forest; without it the forest eats the budget.
+    const map = tileMap([
+      makeTile(0, 0, "player"),
+      makeTile(1, 0, "player", "forest"),
+      makeTile(2, 0, "player"),
+    ]);
+    const ents = entities([["0,0", "warrior"]]);
+    const withoutCity = getMoveField("0,0", "player", ents, map, new Set(), new Set(), 2);
+    expect(withoutCity.reachable.has("2,0")).toBe(false);
+    const withCity = getMoveField(
+      "0,0", "player", ents, map, new Set(), new Set(["1,0"]), 2,
+    );
+    expect(withCity.reachable.has("2,0")).toBe(true);
+    expect(withCity.cost.get("2,0")).toBe(2);
   });
 
   it("never reaches a tile behind a mountain with no way around", () => {
@@ -448,7 +483,7 @@ describe("getMoveField", () => {
       makeTile(1, 0, "player", "mountain"),
     ]);
     const ents = entities([["0,0", "warrior"]]);
-    const { reachable, cost } = getMoveField("0,0", "player", ents, map, new Set());
+    const { reachable, cost } = getMoveField("0,0", "player", ents, map, new Set(), new Set());
     expect(reachable.has("1,0")).toBe(false);
     expect(cost.has("1,0")).toBe(false);
   });
@@ -462,7 +497,7 @@ describe("getMoveField", () => {
       makeTile(0, 1, "player"),
     ]);
     const ents = entities([["0,0", "warrior"]]);
-    const { reachable, cost } = getMoveField("0,0", "player", ents, map, new Set());
+    const { reachable, cost } = getMoveField("0,0", "player", ents, map, new Set(), new Set());
     expect(reachable.has("0,1")).toBe(true);
     expect([...cost.keys()].sort()).toEqual([...reachable].sort());
   });
@@ -479,7 +514,7 @@ describe("getMoveField", () => {
       makeTile(2, -1, "player"),
     ]);
     const ents = entities([["0,0", "scout"]]);
-    const { reachable, cost } = getMoveField("0,0", "player", ents, map, new Set(), 5);
+    const { reachable, cost } = getMoveField("0,0", "player", ents, map, new Set(), new Set(), 5);
     expect(reachable.has("2,0")).toBe(true);
     expect(cost.get("2,0")).toBe(3);
     // The enemy tile itself is still a legal one-step capture.
@@ -496,7 +531,7 @@ describe("getMoveField", () => {
       makeTile(2, -1, "player"),
     ]);
     const ents = entities([["0,0", "scout"], ["1,0", "rebel"]]);
-    const { cost } = getMoveField("0,0", "player", ents, map, new Set(), 5);
+    const { cost } = getMoveField("0,0", "player", ents, map, new Set(), new Set(), 5);
     expect(cost.get("2,0")).toBe(3);
   });
 
@@ -509,7 +544,7 @@ describe("getMoveField", () => {
       makeTile(2, -1, "player"),
     ]);
     const ents = entities([["0,0", "scout"]]);
-    const { cost } = getMoveField("0,0", "player", ents, map, new Set(), 5);
+    const { cost } = getMoveField("0,0", "player", ents, map, new Set(), new Set(), 5);
     expect(cost.get("2,0")).toBe(2);
   });
 
@@ -522,8 +557,8 @@ describe("getMoveField", () => {
       makeTile(2, -1, "player"),
     ]);
     const ents = entities([["0,0", "scout"]]);
-    const { reachable } = getMoveField("0,0", "player", ents, map, new Set(), 5);
-    const moves = getValidMoves("0,0", "player", ents, map, new Set(), 5);
+    const { reachable } = getMoveField("0,0", "player", ents, map, new Set(), new Set(), 5);
+    const moves = getValidMoves("0,0", "player", ents, map, new Set(), new Set(), 5);
     expect([...reachable].sort()).toEqual([...moves].sort());
   });
 });
@@ -740,10 +775,10 @@ describe("improvement constants", () => {
     expect(IMPROVED_TERRAINS.has("mine")).toBe(true);
     expect(IMPROVED_TERRAINS.has("grass")).toBe(false);
   });
-  it("costs field 2, sawmill 3, mine 4 to improve", () => {
-    expect(improveCostFor("field")).toBe(2);
-    expect(improveCostFor("sawmill")).toBe(3);
-    expect(improveCostFor("mine")).toBe(4);
+  it("costs field 3, sawmill 4, mine 5 to improve", () => {
+    expect(improveCostFor("field")).toBe(3);
+    expect(improveCostFor("sawmill")).toBe(4);
+    expect(improveCostFor("mine")).toBe(5);
   });
   it("reverts improved terrain to its base", () => {
     expect(baseTerrainFor("field")).toBe("grass");
@@ -799,7 +834,7 @@ describe("getPlacementAttackTiles", () => {
     // matching getValidMoves, which lets a near-side unit move across it.
     const ents = entities([["1,0", "warrior"]]);
     const moveEnts = entities([["1,0", "warrior"], ["0,0", "scout"]]);
-    expect(getValidMoves("0,0", "player", moveEnts, map, new Set()).has("2,0")).toBe(true);
+    expect(getValidMoves("0,0", "player", moveEnts, map, new Set(), new Set()).has("2,0")).toBe(true);
     expect(placeAcross(ents).has("2,0")).toBe(true);
   });
 
@@ -822,9 +857,9 @@ describe("getPlacementAttackTiles", () => {
 describe("IMPROVEMENTS catalogue", () => {
   it("lists field, sawmill and mine with their source terrain, cost and income delta", () => {
     expect(IMPROVEMENTS).toEqual([
-      { source: "grass", target: "field", name: "Field", cost: 2, incomeDelta: 1 },
-      { source: "forest", target: "sawmill", name: "Sawmill", cost: 3, incomeDelta: 1 },
-      { source: "desert", target: "mine", name: "Mine", cost: 4, incomeDelta: 2 },
+      { source: "grass", target: "field", name: "Field", cost: 3, incomeDelta: 1 },
+      { source: "forest", target: "sawmill", name: "Sawmill", cost: 4, incomeDelta: 1 },
+      { source: "desert", target: "mine", name: "Mine", cost: 5, incomeDelta: 2 },
     ]);
   });
 
@@ -853,7 +888,7 @@ describe("IMPROVEMENTS catalogue", () => {
   it("returns undefined from improvementFor for non-improved terrain", () => {
     expect(improvementFor("grass")).toBeUndefined();
     expect(improvementFor("mountain")).toBeUndefined();
-    expect(improvementFor("field")?.cost).toBe(2);
+    expect(improvementFor("field")?.cost).toBe(3);
   });
 
   it("returns null from improveTargetFor for terrain that cannot be improved", () => {
@@ -926,7 +961,7 @@ describe("ranged movement", () => {
       ["0,0", "crossbowman"],
       ["1,-1", "rebel"],
     ]);
-    const moves = getValidMoves("0,0", "player", ents, map, new Set());
+    const moves = getValidMoves("0,0", "player", ents, map, new Set(), new Set());
     expect(moves.has("1,0")).toBe(true);
     expect(moves.has("0,1")).toBe(false);
     expect(moves.has("-1,0")).toBe(false);
@@ -961,6 +996,7 @@ describe("a clamped ranged budget", () => {
       entities([["0,0", "shortbowman"]]),
       map,
       new Set<string>(),
+      new Set(),
       budget,
     );
   }

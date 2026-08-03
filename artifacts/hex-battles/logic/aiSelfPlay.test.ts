@@ -49,7 +49,7 @@ function countTwoPlyPositiveIdleCaptures(owner: TerritoryOwner, ws: AiWorkingSta
     if (ws.partialMoves.has(tile.key)) continue; // already moved this turn
     const ustr = ENTITY_META[ue].offStrength;
     const [q, r] = tile.key.split(",").map(Number);
-    const vm = getValidMoves(tile.key, owner, entities, tileMap, spentUnits,
+    const vm = getValidMoves(tile.key, owner, entities, tileMap, spentUnits, new Set(),
       unitMovement(ue), ws.combatSpentUnits);
     let hasFreeCapture = false;
     for (const { dir: [dq, dr] } of HEX_EDGES) {

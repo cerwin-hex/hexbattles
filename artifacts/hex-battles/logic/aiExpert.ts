@@ -872,7 +872,7 @@ export function generateCandidateActions(
     if (totalMoveCount >= globalMoveCeiling) break;
     let perUnit = 0;
     const range = ctx.partialMoves.get(uk) ?? unitMovement(ue);
-    const { reachable: vm, cost: vmCost } = getMoveField(uk, owner, ctx.entities, ctx.tileMap, ctx.spentUnits, range, ctx.combatSpentUnits);
+    const { reachable: vm, cost: vmCost } = getMoveField(uk, owner, ctx.entities, ctx.tileMap, ctx.spentUnits, ctx.cities, range, ctx.combatSpentUnits);
     // A unit already on the front never needs a forward reposition; only idle
     // rear units (not enemy-adjacent) get advance candidates.
     const uAdvanceEligible = enemyCoords.length > 0 && !onFront(uk);

@@ -726,10 +726,10 @@ describe("canImproveTile", () => {
   it("allows an empty tile whose terrain matches the improvement", () => {
     expect(canImproveTile(base)).toBe(true);
     expect(
-      canImproveTile({ ...base, terrain: "forest", targetTerrain: "sawmill", balance: 3 }),
+      canImproveTile({ ...base, terrain: "forest", targetTerrain: "sawmill", balance: 4 }),
     ).toBe(true);
     expect(
-      canImproveTile({ ...base, terrain: "desert", targetTerrain: "mine", balance: 4 }),
+      canImproveTile({ ...base, terrain: "desert", targetTerrain: "mine", balance: 5 }),
     ).toBe(true);
   });
 

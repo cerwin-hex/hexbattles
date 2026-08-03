@@ -214,7 +214,7 @@ export function dtFindMergeMove(
       // the cavalry track, not the infantry 3. Hard-coding 3 hid every merge
       // that needed a scout's or knight's extra reach.
       const range1 = ctx.partialMoves.get(uk1) ?? unitMovement(ue1);
-      const { reachable: vm1, cost: cost1 } = getMoveField(uk1, ctx.aiOwner, ctx.entities, ctx.tileMap, ctx.spentUnits, range1, ctx.combatSpentUnits);
+      const { reachable: vm1, cost: cost1 } = getMoveField(uk1, ctx.aiOwner, ctx.entities, ctx.tileMap, ctx.spentUnits, ctx.cities, range1, ctx.combatSpentUnits);
       if (!vm1.has(uk2)) continue;
       // Cost comes from the same search that just vouched for the move, so the
       // merged unit's leftover movement reflects the route it would really walk.
@@ -225,7 +225,7 @@ export function dtFindMergeMove(
       const tempEntities = new Map(ctx.entities);
       tempEntities.delete(uk1);
       tempEntities.set(uk2, mergedType);
-      const vmMerged = getValidMoves(uk2, ctx.aiOwner, tempEntities, ctx.tileMap, new Set(), mergedRemaining);
+      const vmMerged = getValidMoves(uk2, ctx.aiOwner, tempEntities, ctx.tileMap, new Set(), ctx.cities, mergedRemaining);
       for (const tk of targetKeys) {
         if (vmMerged.has(tk)) return { from: uk1, to: uk2 };
       }

@@ -131,6 +131,7 @@ export function useSelectionState({
       entities,
       activeTileMap,
       spentUnits,
+      cities,
       remaining,
       combatSpentUnits,
     );
@@ -154,6 +155,7 @@ export function useSelectionState({
     entities,
     activeTileMap,
     spentUnits,
+    cities,
     partialMoves,
     combatSpentUnits,
   ]);

@@ -701,6 +701,7 @@ describe("generateCandidateActions", () => {
       entities,
       tileMap,
       ctx.spentUnits,
+      new Set(),
       5,
       ctx.combatSpentUnits,
     );
@@ -1267,7 +1268,7 @@ describe("two-ply best-response", () => {
 describe("expert improve (last-resort)", () => {
   it("spends spare gold improving tiles when no better action exists", async () => {
     // A fully interior, all-grass territory surrounded by void: no enemies, no
-    // border tiles, nothing to capture. The balance (5) covers field costs (2)
+    // border tiles, nothing to capture. The balance (8) covers field costs (3)
     // but is too little for any unit/building buy (cheapest unit is 10), so the
     // candidate generator emits no score-improving action and the expert loop's
     // `best` is null. With nothing better to do, the expert falls back to
@@ -1283,7 +1284,7 @@ describe("expert improve (last-resort)", () => {
     const balances = new Map<string, number>();
     const terr = getContiguousTerritory(tileMap, "0,0", "ai1", entities);
     const tid = getTerritoryId(terr)!;
-    balances.set(tid, 5);
+    balances.set(tid, 8);
     const ctx = makeCtx(tileMap, entities, "ai1", balances);
     ctx.cities = new Set(["1,1"]);
 
@@ -1312,9 +1313,9 @@ describe("expert improve (last-resort)", () => {
 
     await runExpertTerritoryDecisionLoop("0,0", ctx, exec, () => true);
 
-    // 5 gold buys exactly two fields (2 each); the third is unaffordable.
+    // 8 gold buys exactly two fields (3 each); the third is unaffordable.
     expect(calls.length).toBe(2);
-    for (const c of calls) expect(c).toMatchObject({ terrain: "field", cost: 2 });
+    for (const c of calls) expect(c).toMatchObject({ terrain: "field", cost: 3 });
     // City-adjacent tiles are preferred — the field bonus stacks next to a city.
     // 1,0 and 0,1 neighbour the city at 1,1; 0,0 does not.
     expect(calls.map((c) => c.target).sort()).toEqual(["0,1", "1,0"]);
