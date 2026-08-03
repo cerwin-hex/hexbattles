@@ -852,7 +852,7 @@ export interface ImproveAnchor {
  * Resolves both the zone rule and the one-improvement-per-city-per-turn rule at
  * once: a tile is improvable when a city of the SAME territory reaches it —
  * see `cityImproveReach` — and has not built this turn. Overlapping zones are a
- * real benefit — the nearest unused city pays, so two cities three tiles apart
+ * real benefit — the nearest unused city pays, so two cities whose zones touch
  * allow two improvements in their shared area in one turn. Ties between equally
  * distant unused cities go to the lower tile key, so the choice is
  * deterministic and testable.

@@ -117,7 +117,7 @@ function MovementHighlightLayerInner({
             });
             if (placement.blocked) return null;
             // A city may only be founded on a legal site: inside the cap and at
-            // least three tiles from every city the player already holds.
+            // least four tiles from every city the player already holds.
             if (armedEntityId === "city" && !validCitySites.has(key)) return null;
             // Cities, graveyards and existing fort cover withdraw the dot for
             // buildings only; they sit outside the shared rule, which cannot see
