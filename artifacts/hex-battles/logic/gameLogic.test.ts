@@ -283,7 +283,9 @@ describe("buildingDotSuppressed", () => {
     expect(site("peasant", { fortificationDots: ["1,0"] })).toBe(false);
   });
 
-  it("graves (a rule) and existing fort cover (a hint) keep withdrawing the dot", () => {
+  // Fort cover is the one term that is a display choice rather than a rule:
+  // the blue cover dot keeps the tile, and the tap still builds.
+  it("graves (a rule) and existing fort cover (a display choice) both withdraw the dot", () => {
     expect(site("tower", { graveyard: ["1,0"] })).toBe(true);
     expect(site("tower", { fortificationDots: ["1,0"] })).toBe(true);
   });

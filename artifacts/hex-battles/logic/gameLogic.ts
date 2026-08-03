@@ -474,12 +474,15 @@ export function classifyOwnTilePlacement(o: {
  * cities and graves and inside fort cover alike.
  *
  * Two of the three terms are rules the tap handler enforces (a city tile and a
- * graveyard marker both reject a building). The third is not: `fortificationDots`
- * is the defense cover a tower or castle already projects over its own tile and
- * its neighbours, so hiding the dot there only discourages stacking a second
- * fort inside cover the player has bought — tapping such a tile still builds.
- * Do NOT reuse this in the tap handler without deciding that question first;
- * that would turn a hint into a rule.
+ * graveyard marker both reject a building). The third is deliberately NOT a
+ * rule: `fortificationDots` is the blue defense cover a tower or castle already
+ * projects over its own tile and its neighbours, and the two dots would land on
+ * the same spot. Showing the cover the player already paid for wins, because
+ * forts are rarely built up against each other — so the yellow dot yields there
+ * even though the tap still builds. That asymmetry is intended.
+ *
+ * Do NOT reuse this in the tap handler: it would turn that display choice into
+ * a fort-spacing rule the game has never had.
  */
 export function buildingDotSuppressed(o: {
   armedEntityId: EntityType;
